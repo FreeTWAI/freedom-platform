@@ -7,11 +7,14 @@ async function login(page:Page){
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');const authResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/login' && response.request().method() === 'POST', {timeout: 25_000});
   await page.getByRole('button',{name:'登入',exact:true}).click();
   expect((await authResponse).status()).toBe(200);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
 }
 async function choose(page:Page,label:string){
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
-  await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:label,exact:true}).click();
+  const box=page.getByRole('dialog',{name:'分享',exact:true});
+  if(label==='分享開源資源'){await box.getByRole('button',{name:'種類',exact:true}).click();await box.getByRole('button',{name:'開源投稿',exact:true}).click();return;}
+  const choices:Record<string,string>={'分享作品':'作品','發文':'貼文','刊登商品':'種類'};
+  await box.getByRole('button',{name:choices[label]??label,exact:true}).click();
 }
 
 for(const width of [1280,320])test(`one visible entry opens actual post, work, resource and product controls without automatic publication (${width}px)`,async({page})=>{
@@ -27,16 +30,16 @@ for(const width of [1280,320])test(`one visible entry opens actual post, work, r
   await page.getByLabel('我同意以社群可見方式分享這件作品').check();
   await page.getByRole('button',{name:'發布作品',exact:true}).click();
   await expect(page.getByRole('region',{name:'作品發布成功'})).toBeFocused();expect(writes).toEqual(['/api/v1/showcases']);
-  await choose(page,'發文');const composer=page.getByRole('dialog',{name:'建立貼文',exact:true});
-  await expect(composer.getByLabel('貼文內容',{exact:true})).toBeFocused();
-  await composer.getByLabel('貼文內容',{exact:true}).fill('還沒要發布，先保留這份原稿。');
-  await composer.getByRole('button',{name:'關閉發文',exact:true}).click();await choose(page,'發文');
-  await expect(composer.getByLabel('貼文內容',{exact:true})).toHaveValue('還沒要發布，先保留這份原稿。');
-  await composer.getByRole('button',{name:'關閉發文',exact:true}).click();
+  await choose(page,'發文');const composer=page.getByRole('dialog',{name:'分享',exact:true});
+  await expect(composer.getByLabel('內容',{exact:true})).toBeFocused();
+  await composer.getByLabel('內容',{exact:true}).fill('還沒要發布，先保留這份原稿。');
+  await composer.getByRole('button',{name:'關閉',exact:true}).click();await choose(page,'發文');
+  await expect(composer.getByLabel('內容',{exact:true})).toHaveValue('還沒要發布，先保留這份原稿。');
+  await composer.getByRole('button',{name:'關閉',exact:true}).click();
   await choose(page,'分享開源資源');await expect(page.getByLabel('GitHub 專案網址',{exact:true})).toBeFocused();
-  await choose(page,'刊登商品');await page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true}).getByRole('button',{name:'我已有商品成果檔',exact:true}).click();
+  await choose(page,'刊登商品');await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'上傳商品',exact:true}).click();
   await expect(page.getByLabel('上傳成果檔',{exact:true})).toBeFocused();
-  await choose(page,'刊登商品');await page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true}).getByRole('button',{name:'我還沒準備商品',exact:true}).click();
+  await choose(page,'刊登商品');await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'準備商品',exact:true}).click();
   await expect(page.getByRole('button',{name:'下載內部商店 MD',exact:true})).toBeFocused();
   expect(writes).toEqual(['/api/v1/showcases']);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -47,12 +50,12 @@ test('320px share choices fit all themes, back and Escape return keyboard focus'
   for(const theme of ['light','rpg','versefolk']){
     await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
     const trigger=page.getByRole('button',{name:'分享或提交',exact:true});await trigger.click();
-    const dialog=page.getByRole('dialog',{name:'你想分享什麼？',exact:true});
+    const dialog=page.getByRole('dialog',{name:'分享',exact:true});
     expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
-    for(const name of ['發文','分享作品','刊登商品','分享開源資源'])expect((await dialog.getByRole('button',{name,exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for(const name of ['網址','貼文','作品','種類'])expect((await dialog.getByRole('button',{name,exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({path:`test-results/share-launcher-${theme}-320.png`});
-    await dialog.getByRole('button',{name:'刊登商品',exact:true}).click();
-    await page.getByRole('button',{name:'← 返回分享選單',exact:true}).click();await expect(dialog).toBeVisible();
+    await dialog.getByRole('button',{name:'種類',exact:true}).click();
+    await page.getByRole('button',{name:'種類',exact:true}).click();await expect(dialog).toBeVisible();
     await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();await expect(trigger).toBeFocused();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
@@ -64,12 +67,13 @@ test('launchpad on lists the in-site store and supply catalog before the product
   for(const [width,height] of [[390,844],[1440,900]] as const){
     await page.setViewportSize({width,height});
     await page.getByRole('button',{name:'分享或提交',exact:true}).click();
-    await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
-    const dialog=page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true});
-    const labels=await dialog.locator('.share-launcher-options > button').evaluateAll(nodes=>nodes.map(node=>(node.querySelector('strong')?.textContent??node.textContent??'').trim()));
-    expect(labels.slice(0,5)).toEqual(['在站內商店刊登','供貨給其他店家','我已有商品成果檔','我還沒準備商品','← 返回分享選單']);
+    await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'種類',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'分享',exact:true});
+    const labels=await dialog.locator('.share-options > button').evaluateAll(nodes=>nodes.map(node=>(node.querySelector('strong')?.textContent??node.textContent??'').trim()));
+    expect(labels.slice(0,4)).toEqual(['刊登商品','供貨','上傳商品','準備商品']);
+    for(const kind of ['活動','服務','開源投稿','找人合作','共創邀請','我的內容'])expect(labels).toContain(kind);
     expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
-    for(const name of ['在站內商店刊登','供貨給其他店家','我已有商品成果檔','我還沒準備商品'])expect((await dialog.getByRole('button',{name,exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for(const name of ['刊登商品','供貨','上傳商品','準備商品'])expect((await dialog.getByRole('button',{name,exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await page.mouse.move(0,0);
     await dialog.screenshot({path:`test-results/share-product-dialog-dark-${width}.png`});
     await page.keyboard.press('Escape');
@@ -80,10 +84,10 @@ test('launchpad on lists the in-site store and supply catalog before the product
 test('在站內商店刊登 opens the existing stores page',async({page})=>{
   await login(page);
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
-  await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
-  await page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true}).getByRole('button',{name:'在站內商店刊登',exact:true}).click();
-  await expect(page).toHaveURL(/#stores$/);
-  await expect(page.getByRole('heading',{name:'我的商店',level:1,exact:true})).toBeVisible();
+  await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'種類',exact:true}).click();
+  await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store$/);
+  await expect(page.getByRole('heading',{name:'商店',level:1,exact:true})).toBeVisible();
   await expect(page.locator('[data-share-entry="stores"]')).toBeVisible();
   await expect(page.locator('[data-share-entry="stores"]')).toBeFocused();
   await expect(page.locator('.share-entry-status')).toHaveCount(0);
@@ -92,10 +96,10 @@ test('在站內商店刊登 opens the existing stores page',async({page})=>{
 test('供貨給其他店家 opens the existing supply catalog',async({page})=>{
   await login(page);
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
-  await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
-  await page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true}).getByRole('button',{name:'供貨給其他店家',exact:true}).click();
-  await expect(page).toHaveURL(/#stores\/supply$/);
-  await expect(page.getByRole('heading',{name:'我的供貨商品庫',level:1,exact:true})).toBeVisible();
+  await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'種類',exact:true}).click();
+  await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'供貨',exact:true}).click();
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
+  await expect(page.getByRole('heading',{name:'供貨商品庫',level:1,exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'我的供貨商品庫',level:2,exact:true})).toBeVisible();
   await expect(page.locator('[data-share-entry="supply"]')).toBeFocused();
   await expect(page.locator('.share-entry-status')).toHaveCount(0);
@@ -108,17 +112,17 @@ test('launchpad off keeps only the two product-result options',async({page})=>{
   });
   await login(page);
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
-  await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
-  const dialog=page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true});
-  const labels=await dialog.locator('.share-launcher-options > button').evaluateAll(nodes=>nodes.map(node=>(node.querySelector('strong')?.textContent??node.textContent??'').trim()));
-  expect(labels.slice(0,3)).toEqual(['我已有商品成果檔','我還沒準備商品','← 返回分享選單']);
-  expect(labels).not.toContain('在站內商店刊登');
-  expect(labels).not.toContain('供貨給其他店家');
-  await dialog.getByRole('button',{name:'我已有商品成果檔',exact:true}).click();
+  await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'種類',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'分享',exact:true});
+  const labels=await dialog.locator('.share-options > button').evaluateAll(nodes=>nodes.map(node=>(node.querySelector('strong')?.textContent??node.textContent??'').trim()));
+  expect(labels.slice(0,2)).toEqual(['上傳商品','準備商品']);
+  expect(labels).not.toContain('刊登商品');
+  expect(labels).not.toContain('供貨');
+  await dialog.getByRole('button',{name:'上傳商品',exact:true}).click();
   await expect(page.getByLabel('上傳成果檔',{exact:true})).toBeFocused();
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
-  await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
-  await page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true}).getByRole('button',{name:'我還沒準備商品',exact:true}).click();
+  await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'種類',exact:true}).click();
+  await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'準備商品',exact:true}).click();
   await expect(page.getByRole('button',{name:'下載內部商店 MD',exact:true})).toBeFocused();
 });
 
@@ -133,17 +137,17 @@ test('a store detail load error still focuses the same-tab share list',async({pa
   }
   async function chooseProduct(label:string){
     await page.getByRole('button',{name:'分享或提交',exact:true}).click();
-    await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
-    await page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true}).getByRole('button',{name:label,exact:true}).click();
+    await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'種類',exact:true}).click();
+    await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:label,exact:true}).click();
   }
   await openDetail();
-  await chooseProduct('供貨給其他店家');
-  await expect(page).toHaveURL(/#stores\/supply$/);
+  await chooseProduct('供貨');
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
   await expect(page.locator('[data-share-entry="supply"]')).toBeFocused();
   await expect(page.getByRole('status').filter({hasText:'分享入口暫時無法載入'})).toHaveCount(0);
   await openDetail();
-  await chooseProduct('在站內商店刊登');
-  await expect(page).toHaveURL(/#stores$/);
+  await chooseProduct('刊登商品');
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store$/);
   await expect(page.locator('[data-share-entry="stores"]')).toBeFocused();
   await expect(page.getByRole('status').filter({hasText:'分享入口暫時無法載入'})).toHaveCount(0);
 });
@@ -162,8 +166,8 @@ test('a refused leave from an unpublished store does not settle the supply share
   const editorHash=new URL(page.url()).hash;
   async function chooseSupply(){
     await page.getByRole('button',{name:'分享或提交',exact:true}).click();
-    await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
-    await page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true}).getByRole('button',{name:'供貨給其他店家',exact:true}).click();
+    await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'種類',exact:true}).click();
+    await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'供貨',exact:true}).click();
   }
   page.once('dialog',d=>d.dismiss());
   await chooseSupply();
@@ -175,7 +179,7 @@ test('a refused leave from an unpublished store does not settle the supply share
   await expect(name).toHaveValue('留下未發布草稿');
   page.once('dialog',d=>d.accept());
   await chooseSupply();
-  await expect(page).toHaveURL(/#stores\/supply$/);
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
   await expect(page.locator('[data-share-entry="supply"]')).toBeFocused();
 });
 
@@ -188,3 +192,25 @@ test('an unavailable share page reports failure, keeps retry and does not create
   await expect(page.getByLabel('作品標題',{exact:true})).toBeVisible();await choose(page,'分享作品');
   await expect(page.getByLabel('作品標題',{exact:true})).toBeFocused();
 });
+
+ test('expanded share kinds reach events, services, collaboration, cocreation and drafts without publication',async({page})=>{
+  await login(page);
+  const writes:string[]=[];page.on('request',request=>{if(request.method()==='POST')writes.push(new URL(request.url()).pathname);});
+  // 活動 stays in the share box: it opens the three-field event form instead of leaving.
+  await choose(page,'刊登商品');
+  const box=page.getByRole('dialog',{name:'分享',exact:true});
+  await box.getByRole('button',{name:'活動',exact:true}).click();
+  for(const field of ['名稱','時間','地點'])await expect(box.getByLabel(field,{exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(box).toBeHidden();
+  for(const [label,hash] of [
+   ['服務','#explore/services'],['找人合作','#explore/works'],
+   ['共創邀請','#guilds/guild_ai_vibe/tools/cocreation'],['我的內容','#me/content'],
+  ]){
+   await choose(page,'刊登商品');
+   await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:label,exact:true}).click();
+   await expect.poll(()=>new URL(page.url()).hash).toBe(hash);
+   await expect(page.getByRole('dialog',{name:'分享',exact:true})).toBeHidden();
+  }
+  expect(writes).toEqual([]);
+ });

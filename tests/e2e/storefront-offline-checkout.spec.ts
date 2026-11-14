@@ -986,7 +986,7 @@ test('order bell tells an eligible seller reader about placement and opening it 
       SELECT $1,$2,$3,ARRAY['store:read','store:orders:read'],'active',principal_id FROM principals WHERE user_ref=$4`,[store.tenant,principal,store.instance,store.seller.id]);
     await apiLogin(readerContext,store.origin,reader.email);
     const readerPage=await readerContext.newPage();await readerPage.goto('/#home');
-    await expect(readerPage.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+    await expect(readerPage.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
     const buyer=await openBuyer(e2eAuthPool,buyerContext,store),buyerPage=await buyerContext.newPage();
     await start(buyerPage,store);await freeze(buyerPage,store);const order=await place(buyerPage,'銀行匯款');
     await readerPage.locator('.notification-bell-trigger').click();
@@ -1004,7 +1004,7 @@ test('order bell tells an eligible seller reader about placement and opening it 
     await assertCartResponsiveLayout(readerPage,[390,768,1440],width=>info.outputPath(`notify-bell-${width}.png`));
     const detail=readerPage.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===`/api/v1${store.root}/checkout-orders/${order.order_ref}`);
     await item.focus();await readerPage.keyboard.press('Enter');expect((await detail).status()).toBe(200);
-    await expect(readerPage).toHaveURL(`${store.origin}/#stores/${store.tenant}/${store.instance}/orders/${order.order_ref}`);
+    await expect(readerPage).toHaveURL(`${store.origin}/#guilds/guild_commerce_sales/tools/store/${store.tenant}/${store.instance}/orders/${order.order_ref}`);
     await expect(readerPage.locator('.seller-console')).toContainText(order.display_number);
     await e2eAuthPool.query("UPDATE tenant_module_permissions SET capabilities=ARRAY['store:read'],version=version+1,updated_at=clock_timestamp() WHERE tenant_id=$1 AND principal_id=$2",[store.tenant,principal]);
     expect((await readerContext.request.get(`/api/v1${store.root}/checkout-orders/${order.order_ref}`)).status()).toBe(403);

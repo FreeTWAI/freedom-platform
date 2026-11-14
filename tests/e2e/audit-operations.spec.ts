@@ -31,7 +31,7 @@ async function layoutProblems(page: Page) {
 }
 const guildCaps = { managed_guilds: [{ guild_key: 'synthetic-guild', name: '測試公會' }], managed_books: [{ book_id: 'video-autopilot', title: '測試剪輯技能' }], can_discuss: true, can_review_pulls: true };
 const viewports = [['desktop', { width: 1280, height: 900 }], ['mobile', { width: 390, height: 844 }]] as const;
-const memberPages: [string, string][] = [['supplier', '我有東西要賣'], ['retail', '我可以賣東西'], ['marketing', '行銷工作室'], ['workbench', '任務協作'], ['showcase', '作品與合作'], ['engagement', '合作紀錄'], ['guild-workspace', '公會管理']];
+const memberPages: [string, string, string][] = [['supplier', '我有東西要賣', '供貨工具'], ['retail', '我可以賣東西', '零售工具'], ['marketing', '行銷工作室', '行銷'], ['workbench', '任務協作', '工作'], ['showcase', '作品與合作', '探索'], ['engagement', '合作紀錄', '合作紀錄'], ['guild-workspace', '公會管理', '公會']];
 
 test('supplier reply needs an explicit choice and manual-quantity products do not ask for stock', async ({ page }) => {
   await login(page);
@@ -123,7 +123,7 @@ test('cooperation cards say who acts next and link between showcase and records'
   await settled(page);
   if (await page.getByText('還沒有合作紀錄', { exact: true }).count()) {
     await page.getByRole('link', { name: '作品與合作', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '作品與合作', level: 1, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   } else await navigate(page, '作品與合作');
   const showcase = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) }).first();
   await showcase.getByRole('button', { name: '我想找你合作', exact: true }).click();
@@ -194,10 +194,10 @@ test('every operations page fits desktop and phone with one h1 and labelled fiel
   for (const [viewport, size] of viewports) {
     await page.setViewportSize(size);
     await login(page);
-    for (const [id, label] of memberPages) {
+    for (const [id, label, heading] of memberPages) {
       const navigationLabel = id === 'supplier' ? 'AI 整理供貨商品' : id === 'retail' ? 'AI 製作銷售網站' : label;
       await navigate(page, navigationLabel);
-      await expect(page.getByRole('heading', { name: label, level: 1, exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: heading, level: 1, exact: true })).toBeVisible();
       await settled(page);
       expect(await layoutProblems(page), `${id} ${viewport}`).toEqual({ overflow: false, offenders: [], unlabeled: [], h1: 1 });
       await page.screenshot({ path: `${evidence}/after-${id}-${viewport}.png`, fullPage: true });

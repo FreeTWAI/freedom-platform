@@ -18,9 +18,9 @@
 
 整合候選另將測試員帳號進度 migration 重新編為202，保留既有198與活動199–201的原始 SQL；來源上限為202，這項來源整合不代表任何環境已部署。
 
-本候選另含會員遊戲來源私有隔離保存 migration203，repository 來源上限為203。此 migration 尚未套用到 staging／production，保存政策預設關閉；沒有來源公開讀取、執行或遊戲上架。以下部署觀察、既有旗標、政策列與 M1／完整驗收狀態不變。
+本候選另含會員遊戲來源私有隔離保存 migration203；平台改版第一輪再加入 migration204–208（分享、Agent 憑證、創作公會、公會工具、活動發布），repository 來源上限為208。migration203 尚未套用到 staging／production，保存政策預設關閉；沒有來源公開讀取、執行或遊戲上架。以下部署觀察、既有旗標、政策列與 M1／完整驗收狀態不變。
 
-<!-- glp-status: as_of=2026-10-12 release.production=d026ba76a4fb2c289cfb456dea68676f03f7bd30 release.staging=d026ba76a4fb2c289cfb456dea68676f03f7bd30 flag.production=true flag.staging=true repo_max_migration=203 applied_migration.production=196 applied_migration.staging=196 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=d026ba76a4fb2c289cfb456dea68676f03f7bd30 release.staging=d026ba76a4fb2c289cfb456dea68676f03f7bd30 flag.production=true flag.staging=true repo_max_migration=208 applied_migration.production=196 applied_migration.staging=196 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 2026-10-30 08:25 UTC：兩環境已部署 `d026ba76a4fb2c289cfb456dea68676f03f7bd30`／schema196，staging 41023423825 與正式站 41025042462 五階段、workflow／Deployment 均成功；08:24 UTC 正式站公開 health 為 `ok`、同 SHA。舊 staging 40853952665 的 handoff 已由 hosted 41023132536 結清為 `reconciled`／`handoff_reconciled`；首試41022455441在 R2 `chain_record` 讀取、任何寫入前失鎖，原 workflow／Deployment failure 保留。195／196 資料表已套用，未啟用新功能或旗標，M1／完整驗收與原政策列觀察不變；`as_of=2026-10-12` 仍是原功能觀察日期。本次無備份或備份前置，租約根因仍待 #1193 診斷。詳見[本次發布與復原收據](../unified-foundation/rollout-main-d026ba76-2026-10-30.json)。
 

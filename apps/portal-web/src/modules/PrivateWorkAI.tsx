@@ -24,8 +24,9 @@ const matching = (a: ModelSelection, b: ModelSelection) => JSON.stringify(a) ===
 
 /** Private content, CSRF and unresolved command keys stay in memory only. Every
  * replay is member-initiated and preserves the original body, key and CAS. */
-export function PrivateWorkAI({ client }: { client: PortalClient }) {
-  const [works, setWorks] = useState<Work[] | null>(null), [workId, setWorkId] = useState('');
+export function PrivateWorkAI({ client, selectedId }: { client: PortalClient; selectedId?:string }) {
+  const [works, setWorks] = useState<Work[] | null>(null), [workId, setWorkId] = useState(selectedId??'');
+  useEffect(()=>{setWorkId(selectedId??'');},[selectedId]);
   const [work, setWork] = useState<Work | null>(null), [overview, setOverview] = useState<Overview | null>(null);
   const [title, setTitle] = useState(''), [objective, setObjective] = useState('');
   const [creating, setCreating] = useState(false), [loading, setLoading] = useState(false), [busy, setBusy] = useState(false);
@@ -208,8 +209,7 @@ export function PrivateWorkAI({ client }: { client: PortalClient }) {
     {unresolvedControls.map(pending => <div className="banner banner-info" key={pending.path}><p>{pending.label}的結果尚未確認；其他停止或撤銷操作仍可使用。</p><div className="actions">
       <button type="button" className="btn btn-ghost" disabled={controlBusy.includes(pending.path)} onClick={() => void control(pending.label, pending.path, pending)}>以原控制請求確認{pending.label}</button>
     </div></div>)}
-    <DeviceConnections client={client} onChanged={() => void refresh()}/>
-    <ModelSettings client={client}/>
+    {window.location.pathname==='/device'?<><DeviceConnections client={client} onChanged={() => void refresh()}/><ModelSettings client={client}/></>:<div className="actions"><a className="btn btn-secondary btn-small" href="#automation/devices">裝置連線</a><a className="btn btn-secondary btn-small" href="#automation/models">模型設定</a></div>}
     <div className="private-ai-grid">
       <section className="card stack"><h2>建立與編輯工作</h2>
         {works === null ? <p role="status">{loading ? '正在讀取私人工作…' : '私人工作服務尚未可用。'}</p> : <>

@@ -2,8 +2,10 @@ import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 import sharp from 'sharp';
-import {test,expect,type Page} from './fixtures.js';
-import {navigate,signOut} from './navigation.js';
+import {expect,type Page} from './fixtures.js';
+// Publication retains immutable credit facts in the synthetic community; own the schema.
+import {isolatedSchemaTest as test} from './isolated-schema.js';
+import {navigate,signOut,openEventManagement,openEventOptions,seedLegacyEventDraft,clearMemberAgentEvents} from './navigation.js';
 import {DEMO_COMMUNITY,DEMO_USERS} from '../../packages/testing/seed.js';
 
 // A rejected departure intentionally leaves the mobile menu open. Dismiss it
@@ -22,7 +24,7 @@ const eventTest=test.extend<{eventFixture:{user:string;email:string}}>({
   eventFixture:async({page,e2eAuthPool},use,info)=>{
     const community=randomUUID(),user=randomUUID(),email=`event-fixture-${user}@example.test`;
     const before=Number((await e2eAuthPool.query('SELECT count(*) FROM communities')).rows[0].count);
-    let setupFailed=false;
+    let setupFailed=false,retainedLedger=false;
     try{
       await e2eAuthPool.query("INSERT INTO communities(community_id,name) VALUES($1,'合成活動隔離社群')",[community]);
       await e2eAuthPool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
@@ -45,6 +47,11 @@ const eventTest=test.extend<{eventFixture:{user:string;email:string}}>({
           // lifecycle. Fail explicitly if that contract changes; never disable
           // its preservation triggers to make fixture cleanup pass.
           expect(Number((await q.query('SELECT count(*) FROM assets WHERE owner_user_id=$1 OR community_ref=$2',[user,community])).rows[0].count)).toBe(0);
+          retainedLedger=Number((await q.query('SELECT count(*) FROM share_credit_events WHERE community_id=$1',[community])).rows[0].count)>0;
+          // Published shares own append-only credit evidence. Keep this isolated
+          // community intact until the enclosing E2E schema is dropped.
+          if(retainedLedger){await q.query('COMMIT');}else{
+          await clearMemberAgentEvents(q,[user]);
           await q.query('DELETE FROM community_event_bulletins WHERE community_id=$1',[community]);
           for(const table of ['community_event_banners','community_event_videos']){
             await q.query(`DELETE FROM ${table} WHERE event_id IN (SELECT event_id FROM community_events WHERE community_id=$1)`,[community]);
@@ -64,12 +71,12 @@ const eventTest=test.extend<{eventFixture:{user:string;email:string}}>({
           await q.query('DELETE FROM sessions WHERE user_id=$1',[user]);
           await q.query('DELETE FROM users WHERE community_id=$1',[community]);
           await q.query('DELETE FROM communities WHERE community_id=$1',[community]);
-          await q.query('COMMIT');
+          await q.query('COMMIT');}
         }catch(error){await q.query('ROLLBACK');throw error;}
         finally{q.release();}
         const remaining=Number((await e2eAuthPool.query('SELECT count(*) FROM communities WHERE community_id=$1',[community])).rows[0].count);
         const after=Number((await e2eAuthPool.query('SELECT count(*) FROM communities')).rows[0].count);
-        expect(remaining).toBe(0);expect(after).toBe(before);
+        expect(remaining).toBe(retainedLedger?1:0);expect(after).toBe(before+(retainedLedger?1:0));
         await info.attach('event-fixture-cleanup',{body:JSON.stringify({community,before,after,remaining}),contentType:'application/json'});
       })()]));
       for(const result of results)if(result.status==='rejected'){
@@ -118,10 +125,10 @@ for(const width of [1280,390])for(const fails of [false,true])eventTest(`event s
     if(fails)await expect(page.getByRole('alert').filter({hasText:'服務暫時無法回應（503）。請稍後重試。'})).toBeVisible();
     await expect(submit).toBeEnabled();
     await submit.click();
-  await page.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+  await openEventOptions(page);
     await page.getByLabel('活動類型').selectOption('guild_skill_exchange');
     await expect(page.getByLabel('活動類型')).toHaveValue('guild_skill_exchange');
-    await expect(page.getByRole('button',{name:'送出審核',exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'發布',exact:true})).toBeVisible();
   }finally{release();}
 });
 
@@ -134,23 +141,25 @@ test('member previews an event, an authorized officer approves it, and participa
     VALUES($1,'guild_member_operations',$2) ON CONFLICT DO NOTHING`,[DEMO_COMMUNITY,DEMO_USERS[1].user_id]);
   await context.grantPermissions(['clipboard-read','clipboard-write']);
   await page.setViewportSize({width:390,height:844});await login(page);await navigate(page,'社群活動');
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   const title='合成活動：共同整理開源工具',form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   let writes=0;page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events')writes++;});
   await form.getByLabel('活動名稱',{exact:true}).fill(title);
   await form.getByLabel('活動說明',{exact:true}).fill('這是合成內容；一起用範例資料整理工具，沒有付款或真實招募。');
-  await form.getByLabel('線上場地',{exact:true}).fill('合成線上工作室');
+  await form.getByLabel('地點',{exact:true}).fill('合成線上工作室');
+  await form.getByRole('combobox',{name:'形式',exact:true}).selectOption('online');
   await form.getByLabel('線上參與連結',{exact:true}).fill('https://example.com/synthetic-event');
-  await form.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+  await openEventOptions(page);
   await form.getByRole('combobox',{name:/^參與範圍/}).selectOption('open');
   await expect(form).toContainText('America/New_York');
-  await expect(form.getByLabel('報名方式',{exact:true})).toHaveValue('community_member');
+  await expect(form.getByLabel('報名方式',{exact:true})).toHaveValue('guest_allowed');
+  await form.getByLabel('報名方式',{exact:true}).selectOption('community_member');
   const start=await form.getByLabel('開始時間',{exact:true}).inputValue();
   const expectedIso=await page.evaluate(value=>new Date(value).toISOString(),start);
   const photo=await sharp({create:{width:700,height:1050,channels:3,background:'#366177'}}).png().toBuffer();
   await form.getByText('加上海報或影片（選填）',{exact:true}).click();
   await form.getByLabel('活動海報（選填）').setInputFiles({name:'synthetic-event.png',mimeType:'image/png',buffer:photo});
-  await expect(form.getByRole('button',{name:'送出審核',exact:true})).toBeEnabled();
+  await expect(form.getByRole('button',{name:'發布',exact:true})).toBeEnabled();
   await form.getByText('送出前預覽活動',{exact:true}).click();
   const preview=form.getByRole('region',{name:'活動送審預覽',exact:true});
   await expect(preview).toContainText(title);await expect(preview).toContainText('活動頁公開，所有人可查看');await expect(preview).toContainText('社群帳號登入後報名');
@@ -162,16 +171,23 @@ test('member previews an event, an authorized officer approves it, and participa
     await page.screenshot({path:`test-results/event-member-journey/preview-${theme}-390.png`,fullPage:true});
   }
   const creating=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events');
-  await form.getByRole('button',{name:'送出審核',exact:true}).click();
+  await form.getByRole('button',{name:'發布',exact:true}).click();
   const created=await creating;expect(created.status()).toBe(201);const event=await created.json();
-  expect(event.starts_at).toBe(expectedIso);expect(event.state).toBe('pending');expect(event.registration_policy).toBe('community_member');
+  expect(event.starts_at).toBe(expectedIso);expect(event.state).toBe('published');expect(event.registration_policy).toBe('community_member');
   let card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
-  await expect(card).toContainText('待審核');await expect(card.locator('.experience-banner-image')).toBeVisible();
+  await expect(card).toContainText('開放報名');await expect(card.locator('.experience-banner-image')).toBeVisible();
+  // New events publish immediately; review remains available for retained legacy drafts.
+  const legacyId=randomUUID(),legacyTitle=title+'（既有草稿）';
+  await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind,registration_policy,review_guild_key)
+    SELECT $1,community_id,organizer_ref,$2,description,starts_at,ends_at,mode,location,'pending',visibility,event_kind,registration_policy,'guild_member_operations' FROM community_events WHERE event_id=$3`,[legacyId,legacyTitle,event.event_id]);
   await logout(page);await login(page,'reviewer@local.test');await navigate(page,'社群活動');
+  const legacyCard=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:legacyTitle,exact:true})});
+  await legacyCard.getByRole('button',{name:'審核活動',exact:true}).click();
+  await legacyCard.getByLabel('審核理由',{exact:true}).fill('合成驗收：介紹、時間及公開範圍已核對。');
+  await legacyCard.getByRole('button',{name:'核准並公告',exact:true}).click();await expect(legacyCard).toContainText('開放報名');
   card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
-  await card.getByRole('button',{name:'審核活動',exact:true}).click();
-  await card.getByLabel('審核理由',{exact:true}).fill('合成驗收：介紹、時間及公開範圍已核對。');
-  await card.getByRole('button',{name:'核准並公告',exact:true}).click();await expect(card).toContainText('開放報名');
+  await expect(card.getByRole('button',{name:'審核活動',exact:true})).toHaveCount(0);
+  await expect(card).toContainText('開放報名');
   await card.getByRole('button',{name:'分享活動',exact:true}).click();
   await expect(page.getByText('活動專頁連結已複製，分享碼已包含在連結中。',{exact:true})).toBeVisible();
   const shared=await page.evaluate(()=>navigator.clipboard.readText());
@@ -184,7 +200,20 @@ test('member previews an event, an authorized officer approves it, and participa
     expect((await site.json()).community_discovery_enabled).toBe(false);
     await expect(publicPage.getByRole('heading',{name:title,exact:true})).toBeVisible();
     // /go/ replaces itself with the event page. Login has to stay on that page, query included.
-    const eventUrl=publicPage.url();
+    const publicUrl=new URL(publicPage.url());
+    expect(publicUrl.searchParams.get('ref')).not.toBeNull();
+    const loginLink=publicPage.getByRole('link',{name:'登入報名',exact:true});
+    const loginUrl=new URL((await loginLink.getAttribute('href'))!,publicPage.url());
+    expect(loginUrl.searchParams.get('ref')).toBe(publicUrl.searchParams.get('ref'));
+    const managementUrl=new URL((await publicPage.getByRole('link',{name:'活動管理',exact:true}).getAttribute('href'))!,publicPage.url());
+    expect(new URLSearchParams(managementUrl.hash.split('?')[1]).get('ref')).toBe(publicUrl.searchParams.get('ref'));
+    for(const query of ['ref=invalid&return_to=https%3A%2F%2Fexample.test',`ref=${publicUrl.searchParams.get('ref')}&ref=${publicUrl.searchParams.get('ref')}`]){
+      const rejected=await publicPage.request.get(`/events/${event.event_id}?${query}`);expect(rejected.status()).toBe(200);
+      const html=await rejected.text();expect(html).toContain(`href="/events/${event.event_id}?app=1"`);expect(html).toContain(`href="/#explore/events/${event.event_id}"`);
+    }
+    await loginLink.click();
+    // Authentication retains public identity/referral and the explicit native-app selector, so a reload stays in the app.
+    const eventUrl=publicUrl.href,appUrl=new URL(eventUrl);appUrl.searchParams.append('app','1');
     const eventLocation=new URL(eventUrl);
     expect(eventLocation.origin).toBe(new URL(shared).origin);
     expect(eventLocation.pathname).toMatch(/^\/events\/[0-9a-f-]{36}\/?$/);
@@ -194,19 +223,19 @@ test('member previews an event, an authorized officer approves it, and participa
     await publicPage.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
     await publicPage.getByRole('button',{name:'登入',exact:true}).click();
     await expect(publicPage.getByRole('region',{name:'活動專頁',exact:true})).toContainText(title);
-    await expect(publicPage).toHaveURL(eventUrl);
+    await expect(publicPage).toHaveURL(appUrl.href);
     expect(await publicPage.evaluate(()=>window.history.state?.freedomEventLogin)).toBeUndefined();
     await publicPage.goBack();await publicPage.goForward();
     await expect(publicPage.getByRole('region',{name:'活動專頁',exact:true})).toContainText(title);
     await expect(publicPage.getByRole('button',{name:'返回活動',exact:true})).toHaveCount(0);
   }
   finally{await guest.close();}
-  await logout(page);await login(page,'client@local.test');await page.goto(shared);
+  await logout(page);await login(page,'client@local.test');await page.goto(shared);await openEventManagement(page);
   await page.getByRole('button',{name:'我要參加',exact:true}).click();await expect(page.getByRole('button',{name:'取消報名',exact:true})).toBeVisible();
   await page.reload();await page.getByRole('button',{name:'取消報名',exact:true}).click();await expect(page.getByRole('button',{name:'我要參加',exact:true})).toBeVisible();
   await logout(page);await login(page);await navigate(page,'我的內容');
   const own=page.getByRole('article').filter({has:page.getByRole('heading',{name:title,exact:true})});
-  await own.getByRole('link',{name:'查看',exact:true}).click();await expect(page.getByRole('region',{name:'活動專頁',exact:true})).toBeVisible();
+  await own.getByRole('link',{name:'查看',exact:true}).click();await openEventManagement(page);await expect(page.getByRole('region',{name:'活動專頁',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'報名名單',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('dialog').getByRole('button',{name:'關閉',exact:true}).click();
   await page.getByRole('button',{name:'取消活動',exact:true}).click();await expect(page.getByRole('region',{name:'活動專頁',exact:true})).toContainText('已取消');
 });
@@ -216,71 +245,72 @@ for(const width of [1440,390])test(`unsaved event input survives rejected naviga
   let discard=false;const prompts:string[]=[];let writes=0;
   page.on('dialog',async dialog=>{prompts.push(dialog.message());await(discard?dialog.accept():dialog.dismiss());});
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/events')writes++;});
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   // An untouched form has no work to discard.
   await navigate(page,'我的內容');expect(prompts).toEqual([]);await navigate(page,'社群活動');
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   await form.getByLabel('活動名稱',{exact:true}).fill('尚未送出的活動草稿');
   await form.getByLabel('活動說明',{exact:true}).fill('切換頁面、返回與關閉編輯都不能默默丟掉這段文字。');
   await form.getByLabel('開始時間',{exact:true}).fill('2030-06-10T14:30');
-  await navigate(page,'我的內容');await expect(page).toHaveURL(/#events$/);expect(prompts).toHaveLength(1);
+  await navigate(page,'我的內容');await expect(page).toHaveURL(/#explore\/events$/);expect(prompts).toHaveLength(1);
   const closeMenu=page.getByRole('button',{name:'關閉選單',exact:true});if(await closeMenu.isVisible())await closeMenu.click();
   await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('尚未送出的活動草稿');
-  await page.goBack();await expect.poll(()=>prompts.length).toBe(2);await expect(page).toHaveURL(/#events$/);
+  await page.goBack();await expect.poll(()=>prompts.length).toBe(2);await expect(page).toHaveURL(/#explore\/events$/);
   await page.evaluate(()=>{window.location.hash='events/00000000-0000-4000-8000-000000000001';});
-  await expect.poll(()=>prompts.length).toBe(3);await expect(page).toHaveURL(/#events$/);
+  await expect.poll(()=>prompts.length).toBe(3);await expect(page).toHaveURL(/#explore\/events$/);
   await expect(form.getByLabel('開始時間',{exact:true})).toHaveValue('2030-06-10T14:30');
   await form.getByRole('button',{name:'返回',exact:true}).click();expect(prompts).toHaveLength(4);
   await expect(form.getByRole('textbox',{name:'活動說明',exact:true})).toHaveValue('切換頁面、返回與關閉編輯都不能默默丟掉這段文字。');
   expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(true);
   await page.screenshot({path:info.outputPath(`event-draft-retained-${width}.png`),fullPage:true});
-  discard=true;await navigate(page,'我的內容');await expect(page).toHaveURL(/#my-content$/);
-  await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  discard=true;await navigate(page,'我的內容');await expect(page).toHaveURL(/#me\/content$/);
+  await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('');expect(writes).toBe(0);
 });
 
-test('event submission blocks departure while pending and saved edits require explicit discard',async({page})=>{
-  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+test('event submission blocks departure while pending and saved edits require explicit discard',async({page,e2eAuthPool})=>{
+  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   const title='離開保護 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
-  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('隔離資料，驗證送出與返回編輯。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('隔離資料，驗證送出與返回編輯。');await form.getByLabel('地點',{exact:true}).fill('合成場地');
   let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});let reached=false,writes=0;
   const createdResponse=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/api/v1/events');
   await page.route('**/api/v1/events',async route=>{if(route.request().method()!=='POST')return route.continue();reached=true;writes++;await held;await route.continue();});
   try{
-    await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect.poll(()=>reached).toBe(true);
+    await form.getByRole('button',{name:'發布',exact:true}).click();await expect.poll(()=>reached).toBe(true);
     await expect(form.getByLabel('活動名稱',{exact:true})).toBeDisabled();
-    await navigate(page,'我的內容');await expect(page).toHaveURL(/#events$/);await expect(page.getByRole('status').filter({hasText:'正在處理活動'})).toBeVisible();
+    await navigate(page,'我的內容');await expect(page).toHaveURL(/#explore\/events$/);await expect(page.getByRole('status').filter({hasText:'正在處理活動'})).toBeVisible();
   }finally{release();}
-  await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();expect(writes).toBe(1);
+  await expect(page.getByText('活動已發布。',{exact:true})).toBeVisible();expect(writes).toBe(1);
   const createdEvent=await(await createdResponse).json();
-  await navigate(page,'我的內容');await expect(page).toHaveURL(/#my-content$/);await navigate(page,'社群活動');
+  await seedLegacyEventDraft(e2eAuthPool,createdEvent.event_id);
+  await navigate(page,'我的內容');await expect(page).toHaveURL(/#me\/content$/);await navigate(page,'社群活動');
   const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
   let discard=false;let prompts=0;page.on('dialog',async dialog=>{prompts++;await(discard?dialog.accept():dialog.dismiss());});
   // Opening a saved draft alone does not make it dirty.
   await card.getByRole('button',{name:'返回',exact:true}).click();expect(prompts).toBe(0);
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await card.getByLabel('活動名稱',{exact:true}).fill(title+' 修改中');
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();expect(prompts).toBe(1);await expect(card.getByLabel('活動名稱',{exact:true})).toHaveValue(title+' 修改中');
-  await navigate(page,'我的內容');await expect(page).toHaveURL(/#events$/);expect(prompts).toBe(2);
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);expect(prompts).toBe(1);await expect(card.getByLabel('活動名稱',{exact:true})).toHaveValue(title+' 修改中');
+  await navigate(page,'我的內容');await expect(page).toHaveURL(/#explore\/events$/);expect(prompts).toBe(2);
   discard=true;await card.getByRole('button',{name:'返回',exact:true}).click();await expect(card.getByLabel('活動名稱',{exact:true})).toHaveCount(0);
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('活動名稱',{exact:true})).toHaveValue(title);expect(writes).toBe(1);
-  await page.goto(`/events/${createdEvent.event_id}`);await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
+  await openEventManagement(page,createdEvent.event_id);await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
   await card.getByLabel('活動名稱',{exact:true}).fill(title+' 專頁修改');discard=false;
   await page.getByRole('button',{name:'返回活動列表與行事曆',exact:true}).click();
-  await expect(page).toHaveURL(new RegExp(`/events/${createdEvent.event_id}$`));await expect(card.getByLabel('活動名稱',{exact:true})).toHaveValue(title+' 專頁修改');
-  discard=true;await page.getByRole('button',{name:'返回活動列表與行事曆',exact:true}).click();await expect(page).toHaveURL(/\/#events$/);
+  await expect(page).toHaveURL(new RegExp(`/#explore/events/${createdEvent.event_id}$`));await expect(card.getByLabel('活動名稱',{exact:true})).toHaveValue(title+' 專頁修改');
+  discard=true;await page.getByRole('button',{name:'返回活動列表與行事曆',exact:true}).click();await expect(page).toHaveURL(/\/#explore\/events$/);
 });
 
 for(const width of [1440,390])test(`an unknown event submission survives a later refusal with its original retry key at ${width}px`,async({page,e2eAuthPool},info)=>{
-  await page.setViewportSize({width,height:844});await login(page,width===390?'client@local.test':'maker@local.test');await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  await page.setViewportSize({width,height:844});await login(page,width===390?'client@local.test':'maker@local.test');await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   const title='不明結果 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   const otherTitle='其他活動 '+randomUUID().slice(0,8);
-  await form.getByLabel('活動名稱',{exact:true}).fill(otherTitle);await form.getByLabel('活動說明',{exact:true}).fill('合成案例：原操作未決時不可插入取消其他活動。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
-  await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();
+  await form.getByLabel('活動名稱',{exact:true}).fill(otherTitle);await form.getByLabel('活動說明',{exact:true}).fill('合成案例：原操作未決時不可插入取消其他活動。');await form.getByLabel('地點',{exact:true}).fill('合成場地');
+  await form.getByRole('button',{name:'發布',exact:true}).click();await expect(page.getByText('活動已發布。',{exact:true})).toBeVisible();
   const other=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:otherTitle,exact:true})});
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();
-  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('合成案例，原請求已完成但回應遺失。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('合成案例，原請求已完成但回應遺失。');await form.getByLabel('地點',{exact:true}).fill('合成場地');
   const attempts:{body:string|null;key:string|undefined}[]=[];
   let releaseRefresh!:()=>void,reachedRefresh!:()=>void;
   const heldRefresh=new Promise<void>(resolve=>{releaseRefresh=resolve;}),refreshReached=new Promise<void>(resolve=>{reachedRefresh=resolve;});
@@ -295,46 +325,46 @@ for(const width of [1440,390])test(`an unknown event submission survives a later
     else if(attempts.length===2)await route.fulfill({status:429,contentType:'application/problem+json',body:JSON.stringify({type:'about:blank',title:'合成傳輸層拒絕',status:429,code:'synthetic_transport_refusal',detail:'合成傳輸層拒絕；不代表原請求未完成。'})});
     else await route.continue();
   });
-  await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByRole('alert')).toBeVisible();
+  await form.getByRole('button',{name:'發布',exact:true}).click();await expect(page.getByRole('alert')).toBeVisible();
   const titleInput=form.getByLabel('活動名稱',{exact:true});await expect(titleInput).toBeDisabled();
   await titleInput.evaluate(input=>(input as HTMLInputElement).focus());await page.keyboard.type('不能改成另一筆活動');await expect(titleInput).toHaveValue(title);
   await expect(form.getByLabel('開始時間',{exact:true})).toBeDisabled();await expect(form.locator('input[type="file"]')).toHaveCount(2);
   for(const input of await form.locator('input[type="file"]').all())await expect(input).toBeDisabled();
   await expect(other.getByRole('button',{name:'取消活動',exact:true})).toBeDisabled();
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();await expect(titleInput).toHaveValue(title);expect(attempts).toHaveLength(1);
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);await expect(titleInput).toHaveValue(title);expect(attempts).toHaveLength(1);
   let prompts=0;page.on('dialog',async dialog=>{prompts++;await dialog.accept();});
-  await navigate(page,'我的內容');await expect(page).toHaveURL(/#events$/);expect(prompts).toBe(0);
+  await navigate(page,'我的內容');await expect(page).toHaveURL(/#explore\/events$/);expect(prompts).toBe(0);
   await expect(page.getByRole('status').filter({hasText:'尚未確認原操作的結果'})).toBeVisible();
   await closeRejectedMobileNavigation(page);
   await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
   try{
-    await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'合成傳輸層拒絕'})).toBeVisible();
+    await form.getByRole('button',{name:'發布',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'合成傳輸層拒絕'})).toBeVisible();
     expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);await expect(titleInput).toBeDisabled();
     await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
-    await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();await refreshReached;
+    await form.getByRole('button',{name:'發布',exact:true}).click();await expect(page.getByText('活動已發布。',{exact:true})).toBeVisible();await refreshReached;
     expect(attempts).toHaveLength(3);expect(attempts[0].key).toBeTruthy();expect(attempts[2]).toEqual(attempts[0]);
     expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_events WHERE title=$1',[title])).rows[0].count)).toBe(1);
     // A confirmed save can close a fresh untouched composer and leave while its
     // real list response is still held. Waiting for that read would hide the race.
     const closeMenu=page.getByRole('button',{name:'關閉選單',exact:true});if(await closeMenu.isVisible())await closeMenu.click();
-    await page.getByRole('button',{name:'辦活動',exact:true}).click();await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('');
+    await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('');
     await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toHaveCount(0);
     expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(false);
-    await navigate(page,'我的內容');await expect(page).toHaveURL(/#my-content$/);expect(prompts).toBe(0);
+    await navigate(page,'我的內容');await expect(page).toHaveURL(/#me\/content$/);expect(prompts).toBe(0);
     await info.attach('ack-lost-original-command',{body:JSON.stringify({width,attempts,title,durable_count:1,departed_while_get200_held:true}),contentType:'application/json'});
     await page.screenshot({path:info.outputPath(`event-retry-left-${width}.png`),fullPage:true});
   }finally{releaseRefresh();}
 });
 
 test('a known event rejection unlocks the draft for correction and a new submission',async({page,e2eAuthPool})=>{
-  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   const title='修正時間 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
-  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('結束時間早於開始時間，已知拒絕後可修正。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('結束時間早於開始時間，已知拒絕後可修正。');await form.getByLabel('地點',{exact:true}).fill('合成場地');
   await form.getByLabel('開始時間',{exact:true}).fill('2030-06-10T14:30');await form.getByLabel('結束時間',{exact:true}).fill('2030-06-10T13:30');
   const rejected=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events');
-  await form.getByRole('button',{name:'送出審核',exact:true}).click();expect((await rejected).status()).toBe(422);await expect(page.getByRole('alert')).toBeVisible();
+  await form.getByRole('button',{name:'發布',exact:true}).click();expect((await rejected).status()).toBe(422);await expect(page.getByRole('alert')).toBeVisible();
   await expect(form.getByLabel('活動名稱',{exact:true})).toBeEnabled();await form.getByLabel('結束時間',{exact:true}).fill('2030-06-10T15:30');
-  await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();
+  await form.getByRole('button',{name:'發布',exact:true}).click();await expect(page.getByText('活動已發布。',{exact:true})).toBeVisible();
   expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_events WHERE title=$1',[title])).rows[0].count)).toBe(1);
 });
 
@@ -358,15 +388,15 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
   try{
     hold=true;
     for(const title of titles){
-      await page.getByRole('button',{name:'辦活動',exact:true}).click();
+      await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
       await form.getByLabel('活動名稱',{exact:true}).fill(title);
       await form.getByLabel('活動說明',{exact:true}).fill('合成內容：核對已確認版本與較新草稿。');
-      await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
-      await form.getByRole('button',{name:'送出審核',exact:true}).click();
+      await form.getByLabel('地點',{exact:true}).fill('合成場地');
+      await form.getByRole('button',{name:'發布',exact:true}).click();
       await expect(form).toHaveCount(0);
     }
     await expect.poll(()=>snapshots.length).toBe(2);
-    await page.getByRole('button',{name:'辦活動',exact:true}).click();
+    await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
     await form.getByLabel('活動名稱',{exact:true}).fill('較新的未送出草稿');
     snapshots[1].release();await snapshots[1].done;
     await expect(page.getByRole('heading',{name:titles[1],exact:true})).toBeVisible();
@@ -378,13 +408,14 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
     page.once('dialog',dialog=>dialog.accept());await form.getByRole('button',{name:'返回',exact:true}).click();
     hold=false;
     const id=(await e2eAuthPool.query('SELECT event_id FROM community_events WHERE organizer_ref=$1 AND title=$2',[user,titles[1]])).rows[0].event_id as string;
+    await seedLegacyEventDraft(e2eAuthPool,id);
     // Keep a separate, legitimate read-error alert visible as a negative control:
     // it must never count as the awaited event media rejection.
     await page.route(`**/api/v1/events/${id}/my-missions`,route=>route.fulfill({
       status:503,contentType:'application/problem+json',
       json:{code:'unavailable',detail:'合成小任務讀取暫停'},
     }));
-    await page.goto(`/events/${id}`);
+    await openEventManagement(page,id);
     await expect(page.getByRole('region',{name:'我的活動小任務',exact:true}).getByRole('alert')).toHaveText('服務暫時無法回應（503）。請稍後重試。');
     const card=page.locator('.experience-card'),editor=card.locator('form');
     await expect(card.getByRole('heading',{name:titles[1],exact:true})).toBeVisible();
@@ -427,7 +458,7 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
     await expect(page.locator('.event-flow > [role="alert"].banner-error')).toBeVisible();
     await expect(editor.getByLabel('活動名稱',{exact:true})).toHaveValue(titles[1]+' 修改二');
     page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'我的內容');
-    await expect(page).toHaveURL(new RegExp(`/events/${id}$`));
+    await expect(page).toHaveURL(new RegExp(`/#explore/events/${id}$`));
     await closeRejectedMobileNavigation(page);
     await editor.getByRole('button',{name:'重試保存',exact:true}).click();
     rejectVideo=false;await editor.getByRole('button',{name:'儲存修改',exact:true}).click();
@@ -446,12 +477,12 @@ for(const kind of ['banner','video'] as const)for(const ack of ['lost','malforme
   const title=`媒體對帳 ${user}`;
   await login(page,email);await navigate(page,'社群活動');
   await expect(page.getByText('目前沒有即將舉辦的活動。你可以提交第一場。',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   const composer=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
-  await composer.getByLabel('活動名稱',{exact:true}).fill(title);await composer.getByLabel('活動說明',{exact:true}).fill('已提交但 ACK 遺失或格式不符，不可再次產生媒體效果。');await composer.getByLabel('線上場地',{exact:true}).fill('合成場地');
+  await composer.getByLabel('活動名稱',{exact:true}).fill(title);await composer.getByLabel('活動說明',{exact:true}).fill('已提交但 ACK 遺失或格式不符，不可再次產生媒體效果。');await composer.getByLabel('地點',{exact:true}).fill('合成場地');
   const created=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events');
-  await composer.getByRole('button',{name:'送出審核',exact:true}).click();const id=(await(await created).json()).event_id as string;
-  await expect(composer).toHaveCount(0);await page.goto(`/events/${id}`);
+  await composer.getByRole('button',{name:'發布',exact:true}).click();const id=(await(await created).json()).event_id as string;
+  await expect(composer).toHaveCount(0);await seedLegacyEventDraft(e2eAuthPool,id);await openEventManagement(page,id);
   const card=page.locator('.experience-card'),editor=card.locator('form');
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
   const photo=await sharp({create:{width:700,height:1050,channels:3,background:'#366177'}}).png().toBuffer();
@@ -505,7 +536,7 @@ for(const kind of ['banner','video'] as const)for(const ack of ['lost','malforme
     if(kind==='video')await expect(card.getByRole('button',{name:'移除海報',exact:true})).toBeDisabled();
     // Even direct form submission cannot bypass the unknown-outcome guard.
     await editor.evaluate(form=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
-    await navigate(page,'我的內容');await expect(page).toHaveURL(new RegExp(`/events/${id}$`));
+    await navigate(page,'我的內容');await expect(page).toHaveURL(new RegExp(`/#explore/events/${id}$`));
     expect(updates).toEqual(['"1"']);expect(commands.filter(entry=>entry.kind===kind)).toHaveLength(1);
     expect(commands.filter(entry=>entry.kind==='video')).toHaveLength(kind==='banner'?0:1);
     const committed=(await e2eAuthPool.query('SELECT command FROM transition_journal WHERE aggregate_id=$1 AND command=$2',[id,`save_${kind}`])).rows;
@@ -517,7 +548,7 @@ for(const kind of ['banner','video'] as const)for(const ack of ['lost','malforme
     expect(durable).toEqual([{command:'save_banner',n:1},{command:'save_video',n:1}]);
     expect(Number((await e2eAuthPool.query('SELECT aggregate_version FROM community_events WHERE event_id=$1',[id])).rows[0].aggregate_version)).toBe(4);
     // Confirmed recovery also releases departure without waiting for a list refresh.
-    await navigate(page,'我的內容');await expect(page).toHaveURL(/#my-content$/);
+    await navigate(page,'我的內容');await expect(page).toHaveURL(/#me\/content$/);
     await info.attach('media-reconciliation',{body:JSON.stringify({kind,ack,reads,updates,commands,durable}),contentType:'application/json'});
   }finally{release();releaseList();}
 });
@@ -538,10 +569,10 @@ eventTest('superseded event reads cannot replace the newest loading or error sta
     await route.fulfill(failure?{status:503,contentType:'application/problem+json',body:JSON.stringify({detail:`合成刷新失敗 ${index}`})}:{response});complete();
   });
   async function create(index:number){
-    await page.getByRole('button',{name:'辦活動',exact:true}).click();
+    await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
     const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
-    await form.getByLabel('活動名稱',{exact:true}).fill(`讀取狀態 ${index} ${user}`);await form.getByLabel('活動說明',{exact:true}).fill('合成列表競態');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
-    await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(form).toHaveCount(0);
+    await form.getByLabel('活動名稱',{exact:true}).fill(`讀取狀態 ${index} ${user}`);await form.getByLabel('活動說明',{exact:true}).fill('合成列表競態');await form.getByLabel('地點',{exact:true}).fill('合成場地');
+    await form.getByRole('button',{name:'發布',exact:true}).click();await expect(form).toHaveCount(0);
   }
   const loading=page.getByRole('status').filter({hasText:'正在載入活動…'});
   try{
@@ -566,7 +597,7 @@ eventTest('legacy draft preserves guest policy until the organizer explicitly ch
   const eventId=randomUUID(),title=`既有報名方式 ${eventId.slice(0,8)}`;
   await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
     SELECT $1,community_id,user_id,$2,'合成既有活動',now()+interval '2 days',now()+interval '2 days 1 hour','online','合成教室','pending','open','other' FROM users WHERE user_id=$3`,[eventId,title,eventFixture.user]);
-  await login(page,eventFixture.email);await page.goto(`/events/${eventId}`);
+  await login(page,eventFixture.email);await openEventManagement(page,eventId);
   const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('報名方式',{exact:true})).toHaveValue('guest_allowed');
   const editor=card.locator('form.experience-editor');
@@ -581,9 +612,9 @@ eventTest('legacy draft preserves guest policy until the organizer explicitly ch
 });
 
 eventTest('malformed metadata success retains the original command and does not start selected media',async({page,e2eAuthPool,eventFixture:{user,email}},info)=>{
-  await login(page,email);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  await login(page,email);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})}),title=`回條確認 ${user}`;
-  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('活動已儲存但回條被截斷；確認原命令後才接續原影片。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('活動已儲存但回條被截斷；確認原命令後才接續原影片。');await form.getByLabel('地點',{exact:true}).fill('合成場地');
   await form.getByText('加上海報或影片（選填）',{exact:true}).click();
   await form.getByLabel('活動影片（選填）').setInputFiles({name:'synthetic.mp4',mimeType:'video/mp4',buffer:await readFile('tests/media-fixtures/event-video-160x90.mp4')});
   const commands:{body:string|null;key:string|undefined}[]=[],uploads:string[]=[];
@@ -594,10 +625,10 @@ eventTest('malformed metadata success retains the original command and does not 
     if(commands.length===1)await route.fulfill({response,body:'{}'});else await route.fulfill({response});
   });
   await page.route('**/api/v1/events/*/video',async route=>{if(route.request().method()==='POST')uploads.push(route.request().headers()['if-match']);await route.continue();});
-  await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'結果尚未確認'})).toBeVisible();
+  await form.getByRole('button',{name:'發布',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'結果尚未確認'})).toBeVisible();
   await expect(form.getByLabel('活動名稱',{exact:true})).toBeDisabled();await expect(form.getByLabel('活動影片（選填）')).toBeDisabled();expect(uploads).toHaveLength(0);
   await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
-  await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(form).toHaveCount(0);await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();
+  await form.getByRole('button',{name:'發布',exact:true}).click();await expect(form).toHaveCount(0);await expect(page.getByText('活動已發布。',{exact:true})).toBeVisible();
   expect(commands).toHaveLength(2);expect(commands[1]).toEqual(commands[0]);expect(uploads).toEqual(['"1"']);
   const events=(await e2eAuthPool.query('SELECT event_id,aggregate_version FROM community_events WHERE organizer_ref=$1 AND title=$2',[user,title])).rows;
   expect(events).toHaveLength(1);expect(Number(events[0].aggregate_version)).toBe(2);
@@ -607,25 +638,26 @@ eventTest('malformed metadata success retains the original command and does not 
 
 for(const width of [1280,390])eventTest(`custom event capacity stays editable and persists at ${width}px`,async({page,eventFixture,e2eAuthPool})=>{
   await page.setViewportSize({width,height:900});await login(page,eventFixture.email);await navigate(page,'社群活動');
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   const title=`自訂人數 ${eventFixture.user}`;
-  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('合成自訂人數回歸');await form.getByLabel('線上場地',{exact:true}).fill('合成教室');
-  await form.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('合成自訂人數回歸');await form.getByLabel('地點',{exact:true}).fill('合成教室');
+  await openEventOptions(page);
   const select=form.getByRole('combobox',{name:/^人數上限/}),custom=form.getByLabel('自訂人數上限',{exact:true});
   await select.selectOption('custom');await custom.fill('');await expect(custom).toBeVisible();await expect(select).toHaveValue('custom');
   const writes:string[]=[];const record=(request:import('@playwright/test').Request)=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/events')writes.push(request.postData()??'');};page.on('request',record);
   try{
-    await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(custom).toBeFocused();expect(await custom.evaluate((input:HTMLInputElement)=>input.validity.valueMissing)).toBe(true);expect(writes).toEqual([]);
+    await form.getByRole('button',{name:'發布',exact:true}).click();await expect(custom).toBeFocused();expect(await custom.evaluate((input:HTMLInputElement)=>input.validity.valueMissing)).toBe(true);expect(writes).toEqual([]);
     // Native keystrokes must pass through the preset intermediate value 10
     // without removing the focused input before the final 1 arrives.
     await custom.pressSequentially('101');await expect(custom).toHaveValue('101');await expect(custom).toBeFocused();await expect(select).toHaveValue('custom');
     const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events');
-    await form.getByRole('button',{name:'送出審核',exact:true}).click();const saved=await response;expect(saved.status()).toBe(201);const event=await saved.json();expect(event.capacity).toBe(101);await expect(form).toHaveCount(0);expect(writes).toHaveLength(1);
+    await form.getByRole('button',{name:'發布',exact:true}).click();const saved=await response;expect(saved.status()).toBe(201);const event=await saved.json();expect(event.capacity).toBe(101);await expect(form).toHaveCount(0);expect(writes).toHaveLength(1);
     expect((await e2eAuthPool.query('SELECT capacity FROM community_events WHERE event_id=$1',[event.event_id])).rows[0].capacity).toBe(101);
-    await page.goto(`/events/${event.event_id}`);
+    await seedLegacyEventDraft(e2eAuthPool,event.event_id);
+    await openEventManagement(page,event.event_id);
     const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
-    const editor=card.locator('form.experience-editor');await editor.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+    const editor=card.locator('form.experience-editor');await openEventOptions(page);
     const editCustom=editor.getByLabel('自訂人數上限',{exact:true});await expect(editCustom).toHaveValue('101');await editCustom.fill('');await expect(editCustom).toBeVisible();await editCustom.pressSequentially('20');await expect(editCustom).toHaveValue('20');
     // Choosing a preset is still an explicit mode change.
     await editor.getByRole('combobox',{name:/^人數上限/}).selectOption('20');await expect(editCustom).toHaveCount(0);
@@ -637,20 +669,24 @@ for(const width of [1280,390])eventTest(`custom event capacity stays editable an
 
 for(const width of [1280,390])eventTest(`extended event years show recoverable validation before any save at ${width}px`,async({page,eventFixture,e2eAuthPool})=>{
   await page.setViewportSize({width,height:900});await login(page,eventFixture.email);await navigate(page,'社群活動');
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   const form=page.locator('form.experience-editor'),title=`合成日期邊界 ${width}`;
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   let writes=0;page.on('request',request=>{if(request.method()==='POST'&&/^\/api\/v1\/events(?:\/[0-9a-f-]+\/update)?$/.test(new URL(request.url()).pathname))writes++;});
-  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('日期輸入錯誤後保留的合成內容');await form.getByLabel('線上場地',{exact:true}).fill('合成線上場地');
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('日期輸入錯誤後保留的合成內容');await form.getByLabel('地點',{exact:true}).fill('合成線上場地');
   await form.getByLabel('開始時間',{exact:true}).fill('2099-01-01T12:00');await form.getByLabel('結束時間',{exact:true}).fill('2099-01-01T13:00');
   for(const editing of [false,true]){
-    if(editing)await page.getByRole('button',{name:'編輯草稿',exact:true}).click();
+    if(editing){
+      const id=(await e2eAuthPool.query('SELECT event_id FROM community_events WHERE organizer_ref=$1',[eventFixture.user])).rows[0].event_id;
+      await seedLegacyEventDraft(e2eAuthPool,id);await page.reload();
+      await page.getByRole('button',{name:'編輯草稿',exact:true}).click();await openEventOptions(page);
+    }
     for(const label of ['開始時間','結束時間']){
       const input=form.getByLabel(label,{exact:true});await input.fill('10000-01-01T12:00');
       // This is a valid native datetime-local value; the product converter only
       // accepts four-digit years. Exercise the real submit path, not a JS handler.
       await expect(input).toHaveValue('10000-01-01T12:00');expect(await form.evaluate(node=>(node as HTMLFormElement).checkValidity())).toBe(true);
-      await form.getByRole('button',{name:editing?'儲存修改':'送出審核',exact:true}).click();
+      await form.getByRole('button',{name:editing?'儲存修改':'發布',exact:true}).click();
       await expect(page.getByRole('status').filter({hasText:'年份須為四位數'})).toBeVisible();
       await expect(input).toBeEnabled();await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue(title);
       expect(writes).toBe(editing?1:0);expect(errors).toEqual([]);
@@ -664,7 +700,7 @@ for(const width of [1280,390])eventTest(`extended event years show recoverable v
       await description.fill('修正日期後的合成內容');
     }
     const response=page.waitForResponse(result=>result.request().method()==='POST'&&new URL(result.url()).pathname.endsWith(editing?'/update':'/events'));
-    await form.getByRole('button',{name:editing?'儲存修改':'送出審核',exact:true}).click();const saved=await response;expect(saved.ok()).toBe(true);await saved.finished();
+    await form.getByRole('button',{name:editing?'儲存修改':'發布',exact:true}).click();const saved=await response;expect(saved.ok()).toBe(true);await saved.finished();
     await expect(form).toHaveCount(0);expect(writes).toBe(editing?2:1);
     const rows=(await e2eAuthPool.query('SELECT title,description,starts_at,ends_at FROM community_events WHERE organizer_ref=$1',[eventFixture.user])).rows;
     expect(rows).toHaveLength(1);expect(rows[0].title).toBe(title);expect(rows[0].description).toBe(editing?'修正日期後的合成內容':'日期輸入錯誤後保留的合成內容');

@@ -84,7 +84,7 @@ test.describe('guild leader drafts while skill editing needs an AI guild', () =>
     await page.route('**/api/v1/guilds/*/join', route => { joins.push(route.request().url()); return route.fulfill({ status: 418, json: { detail: 'unexpected join' } }); });
     await login(page);
     await page.goto('/#guild-workspace');
-    await expect(page.getByRole('heading', { level: 1, name: '公會管理' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '公會' })).toBeVisible();
     const root = page.locator('.guild-workspace');
     await expect(root.getByText(recoveryText, { exact: true })).toBeVisible();
     return { root, joins };
@@ -104,7 +104,7 @@ test.describe('guild leader drafts while skill editing needs an AI guild', () =>
     const guildPage = await popup;
     await expect(guildPage).toHaveURL(/#guilds$/);
     await guildPage.close();
-    await expect(page).toHaveURL(/#guild-workspace$/);
+    await expect(page).toHaveURL(/#guilds\/manage$/);
   }
 
   test('an unsaved announcement survives the guild link', async ({ page }) => {

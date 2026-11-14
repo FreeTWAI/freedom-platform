@@ -1,3 +1,4 @@
+import {replaceLegacyAddress,canonicalHash,portalHash,legacyHash,resolvePortalRoute} from '../../apps/portal-web/src/portal-route.js';
 import {test,type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -114,18 +115,18 @@ const event=(i:number)=>({event_id:IDS[i],title:labels[i],description:'合成活
 const notices=()=>({items:IDS.map((id,i)=>({notification_id:'n'+i,title:'前往'+labels[i],body:'合成活動通知',created_at:new Date().toISOString(),read_at:new Date().toISOString(),action:{tab:'events',resource_id:id}})),unread_count:0});
 function fixture(t:TestContext,kind='hash',participationEnabled=false){
  const requests:any[]=[],commits:{hash:string;text:string}[]=[],container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container as unknown as HTMLElement);let mounted=true,shell:any;
- Object.assign(window.location,{origin:'https://fixture.invalid',pathname:kind==='path'?'/events/'+IDS[0]:'/',search:'',hash:kind==='path'?'':'#events/'+IDS[0]});
+ Object.assign(window.location,{origin:'https://fixture.invalid',pathname:kind==='path'?'/events/'+IDS[0]:'/',search:'',hash:kind==='path'?'':'#explore/events/'+IDS[0]});
  Object.defineProperty(window.location,'href',{configurable:true,get(){return window.location.origin+window.location.pathname+window.location.search+window.location.hash;}});
  const transport=(method:string)=>(url:string,body?:any,options?:any)=>new Promise((resolve,reject)=>requests.push({method,path:url,body,options,resolve,reject}));
  const client={sessionGeneration:1,get:transport('GET'),post:transport('POST')};
  let props:any={client,session:{user:{user_id:OWNER}},site:{event_participation_enabled:participationEnabled},locationHash:window.location.hash};
  function Host(){
   const [hash,setHash]=React.useState(props.locationHash);props.locationHash=hash;
-  shell={useCallback:React.useCallback,acceptedHash:React.useRef(hash),pageLeaveGuard:React.useRef(null),messageHistoryTransition:React.useRef(null),isMessagesHistoryEntry:()=>false,messagesHistoryState:()=>null,messageLocation:React.useRef(null),messageLeaveGuard:React.useRef(null),notificationSequence:React.useRef(0),canEndConsoleSession:()=>true,orderNotificationDestination:()=>null,
+  shell={replaceLegacyAddress,canonicalHash,portalHash,legacyHash,resolvePortalRoute,useCallback:React.useCallback,acceptedHash:React.useRef(hash),pageLeaveGuard:React.useRef(null),messageHistoryTransition:React.useRef(null),isMessagesHistoryEntry:()=>false,messagesHistoryState:()=>null,messageLocation:React.useRef(null),messageLeaveGuard:React.useRef(null),notificationSequence:React.useRef(0),canEndConsoleSession:()=>true,orderNotificationDestination:()=>null,
    setMessagesMounted(){},setTab(){},setLocationHash:setHash,setFriendScope(){},setMessagesOpen(){},setMobileOpen(){},mainContent:{current:{focus(){}}},setNotificationTarget(){},window,HashChangeEvent:class{constructor(public type:string){}}};
   runInNewContext(transformSync(shellSource,{loader:'tsx',format:'cjs'}).code,shell);
   React.useLayoutEffect(()=>{commits.push({hash,text:container.textContent});});
-  return React.createElement(React.Fragment,null,React.createElement(NotificationBell,{client:props.client,preferencesEnabled:false,onNavigate:shell.route.navigateNotification}),entry.render({...props,registerPageLeave:shell.route.registerPageLeave,selectTab:shell.route.selectTab}));
+  return React.createElement(React.Fragment,null,React.createElement(NotificationBell,{client:props.client,preferencesEnabled:false,onNavigate:shell.route.navigateNotification}),entry.render({...props,locationHash:props.locationHash?legacyHash(props.locationHash):'',registerPageLeave:shell.route.registerPageLeave,selectTab:shell.route.selectTab}));
  }
  (window as any).history={state:null,replaceState(state:any,_unused:any,url:string){this.state=state;const target=new URL(url,window.location.href);Object.assign(window.location,{pathname:target.pathname,search:target.search,hash:target.hash});},pushState:noNetwork,back:noNetwork};
  const render=()=>flush(()=>root.render(React.createElement(Host)));
@@ -145,7 +146,7 @@ function fixture(t:TestContext,kind='hash',participationEnabled=false){
  return{container,commits,client,props,render,unmount,reads,writes,settle,button,click,navigate,start,shell:()=>shell,href:()=>window.location.href,text:()=>container.textContent};
 }
 for(const kind of ['hash','path'])test(`mounted notification navigates A to B (${kind}) without stale A controls while B read waits`,async t=>{
- const h=fixture(t,kind);await h.start();assert.match(h.text(),/活動甲/);await h.navigate(1);assert.equal(window.location.hash,'#events/'+IDS[1]);assert(h.reads('/events/'+IDS[1]).length);for(const commit of h.commits.filter(c=>c.hash==='#events/'+IDS[1]))assert.doesNotMatch(commit.text,/合成活動說明 0/,'no stale A in a committed B tree before passive effects');assert.doesNotMatch(h.text(),/合成活動說明 [01]/);assert.match(h.text(),/正在載入活動/);assert.equal(h.button('我要參加'),undefined);assert.equal(h.writes().length,0);await h.settle(h.reads('/events/'+IDS[1]).at(-1),event(1));assert.match(h.text(),/合成活動說明 1/);h.click(h.button('我要參加')!);assert.equal(h.writes().at(-1).path,'/events/'+IDS[1]+'/rsvp');
+ const h=fixture(t,kind);await h.start();assert.match(h.text(),/活動甲/);await h.navigate(1);assert.equal(window.location.hash,'#explore/events/'+IDS[1]);assert(h.reads('/events/'+IDS[1]).length);for(const commit of h.commits.filter(c=>c.hash==='#explore/events/'+IDS[1]))assert.doesNotMatch(commit.text,/合成活動說明 0/,'no stale A in a committed B tree before passive effects');assert.doesNotMatch(h.text(),/合成活動說明 [01]/);assert.match(h.text(),/正在載入活動/);assert.equal(h.button('我要參加'),undefined);assert.equal(h.writes().length,0);await h.settle(h.reads('/events/'+IDS[1]).at(-1),event(1));assert.match(h.text(),/合成活動說明 1/);h.click(h.button('我要參加')!);assert.equal(h.writes().at(-1).path,'/events/'+IDS[1]+'/rsvp');
 });
 test('control: B already in successful list renders and submits B immediately',async t=>{
  const h=fixture(t);await h.start([event(1)]);await h.navigate(1);assert.match(h.text(),/合成活動說明 1/);assert.doesNotMatch(h.text(),/合成活動說明 0/);assert.equal(h.reads('/events/'+IDS[1]).length,0);h.click(h.button('我要參加')!);assert.equal(h.writes().at(-1).path,'/events/'+IDS[1]+'/rsvp');
@@ -155,15 +156,15 @@ test('control: B GET success replaces A and subsequent RSVP targets B',async t=>
 });
 for(const status of [403,404,503])test(`B GET ${status} shows no stale A and existing list retry self-recovers`,async t=>{
  const h=fixture(t);await h.start();await h.navigate(1);await h.settle(h.reads('/events/'+IDS[1]).at(-1),new ApiError({status,message:'合成讀取失敗',definitiveResponse:true}),true);assert.doesNotMatch(h.text(),/合成活動說明 0/);assert.equal(h.button('我要參加'),undefined);assert.match(h.text(),status===503?/活動暫時無法載入，請重新讀取/:/找不到這場活動，或目前無法查看/);
- h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events');assert(h.button('重試'));h.click(h.button('重試')!);
+ h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events');assert(h.button('重試'));h.click(h.button('重試')!);
  await h.settle(h.reads('/guilds/directory').at(-1),{items:[]});await h.settle(h.reads('/events/bulletins').at(-1),{items:[]});await h.settle(h.reads('/events').at(-1),{items:[event(0),event(1)]});await h.navigate(1);assert.match(h.text(),/合成活動說明 1/);assert.equal(h.writes().length,0);
 });
 test('control: A to B to C, late B cannot overwrite C',async t=>{
- const h=fixture(t);await h.start();await h.navigate(1);const b=h.reads('/events/'+IDS[1]).at(-1);await h.navigate(2);const c=h.reads('/events/'+IDS[2]).at(-1);assert.equal(window.location.hash,'#events/'+IDS[2]);assert.doesNotMatch(h.text(),/合成活動說明 [01]/);assert.equal(h.button('我要參加'),undefined);await h.settle(c,event(2));await h.settle(b,event(1));assert.match(h.text(),/合成活動說明 2/);assert.doesNotMatch(h.text(),/合成活動說明 [01]/);h.click(h.button('我要參加')!);assert.equal(h.writes().at(-1).path,'/events/'+IDS[2]+'/rsvp');
+ const h=fixture(t);await h.start();await h.navigate(1);const b=h.reads('/events/'+IDS[1]).at(-1);await h.navigate(2);const c=h.reads('/events/'+IDS[2]).at(-1);assert.equal(window.location.hash,'#explore/events/'+IDS[2]);assert.doesNotMatch(h.text(),/合成活動說明 [01]/);assert.equal(h.button('我要參加'),undefined);await h.settle(c,event(2));await h.settle(b,event(1));assert.match(h.text(),/合成活動說明 2/);assert.doesNotMatch(h.text(),/合成活動說明 [01]/);h.click(h.button('我要參加')!);assert.equal(h.writes().at(-1).path,'/events/'+IDS[2]+'/rsvp');
 });
 for(const participationEnabled of [false,true])test(`control: pending and unknown original A registration blocks notification route and retains exact retry (participation ${participationEnabled})`,async t=>{
- const h=fixture(t,'hash',participationEnabled);await h.start();h.click(h.button('我要參加')!);const original=h.writes()[0];await h.navigate(1);assert.equal(window.location.hash,'#events/'+IDS[0]);assert.equal(h.reads('/events/'+IDS[1]).length,0);
- await h.settle(original,new ApiError({message:'合成ACK遺失',network:true}),true);await h.navigate(1);assert.equal(window.location.hash,'#events/'+IDS[0]);assert.equal(h.reads('/events/'+IDS[1]).length,0);h.click(h.button('重試原活動操作')!);const retry=h.writes()[1];assert.equal(retry.path,original.path);assert.deepEqual(retry.body,original.body);assert.deepEqual(retry.options,original.options);
+ const h=fixture(t,'hash',participationEnabled);await h.start();h.click(h.button('我要參加')!);const original=h.writes()[0];await h.navigate(1);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);assert.equal(h.reads('/events/'+IDS[1]).length,0);
+ await h.settle(original,new ApiError({message:'合成ACK遺失',network:true}),true);await h.navigate(1);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);assert.equal(h.reads('/events/'+IDS[1]).length,0);h.click(h.button('重試原活動操作')!);const retry=h.writes()[1];assert.equal(retry.path,original.path);assert.deepEqual(retry.body,original.body);assert.deepEqual(retry.options,original.options);
 });
 test('control: session generation remount removes A and old B response cannot enter new owner',async t=>{
  const h=fixture(t);await h.start();await h.navigate(1);const old=h.reads('/events/'+IDS[1]).at(-1);h.client.sessionGeneration++;h.render();assert.doesNotMatch(h.text(),/合成活動說明 0/);assert.equal(h.button('我要參加'),undefined);await h.settle(old,event(1));assert.doesNotMatch(h.text(),/合成活動說明 [01]/);await h.settle(h.reads('/events/'+IDS[1]).at(-1),event(1));assert.match(h.text(),/合成活動說明 1/);
@@ -190,7 +191,7 @@ test('unmount detaches controls and a held response cannot recreate them',async 
  const h=fixture(t);await h.start();await h.navigate(1);const b=h.reads('/events/'+IDS[1]).at(-1);h.unmount();await h.settle(b,event(1));assert.equal(h.container.textContent,'');assert.equal(h.writes().length,0);
 });
 test('pending and unknown helper command blocks route change and keeps original retry tuple',async t=>{
- const h=fixture(t);await h.start(null,{...event(0),help_need:'合成活動需要幫忙'} as any);await h.settle(h.reads('/events/'+IDS[0]+'/helpers/me').at(-1),{state:null,version:1,event_closed:false});h.click(h.button('我要幫忙，送出申請')!);const first=h.writes().at(-1);await h.navigate(1);assert.equal(window.location.hash,'#events/'+IDS[0]);assert.equal(h.reads('/events/'+IDS[1]).length,0);await h.settle(first,new ApiError({message:'合成遺失回應',network:true}),true);await h.navigate(1);assert.equal(window.location.hash,'#events/'+IDS[0]);h.click(h.button('重試原幫忙操作')!);const retry=h.writes().at(-1);assert.equal(retry.path,first.path);assert.deepEqual(retry.body,first.body);assert.equal(retry.options.idempotencyKey,first.options.idempotencyKey);assert.equal(retry.options.ifMatch,first.options.ifMatch);
+ const h=fixture(t);await h.start(null,{...event(0),help_need:'合成活動需要幫忙'} as any);await h.settle(h.reads('/events/'+IDS[0]+'/helpers/me').at(-1),{state:null,version:1,event_closed:false});h.click(h.button('我要幫忙，送出申請')!);const first=h.writes().at(-1);await h.navigate(1);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);assert.equal(h.reads('/events/'+IDS[1]).length,0);await h.settle(first,new ApiError({message:'合成遺失回應',network:true}),true);await h.navigate(1);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);h.click(h.button('重試原幫忙操作')!);const retry=h.writes().at(-1);assert.equal(retry.path,first.path);assert.deepEqual(retry.body,first.body);assert.equal(retry.options.idempotencyKey,first.options.idempotencyKey);assert.equal(retry.options.ifMatch,first.options.ifMatch);
 });
 
 test('new client with same route and generation cannot commit the previous detail before effect cleanup',async t=>{

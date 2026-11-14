@@ -1,3 +1,4 @@
+import {currentLegacyHash} from '../portal-route';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { communitySearchKinds, communitySearchKindLabels, communitySearchTopics, communitySearchTopicLabels, communitySearchPageSchema, type CommunitySearchPage } from '../../../../packages/shared/community-search';
 import type { PortalClient } from '../api';
@@ -117,7 +118,7 @@ export function CommunityRelations({ client, navigation }: { client: PortalClien
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     const restore = () => {
-      if (!/^#community-search(?:\?|$)/.test(window.location.hash)) return;
+      if (!/^#community-search(?:\?|$)/.test(currentLegacyHash())) return;
       const next = navigation.read(window.history.state);
       if (next === selectedTab.current) return;
       selectedTab.current = next; setTab(next); setCursor(null); setBookmarkPage(0);
@@ -148,7 +149,7 @@ export function CommunityRelations({ client, navigation }: { client: PortalClien
   const savedPage = Math.min(bookmarkPage, Math.max(0, Math.ceil((state.bookmarks?.length ?? 0) / 20) - 1));
   function select(next: CommunityListTab) {
     if (!navigation.current()) return;
-    if (/^#community-search(?:\?|$)/.test(window.location.hash)) {
+    if (/^#community-search(?:\?|$)/.test(currentLegacyHash())) {
       const saved = navigation.write(window.history.state, next);
       if (saved) {
         // A restricted history API must not prevent the current local selection.

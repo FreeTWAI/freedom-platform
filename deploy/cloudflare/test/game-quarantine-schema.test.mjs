@@ -8,7 +8,7 @@ const sql=readFileSync(new URL('../../../migrations/203_member_game_quarantine.s
 test('203 is one additive migration over the exact unchanged202 ledger',()=>{
  const sources=readMigrationSources(fileURLToPath(new URL('../../../migrations',import.meta.url)));
  const prior=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=202),legacyMigrationProfile({first:1,last:202,known_gaps:[22]}));
- const next=resolveMigrationPlan(sources,legacyMigrationProfile({first:1,last:203,known_gaps:[22]}),prior.ledger);
+ const next=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=203),legacyMigrationProfile({first:1,last:203,known_gaps:[22]}),prior.ledger);
  assert.deepEqual(next.pending,['203_member_game_quarantine.sql']);assert.deepEqual(next.ledger.slice(0,-1),prior.ledger);assert.notEqual(next.ledger_digest,prior.ledger_digest);
 });
 test('source schema remains personal, opaque, unreviewed and default closed',()=>{

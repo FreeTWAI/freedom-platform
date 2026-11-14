@@ -48,7 +48,7 @@ async function registerJoined(page: Page, profile='guide-dragon') {
   await expect(widget(page)).toHaveCount(0);
   await page.getByLabel('找感興趣的公會').fill('AI 開發公會');
   await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   if(profile==='guide-dragon'){await expect(widget(page)).toHaveAttribute('data-page-id','home');await expect(widget(page).locator('.page-spirit-launcher')).toBeVisible();}
   else await expect(widget(page)).toHaveCount(0);
   return {email,password};
@@ -236,15 +236,16 @@ test('joined member loads only the current hero before interaction and each perm
     }
     const navigationLabel = id === 'supplier' ? 'AI 整理供貨商品' : id === 'retail' ? 'AI 製作銷售網站' : TAB_TITLES[id];
     await navigate(page,navigationLabel);
-    await expect(widget(page)).toHaveAttribute('data-page-id',id);
-    const character = SPIRIT_CHARACTERS[id], launcher = widget(page).locator('.page-spirit-launcher');
+    const pageId=id==='social'?'home':id; // The legacy social page is now the home feed.
+    await expect(widget(page)).toHaveAttribute('data-page-id',pageId);
+    const character = SPIRIT_CHARACTERS[pageId], launcher = widget(page).locator('.page-spirit-launcher');
     await expect(launcher).toHaveAccessibleName(`${character.name}・${character.title}的當頁龍娘`);
     await expect(launcher.locator('img')).toHaveAttribute('src',character.hero);
     await expect(launcher.locator('img')).toHaveJSProperty('complete',true);
     await expect.poll(() => launcher.locator('img').evaluate(image => (image as HTMLImageElement).naturalWidth > 0)).toBe(true);
     observedNames.add(character.name);
   }
-  expect(observedNames.size).toBe(24);
+  expect(observedNames.size).toBe(23);
   expect(requests.filter(request=>!['portrait','hero','frame-0'].includes(request.part)).every(request=>request.pageId==='home')).toBe(true);
   expect(packRequests.every(path=>/\/home-[^/]+\.js$/.test(path)||path.endsWith('/content/home.json'))).toBe(true);
 });
@@ -342,7 +343,7 @@ test('chat drafts, the existing page dialog and outside form focus keep the comp
   await navigate(page,'工坊夥伴'); await openSpirit(page);
   const search = page.getByLabel('搜尋夥伴',{exact:true}), privateSearch = `unsent-profile-${randomUUID()}`;
   await search.fill(privateSearch); await expectQuietCompanion(page); await expect(search).toBeFocused(); await expect(search).toHaveValue(privateSearch);
-  await page.getByRole('heading',{name:'工坊夥伴',level:1,exact:true}).click();
+  await page.getByRole('heading',{name:'探索',level:1,exact:true}).click();
   await expect(widget(page).locator('.page-spirit-launcher')).toBeVisible(); await openSpirit(page);
   await expect(line(page)).not.toContainText(privateSearch); await expect(search).toHaveValue(privateSearch);
 });

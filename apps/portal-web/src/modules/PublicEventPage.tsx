@@ -1,3 +1,4 @@
+import {currentLegacyHash} from '../portal-route';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {z} from 'zod';
 import {ApiError,type PortalClient} from '../api';
@@ -13,7 +14,7 @@ const publicEventSchema=z.object({prize_photos:z.array(z.object({prize_id:z.stri
 type PublicEvent=z.infer<typeof publicEventSchema>;
 const safeUrl=(value:string|null)=>{try{const url=new URL(value??'');return url.protocol==='https:'&&!url.username&&!url.password?url.href:null}catch{return null}};
 const savedCode=(id:string)=>{
-  const match=/^#events\/([0-9a-f-]{36})(?:\?(.*))?$/.exec(window.location.hash);
+  const match=/^#events\/([0-9a-f-]{36})(?:\?(.*))?$/.exec(currentLegacyHash());
   const pathId=/^\/events\/([0-9a-f-]{36})\/?$/.exec(window.location.pathname)?.[1];
   const refs=new URLSearchParams(match?.[1]===id?match[2]??'':pathId===id?window.location.search:'').getAll('ref');
   const linkCode=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?refs[0]:null;
@@ -97,7 +98,7 @@ function PublicEventContent({client,id,onLogin,onJoin,revalidatePublic=false,par
         const value=publicEventSchema.parse(payload);
         if(value.event_id!==routeId)throw new Error('活動資料與目前連結不符，請重新開啟活動。');
         if(revalidatePublic){
-          const hash=/^#events\/([0-9a-f-]{36})(?:\?(.*))?$/.exec(window.location.hash);
+          const hash=/^#events\/([0-9a-f-]{36})(?:\?(.*))?$/.exec(currentLegacyHash());
           const refs=new URLSearchParams(hash?.[1]===id?hash[2]??'':window.location.search).getAll('ref');
           const referral=refs.length===1?refs[0]:null;
           if(value.visibility!=='open'&&!(value.visibility==='referral'&&referral&&/^[A-Za-z0-9_-]{16,32}$/.test(referral)))throw new Error('活動目前無法公開查看。');

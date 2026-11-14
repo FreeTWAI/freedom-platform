@@ -1,3 +1,4 @@
+import {clearMemberAgentEvents} from './navigation.js';
 import {openAccountSettings} from './navigation.js';
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
@@ -134,7 +135,8 @@ for(const width of [1440,768,390,320])for(const [themeName,theme] of themes){
       await db.query('DELETE FROM member_notifications WHERE recipient_ref=ANY($1::uuid[])',[ids]);
       await db.query('DELETE FROM outbox WHERE transition_id IN (SELECT transition_id FROM transition_journal WHERE actor_ref=ANY($1::uuid[]))',[ids]);
       await db.query('DELETE FROM transition_journal WHERE actor_ref=ANY($1::uuid[])',[ids]);
-      await db.query('DELETE FROM users WHERE user_id=ANY($1::uuid[])',[ids]);
+      await clearMemberAgentEvents(db,ids);
+    await db.query('DELETE FROM users WHERE user_id=ANY($1::uuid[])',[ids]);
     }
   });
 }

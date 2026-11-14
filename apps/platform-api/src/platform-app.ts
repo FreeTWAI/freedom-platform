@@ -1,3 +1,10 @@
+import {createEventPageRoutes} from './routes/event-pages.js';
+import {createGuildToolRoutes,createPublicGuildToolRoutes} from './routes/guild-tools.js';
+import {frameOrigins} from '../../../modules/guild-tools/service.js';
+import {safeFrameOrigins} from '../../../modules/guild-tools/validation.js';
+import {createAgentFeedRoutes} from './routes/agent-feed.js';
+import { createAgentTokenRoutes } from './routes/agent-tokens.js';
+import { agentBoundary } from './agent-boundary.js';
 import {createGameUploadRoutes,isGameSourceUpload,checkGameSourceHeaders} from './routes/game-uploads.js';
 import {createTesterMapRoutes,createPublicTesterMapRoutes} from './routes/tester-map.js';
 import { performance } from "node:perf_hooks";
@@ -61,6 +68,7 @@ import { authRateLimit } from '../../../modules/identity-membership/members.js';
 import { requestEmailVerification } from '../../../modules/identity-membership/email-verification.js';
 import { communityCatalog } from '../../../modules/community/catalog.js';
 import { publicDiscovery, discoveryReadAllowed } from '../../../modules/community/public-discovery.js';
+import { createShareRoutes,createPublicShareRoutes } from './routes/shares.js';
 import { createOpenSourceRoutes } from './routes/opensource.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCoCreationRoutes } from './routes/co-creation.js';
@@ -172,16 +180,16 @@ export const wireVersionResponses:MiddlewareHandler=async(c,next)=>{
 /** Browser page for a share token. The JSON and avatar routes set the same tag themselves. */
 export function isMemberCardPage(path:string){return /^\/member-cards\/[A-Za-z0-9_-]{43}\/?$/.test(path);}
 /** Shared by the Worker file fast path; route-specific form destinations stay here. */
-export function platformContentSecurityPolicy(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false){
+export function platformContentSecurityPolicy(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false,toolOrigins?:string[]){
   const githubSetupForm=path==='/admin'||path==='/admin/github/callback'?' https://github.com/organizations/FreeTWAI/settings/apps/new':'';
   const destinations=isPaymentHandoffPath(path)?(paymentFormOrigin?' '+paymentFormOrigin:''):githubSetupForm+(brokerFormOrigin?' '+brokerFormOrigin:'');
-  const frameOrigins=path==='/'?['https://aisns.evitina.tw','https://freetwai.github.io']:[];
+  const frameOrigins=path==='/'||path==='/play'||path==='/play/'?[...(toolOrigins?["'self'"]:[]),'https://aisns.evitina.tw','https://freetwai.github.io',...safeFrameOrigins(toolOrigins??[],'https://freetwai.com')]:[];
   if(shortVideosEnabled&&!isPaymentHandoffPath(path)&&path!=='/admin'&&!path.startsWith('/admin/'))frameOrigins.push('https://www.youtube-nocookie.com');
   const frames=frameOrigins.length?' frame-src '+frameOrigins.join(' ')+';':'';
   return "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: https:; connect-src 'self'; media-src 'self' blob:;"+frames+" base-uri 'none'; frame-ancestors 'none'; form-action 'self'"+destinations;
 }
-export function platformResponseHeaders(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false){
-  return {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':platformContentSecurityPolicy(path,brokerFormOrigin,paymentFormOrigin,shortVideosEnabled)};
+export function platformResponseHeaders(path:string,brokerFormOrigin?:string,paymentFormOrigin?:string,shortVideosEnabled=false,toolOrigins?:string[]){
+  return {'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':platformContentSecurityPolicy(path,brokerFormOrigin,paymentFormOrigin,shortVideosEnabled,toolOrigins)};
 }
 /** Runtime-neutral platform app. Host adapters: app.ts (Node) and worker.ts (Cloudflare). */
 export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,runtime:PlatformRuntime,options:{githubSocial?:GitHubSocialOptions;coCreationGitHub?:CollaborationGitHub}={}) {
@@ -225,6 +233,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     console.error('request_failed', err instanceof Error ? err.name : 'unknown');
     return c.json({type:'about:blank',title:'Internal error',status:500,code:'internal_error',detail:'操作未完成，請重新整理並查看目前狀態。'},500);
   });
+  app.use('*',agentBoundary(pool,path=>platformResponseHeaders(path,brokerFormOrigin,paymentFormOrigin,runtime.shortVideosEnabled===true)));
   // Outermost: Hono resolves downstream onError responses before next() returns.
   app.use('*',async(c,next)=>{
     const started=performance.now();
@@ -235,9 +244,10 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     const pattern=routePath(c),route=pattern&&pattern!=='*'&&pattern!=='/*'?pattern:'unmatched';
     console.warn(JSON.stringify({event:status>=500?'server_error':'slow_request',method:c.req.method,route,status,duration_ms}));
   });
+  app.use('/guild-tool/v2/client.js',async(c,next)=>{c.header('Access-Control-Allow-Origin','*');await next();});
   app.use('/api/v1/me/onboarding/*',onboardingDiagnostics());
   app.use('*',async(c,next)=>{
-    const headers=platformResponseHeaders(c.req.path,brokerFormOrigin,paymentFormOrigin,runtime.shortVideosEnabled===true);
+    const headers=platformResponseHeaders(c.req.path,brokerFormOrigin,paymentFormOrigin,runtime.shortVideosEnabled===true,['/','/play','/play/'].includes(c.req.path)?await frameOrigins(pool,origin):[]);
     for(const [name,value] of Object.entries(headers))if(name!=='Content-Security-Policy')c.header(name,value);
     const host=new URL(c.req.url).hostname;
     requireCondition(allowedHosts.has(host),403,'host_rejected',freedomEnv==='local'?'此版本只提供本機使用。':'請從自由工坊網站操作。');
@@ -270,7 +280,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
       const shopMachine=c.req.path.startsWith('/shop-api/v1/');
       const maintainerWebhook=isMaintainerWebhookPath(c.req.method,c.req.path);
       // GitHub sends no Origin. A browser Origin that is present must still match.
-      if(!commerceProviderEntry&&((!agentUpload&&!shopMachine&&!maintainerWebhook)||c.req.header('Origin')!==undefined))requireCondition(allowedOrigins.has(c.req.header('Origin')??''),403,'origin_rejected',freedomEnv==='local'?'操作來源不正確，請從本機工作台操作。':'操作來源不正確，請從自由工坊網站操作。');
+      if(!commerceProviderEntry&&((!c.get('actor')?.agent&&!agentUpload&&!shopMachine&&!maintainerWebhook)||c.req.header('Origin')!==undefined))requireCondition(allowedOrigins.has(c.req.header('Origin')??''),403,'origin_rejected',freedomEnv==='local'?'操作來源不正確，請從本機工作台操作。':'操作來源不正確，請從自由工坊網站操作。');
       if(commerceProviderEntry) {
         // The signed provider route owns form parsing and its bounded byte stream.
       } else if(agentUpload) {
@@ -397,6 +407,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     if(actor?.onboarding_required&&!actor.onboarding_completed_at)actor=null;
     return actor?readWithMemberSession(pool,actor,q=>eventOutcomeBacklinksHtml(q,{kind:'skill_book',id},{communityId:actor!.community_id,userId:actor!.user_id})):eventOutcomeBacklinksHtml(pool,{kind:'skill_book',id},null);
   }:undefined;
+  app.route('/',createPublicGuildToolRoutes(pool,origin,runtime.guildToolSigner));
+  app.route('/',createPublicShareRoutes(pool,runtime.publicOrigin,{fetcher:options.githubSocial?.fetcher,previewFetch:runtime.linkPreviewFetch},runtime.afterResponse));
   app.route('/',createPublishedSkillRoutes(pool,runtime.publicOrigin,runtime.skillImageAssetStore,runtime.communityDiscoveryEnabled===true,skillEventBacklinks));
   app.route('/',createDevelopmentRoutes(id=>publicSocial.cachedMetrics(id),id=>readSkillEditorial(pool,id),async id=>(await skillDiscovery(pool)).books.find(book=>book.book_id===id),runtime.publicOrigin,id=>publicAuthorClaimForBook(pool,id),runtime.communityDiscoveryEnabled===true,skillEventBacklinks));
   app.route('/',createSkillInstallRoutes(options.githubSocial?.fetcher??globalThis.fetch,runtime.githubMetricsToken));
@@ -497,6 +509,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   registerPublicMemberProfiles(app, featureContext);
   app.route('/api/v1',createPublicProfileCoverRoutes(pool,runtime.avatarAssetStore));
   app.route('/api/v1',createPublicEventPrizePhotoRoutes(pool,runtime.eventPrizePhotoAssetStore));
+  app.route('/',createEventPageRoutes(pool,origin,runtime.eventParticipationEnabled===true,Boolean(runtime.eventEmailSender)));
   registerPublicEventMediaRoutes(app, featureContext);
   registerPublicPromotion(app,pool,runtime,origin);
   registerPublicSocialPosts(app,pool,runtime);
@@ -596,11 +609,15 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createRepoMaintainerMemberRoutes(pool));
   app.route('/api/v1',createAvatarRoutes(pool,runtime.avatarAssetStore));
   app.route('/api/v1',createClientConnectionRoutes(pool));
+  app.route('/api/v1',createAgentTokenRoutes(pool));
+  app.route('/api/v1',createAgentFeedRoutes(pool));
   app.route('/api/v1',createJournalMemberRoutes(pool));
   app.route('/api/v1',createSkillSubmissionRoutes(pool,origin,runtime.githubMetricsToken,runtime));
   app.route('/api/v1',createPositioningRoutes(pool,{guildLaunchpadEnabled:runtime.guildLaunchpadEnabled===true,communitySearchEnabled:runtime.communitySearchEnabled===true}));
   app.route('/api/v1',createCommerceRoutes(pool));
   app.route('/api/v1',createAgentCommerceRoutes(pool,origin,shopHost));
+  app.route('/api/v1',createGuildToolRoutes(pool,origin,runtime.guildToolFetch,runtime.guildToolSigner));
+  app.route('/api/v1',createShareRoutes(pool,{fetcher:options.githubSocial?.fetcher,previewFetch:runtime.linkPreviewFetch},loadSocial,runtime.afterResponse));
   app.route('/api/v1', createOpenSourceRoutes(pool,runtime.githubMetricsToken,loadSocial));
   app.route('/api/v1',createCoCreationRoutes(pool,options.coCreationGitHub));
   app.route('/api/v1',createBenefitRoutes(pool));

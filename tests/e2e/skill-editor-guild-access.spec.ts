@@ -59,7 +59,8 @@ async function login(page: Page) {
 }
 async function openWorkspace(page: Page) {
   await page.goto('/#guild-workspace');
-  await expect(page.getByRole('heading', { level: 1, name: '公會管理' })).toBeVisible();
+  await expect(page).toHaveURL(/#guilds\/manage$/);
+  await expect(page.getByRole('heading', { level: 1, name: '公會' })).toBeVisible();
   await expect(page.getByText('正在載入管理權限…', { exact: true })).toHaveCount(0);
 }
 const fits = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
@@ -83,7 +84,7 @@ for (const [viewport, size] of viewports) {
 
     await link.click();
     await expect(page).toHaveURL(/#guilds$/);
-    await expect(page.getByRole('heading', { level: 1, name: '職業公會' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '公會' })).toBeVisible();
     expect(calls.joins).toEqual([]);
     expect(calls.editorGets).toBe(0);
 

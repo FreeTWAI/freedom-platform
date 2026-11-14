@@ -12,7 +12,7 @@
     "db:down": "docker compose down",
     "db:migrate": "tsx scripts/database.ts migrate",
     "db:seed": "tsx scripts/database.ts seed",
-    "build": "node scripts/generate-guild-blocks.mjs --check && node scripts/generate-runtime-text.mjs --check && node scripts/build-skill-upload-client.mjs && vite build --config apps/portal-web/vite.config.ts",
+    "build": "node scripts/build-agent-contract.mjs --check && node scripts/generate-guild-blocks.mjs --check && node scripts/generate-runtime-text.mjs --check && node scripts/build-skill-upload-client.mjs && vite build --config apps/portal-web/vite.config.ts",
     "start": "tsx apps/platform-api/src/server.ts",
     "generate:runtime-text": "node scripts/generate-runtime-text.mjs",
     "check:runtime-text": "node scripts/generate-runtime-text.mjs --check",
@@ -27,10 +27,11 @@
     "test:skill-client": "node --test packages/skill-upload-client/test/*.test.mjs",
     "test:governance": "node --test packages/contribution-tools/test/*.test.mjs",
     "test:e2e": "node scripts/run-e2e.mjs",
+    "test:e2e:arcade": "playwright test --config playwright.arcade.config.ts",
     "test:benchmarks": "node --import tsx --test tests/benchmarks/*.test.ts",
     "test:contracts": "python3 -m pytest -q -p no:cacheprovider docs/platform-plan/contracts/tests docs/platform-plan/execution/tools/tests",
     "verify:inventory": "python3 docs/platform-plan/verification/verify_revision.py",
-    "contracts:build": "node scripts/build-contract-bundle.mjs",
+    "contracts:build": "node scripts/build-contract-bundle.mjs && node scripts/build-agent-contract.mjs",
     "contracts:common": "tsx scripts/build-common-contracts.ts",
     "check:common-contracts": "tsx scripts/build-common-contracts.ts --check",
     "contracts:execution": "tsx packages/execution-state/generate.ts",
@@ -80,7 +81,9 @@
     "guild:test": "node scripts/generate-guild-blocks.mjs --check && vite build --config apps/portal-web/guild-preview/vite.config.ts && playwright test --config packages/guild-presentation/playwright.config.ts",
     "module:list": "node scripts/freedom.mjs modules",
     "module:new": "node scripts/freedom.mjs module-new",
-    "module:check": "node scripts/freedom.mjs module-check"
+    "module:check": "node scripts/freedom.mjs module-check",
+    "contracts:agent": "node scripts/build-agent-contract.mjs",
+    "check:agent-contract": "node scripts/build-agent-contract.mjs --check"
   },
   "dependencies": {
     "@hono/node-server": "2.1.1",

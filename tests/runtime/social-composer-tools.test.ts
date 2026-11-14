@@ -60,7 +60,10 @@ function harness(){
     './SocialPostEditor':['SocialPostEditor'],'./ShortVideoFeed':['ShortVideoFeed'],'./InlineVideo':['InlineVideo'],'./SocialPostShare':['SocialPostShare'],
   };
   const children=Object.fromEntries(Object.entries(childModules).map(([path,names])=>[path,Object.fromEntries(names.map(name=>[name,()=>null]))]));
+  const routeModule={exports:{} as any};
+  runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/portal-route.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code,{module:routeModule,exports:routeModule.exports,window,URLSearchParams});
   runInNewContext(compiled,{module,exports:module.exports,URL,URLSearchParams,location,document,window,sessionStorage:storage,localStorage:storage,require:(name:string)=>{
+    if(name==='../portal-route')return routeModule.exports;
     if(name==='react')return react;
     if(name==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:react.Fragment};
     if(name==='./text-edit-history')return textHistory;

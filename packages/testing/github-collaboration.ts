@@ -3,6 +3,10 @@
 export function collaborationGitHubFixture(input:string|URL|Request):Response {
   const url=new URL(input instanceof Request?input.url:String(input));
   const base='/repos/FreeTWAI/video-autopilot-kit';
+  if(url.pathname==='/repos/freetwai-test/shared-repo')return Response.json({id:88009903,full_name:'freetwai-test/shared-repo',private:false,visibility:'public',default_branch:'main',fork:false,archived:false,owner:{id:88009900,login:'freetwai-test'},description:'合成分享測試工具',stargazers_count:42,topics:['testing'],license:{spdx_id:'MIT'}});
+  if(url.pathname==='/repos/freetwai-test/shared-repo/readme')return new Response('<h2>快速開始</h2><pre><code>npm install synthetic-share</code></pre><p>這是原作 README 的合成錄製內容。</p><script>window.shareXss=true</script><img src="https://evil.example/x" onerror="window.shareXss=true"><svg><foreignObject><img src=x onerror="window.shareXss=true"></foreignObject></svg>',{headers:{'Content-Type':'text/html',etag:'"synthetic-readme"'}});
+  if(url.pathname==='/repos/freetwai-test/shared-repo/releases/latest')return Response.json({tag_name:'v1.0.0',name:'合成初版',html_url:'https://github.com/freetwai-test/shared-repo/releases/tag/v1.0.0',published_at:'2026-11-01T00:00:00Z'});
+
   if(url.origin!=='https://api.github.com')throw Error('Unexpected test outbound host');
   // Isolated manual-submission fixture; never used by production/staging.
   const sha='c'.repeat(40);

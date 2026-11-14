@@ -88,7 +88,7 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
   // Keyboard opening from the toggle, then selecting a page moves focus into main.
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'登出',exact:true})).toBeFocused();
   await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/#todos$/);await expect(page.getByRole('heading',{level:1})).toHaveText('入門指南');
+  await expect(page).toHaveURL(/#me\/start$/);await expect(page.getByRole('heading',{level:1})).toHaveText('我的');
   await expect(page.locator('#main-content')).toBeFocused();await expect(menu).toHaveCount(0);
 
   // Tab leaves the menu normally and closes it.
@@ -104,16 +104,16 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
   await bell.dispatchEvent('pointerdown');await bell.focus();await expect(menu).toHaveCount(0);await expect(bell).toBeFocused();
 
   // On the card page the item names stay exact and the current page is marked.
-  await openPage(page,'我的名片');await expect(page).toHaveURL(/#account$/);await expect(page.locator('#main-content')).toBeFocused();
+  await openPage(page,'我的名片');await expect(page).toHaveURL(/#me\/settings$/);await expect(page.locator('#main-content')).toBeFocused();
   await toggle.click();await expectExactItems(page);
   await expect(menu.getByRole('menuitem',{name:'資料與帳號設定',exact:true})).toHaveAttribute('aria-current','page');
   // Choosing the page that is already open by keyboard still closes the menu and lands in main.
   await menu.getByRole('menuitem',{name:'資料與帳號設定',exact:true}).focus();await page.keyboard.press('Enter');
-  await expect(menu).toHaveCount(0);await expect(page).toHaveURL(/#account$/);await expect(page.locator('#main-content')).toBeFocused();
+  await expect(menu).toHaveCount(0);await expect(page).toHaveURL(/#me\/settings$/);await expect(page.locator('#main-content')).toBeFocused();
   await openPage(page,'我的訊息');
-  await expect(page).toHaveURL(/#account$/);await expect(page.locator('#floating-message-title')).toHaveText('我的訊息');await expect(page.locator('#floating-message-title')).toBeFocused();await closeChat(page);
+  await expect(page).toHaveURL(/#me\/settings$/);await expect(page.locator('#floating-message-title')).toHaveText('我的訊息');await expect(page.locator('#floating-message-title')).toBeFocused();await closeChat(page);
   // Browser Back while the menu is open closes it.
-  await toggle.click();await expect(menu).toBeVisible();await page.goBack();await expect(page).toHaveURL(/#todos$/);await expect(menu).toHaveCount(0);
+  await toggle.click();await expect(menu).toBeVisible();await page.goBack();await expect(page).toHaveURL(/#me\/start$/);await expect(menu).toHaveCount(0);
   // A profile re-read still in flight when the case ends must not fail it after the fact.
   await page.unrouteAll({behavior:'ignoreErrors'});
 });
@@ -180,11 +180,11 @@ test('GitHub todo follows the real connection state and never completes by hand'
   expect(connects).toEqual([]);
   await task.getByRole('button',{name:'連結 GitHub',exact:true}).click();
   await expect(page).toHaveURL(/^https:\/\/github\.com\/login\/oauth\/authorize\?/);expect(connects).toEqual([{return_to:'#todos'}]);
-  await page.goto('/github/callback?code=synthetic&state=synthetic');await expect(page).toHaveURL(/\/#todos$/);
-  await expect(page.getByRole('heading',{level:1})).toHaveText('入門指南');
+  await page.goto('/github/callback?code=synthetic&state=synthetic');await expect(page).toHaveURL(/\/#me\/start$/);
+  await expect(page.getByRole('heading',{level:1})).toHaveText('我的');
   await expect(task.getByRole('status')).toHaveText('已完成');await expect(task).toContainText('@synthetic-owner');
   expect(starWrites).toBe(0);
-  await task.getByRole('button',{name:'到我的名片管理 GitHub 連結',exact:true}).click();await expect(page).toHaveURL(/#account$/);
+  await task.getByRole('button',{name:'到我的名片管理 GitHub 連結',exact:true}).click();await expect(page).toHaveURL(/#me\/settings$/);
 });
 
 type Notice={notification_id:string;kind:string;title:string;body:string;created_at:string;read_at:string|null;action:{tab:string;resource_id:string|null}|null};
@@ -303,7 +303,7 @@ test('a failed read before navigating can be retried or skipped explicitly',asyn
   await item.getByRole('button',{name:'前往小隊集合',exact:true}).click();
   await expect(item.getByRole('alert')).toContainText('合成錯誤');await expect(page).toHaveURL(retainedPageUrl);
   await expect(page.locator('#floating-message-panel')).toBeHidden();
-  await item.getByRole('button',{name:'不標已讀，直接前往小隊集合',exact:true}).click();await expect(page).toHaveURL(/#squads$/);
+  await item.getByRole('button',{name:'不標已讀，直接前往小隊集合',exact:true}).click();await expect(page).toHaveURL(/#me\/teams$/);
 });
 
 test('a late read after leaving the page never navigates, and a failed count refresh is unconfirmed',async({page})=>{
@@ -320,9 +320,9 @@ test('a late read after leaving the page never navigates, and a failed count ref
   await page.route(/\/api\/v1\/me\/conversations(\?.*)?$/,route=>route.fulfill({json:{items:[],unread_count:0,next_offset:null}}));
   await login(page,'#messages');await openNotifications(page);
   await page.locator('li',{hasText:'合成通知 1'}).getByRole('button',{name:'前往小隊集合',exact:true}).click();
-  await openPage(page,'入門指南');await expect(page).toHaveURL(/#todos$/);
+  await openPage(page,'入門指南');await expect(page).toHaveURL(/#me\/start$/);
   release();await page.waitForTimeout(300);
-  await expect(page).toHaveURL(/#todos$/);await expect(page.getByRole('heading',{level:1})).toHaveText('入門指南');
+  await expect(page).toHaveURL(/#me\/start$/);await expect(page.getByRole('heading',{level:1})).toHaveText('我的');
   await openNotifications(page);
   countFails=true;
   const second=page.locator('li',{hasText:'合成通知 2'});await second.getByRole('button',{name:'標為已讀',exact:true}).click();

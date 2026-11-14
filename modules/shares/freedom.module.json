@@ -1,0 +1,96 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "shares",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/shares/**",
+    "apps/platform-api/src/routes/shares.ts",
+    "apps/portal-web/src/share/**",
+    "migrations/204_shares.sql",
+    "tests/runtime/shares.test.ts",
+    "tests/runtime/shares-sanitizer.test.ts",
+    "tests/runtime/shares-backfill.test.ts",
+    "tests/e2e/shares.spec.ts",
+    "scripts/backfill-shares.ts",
+    "tests/runtime/event-import.test.ts",
+    "tests/runtime/event-share-security.test.ts",
+    "tests/fixtures/event-import/**",
+    "tests/runtime/security-review-shares.test.ts",
+    "tests/runtime/security-review-sanitizer.test.ts",
+    "tests/runtime/admin-held-shares.test.ts",
+    "tests/e2e/admin-held-shares.spec.ts"
+  ],
+  "public_exports": [
+    "modules/shares/service.ts",
+    "modules/shares/types.ts",
+    "modules/shares/event-ledger.ts",
+    "modules/shares/credit.ts",
+    "modules/shares/moderation.ts"
+  ],
+  "dependencies": [
+    "command-core",
+    "shared",
+    "community",
+    "guild-open-source",
+    "github-social",
+    "work",
+    "assets",
+    "skill-submissions",
+    "client-connections",
+    "application-composition"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "modules/shares/README.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "shares.member-api",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/shares.ts",
+      "operations": [
+        "shares.create",
+        "shares.read",
+        "shares.report",
+        "shares.retract",
+        "shares.links",
+        "shares.credit",
+        "shares.preview",
+        "shares.star",
+        "shares.claim"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "shares.public-page",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/shares.ts",
+      "operations": [
+        "shares.public.read"
+      ],
+      "auth_profile": "public-anonymous-read"
+    },
+    {
+      "surface_id": "shares.admin-moderation",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/admin.ts",
+      "operations": [
+        "shares.held",
+        "shares.restore",
+        "shares.confirm"
+      ],
+      "auth_profile": "platform-admin"
+    }
+  ]
+}

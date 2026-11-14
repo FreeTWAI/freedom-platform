@@ -5,9 +5,9 @@ async function login(page:Page,email:string) {
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
   await navigate(page, '任務協作');
-  await expect(page.getByRole('heading',{name:'任務協作',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'工作',exact:true,level:1})).toBeVisible();
 }
 async function switchAccount(page:Page,email:string) {await signOut(page);await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await login(page,email);}
 const artifactLabel='成果引用（例如 artifact:template-v1）';
@@ -17,9 +17,9 @@ test('localhost alias permits browser login and logout',async({page,baseURL})=>{
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
   await navigate(page, '任務協作');
-  await expect(page.getByRole('heading',{name:'任務協作',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'工作',exact:true,level:1})).toBeVisible();
   await signOut(page);
   await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();
 });

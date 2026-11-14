@@ -28,7 +28,11 @@ export async function verifyMigration({ root, openCluster }) {
   const sources = readMigrationSources(join(repo, 'migrations'));
   for (const item of sources) await put('migrations/' + item.name, item.sql);
   const last = Math.max(...sources.map(item => Number(item.name.slice(0, 3))));
-  const profile = { format: LEGACY_MIGRATIONS, first: 1, last, known_gaps: [22] };
+  const installedProfile = { format: LEGACY_MIGRATIONS, first: 1, last: 189, known_gaps: [22] };
+  const profile = sourceMigrationProfile(source, installedProfile);
+  assert.equal(last, 208);
+  assert.equal(profile.last, last);
+  assert.deepEqual(profile.known_gaps, [22]);
   const pending = `${String(last + 1).padStart(3, '0')}_shared_release_fixture.sql`;
   await put('migrations/' + pending, `CREATE TABLE shared_release_fixture(id integer PRIMARY KEY);
 ALTER TABLE shared_release_fixture ENABLE ROW LEVEL SECURITY;
@@ -47,12 +51,11 @@ INSERT INTO shared_release_fixture VALUES(1);
     // Regression: the installed environments were at 189. Starting at today's
     // full schema would miss migration 192's new, disabled profile-cover policy.
     await runMigrationPlan(pool, { sources: sources.filter(item => Number(item.name.slice(0, 3)) <= 189),
-      profile: { ...profile, last: 189 }, target: { database, role: migrator, schema: 'public' } });
+      profile: installedProfile, target: { database, role: migrator, schema: 'public' } });
     await pool.query("UPDATE domain_media_storage_policy SET mode='bridge' WHERE purpose='member.service-cover'");
     await pool.query(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${backup};
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO ${backup};`);
     const beforeLedger = (await pool.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows;
-    const installedProfile = { ...profile, last: 189 };
     const candidateProfile = sourceMigrationProfile(source, installedProfile);
     assert.equal(candidateProfile.last, last + 1); assert.equal(installedProfile.last, 189);
     const prepare = ledger => preparePortableMigration({ sourceRoot: source, sourceCommit,

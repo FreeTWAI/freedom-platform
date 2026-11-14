@@ -7,7 +7,7 @@ export type { Localized, TesterAccess, TesterArea, TesterFeature, TesterFlag, Te
 export { COVERAGE_STATUSES, TESTER_COVERAGE, TESTER_COVERAGE_UPDATED_AT } from './coverage.js';
 export type { CoverageEntry, CoverageStatus } from './coverage.js';
 export { areasForGroup, coverageOf, coverageSummary, isDefaultOff, validateTesterMap } from './service.js';
-export { FEATURE_SEARCH_EXAMPLES, QUEST_PATHS, QUEST_STAGES, QUEST_STEP_IDS } from './quest.js';
+export { QUEST_PATHS, QUEST_STAGES, QUEST_STEP_IDS } from './quest.js';
 export type { QuestStage, QuestStep } from './quest.js';
 export {
   MILESTONE_MEDALS, TESTER_PROGRESS_KEY, emptyProgress, normalizeProgress, overallProgress, readTesterProgress,

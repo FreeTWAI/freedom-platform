@@ -23,7 +23,7 @@ async function openLibrary(page:Page){
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await navigate(page, '技能書架');
   const library=page.locator('.community-library');
-  await expect(page.getByRole('heading',{name:'技能書架',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'探索',level:1,exact:true})).toBeVisible();
   await page.getByRole('button',{name:'未解鎖',exact:true}).click();
   await expect(library.locator('.skill-library-book')).toHaveCount(29);
   return library;
@@ -171,7 +171,7 @@ test('book cards credit the original GitHub author and offer direct reading acti
   expect(await modal.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
   await page.keyboard.press('Escape');
   await expect(modal).not.toBeVisible();await expect(trigger).toBeFocused();
-  await expect(page).toHaveURL(/#skills$/);
+  await expect(page).toHaveURL(/#explore\/resources$/);
 });
 
 test('all public book pages and Markdown preserve beginner summaries, covers, original stars and source facts',async({page,request})=>{

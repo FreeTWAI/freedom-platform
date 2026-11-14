@@ -1,0 +1,18 @@
+.share-box { width:min(36rem,calc(100vw - 2rem)); max-height:calc(100dvh - 2rem); overflow:auto; border:1px solid var(--line); border-radius:16px; background:var(--bg-elev); color:var(--ink); padding:1rem; }
+.share-box::backdrop { background:rgb(0 0 0 / .55); }
+.share-box header,.share-chips,.share-actions { display:flex;align-items:center;gap:.5rem;flex-wrap:wrap; }
+.share-box header { justify-content:space-between; }
+.share-box h2 { margin:0; }
+.share-chips { margin-block:1rem; }
+.share-box textarea { width:100%;box-sizing:border-box; font-size:1rem; }
+.share-box .btn-primary { margin-top:.75rem; }
+.share-preview { margin-top:.75rem;overflow-wrap:anywhere; }
+.share-preview p { margin:.4rem 0; }
+.share-options { display:flex;flex-wrap:wrap;gap:.5rem; }
+.share-image { display:block;margin-block:.5rem; }
+.share-page { max-width:54rem;margin-inline:auto;overflow-wrap:anywhere; }
+.share-page pre { overflow:auto;max-width:100%;padding:1rem;background:var(--bg-elev);border:1px solid var(--line);border-radius:12px; }
+.share-readme img { max-width:100%;height:auto; }
+.share-readme table { display:block;max-width:100%;overflow:auto; }
+.share-readme h1,.share-readme h2 { font-size:1.3rem; }
+@media(max-width:600px){.share-box>.btn-primary{width:100%;}.share-page{width:100%;}}

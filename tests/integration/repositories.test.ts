@@ -276,7 +276,7 @@ test('agent-kit uses its pinned client for canonical member/work state without e
  const {PlatformClient}=await importRepo('freedom-agent-kit','packages/client/index.mjs');
  const client=await login(PlatformClient);
  const workspace=await kit.loadMemberWorkspace(client);
- assert.equal(workspace.member.email,'maker@local.test');assert(Array.isArray(workspace.work));assert.equal(workspace.guilds.length,18);
+ assert.equal(workspace.member.email,'maker@local.test');assert(Array.isArray(workspace.work));assert.equal(workspace.guilds.length,20);
  assert.equal(workspace.agent_execution_grant,false);assert.equal(Object.hasOwn(workspace,'csrf_token'),false);
  assert(!JSON.stringify(workspace).includes('freedom_local_session='));
  await client.call('logout',{body:{}});

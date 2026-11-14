@@ -1,3 +1,4 @@
+import { refreshDueRepositories } from '../../../modules/shares/repository-cache.js';
 import {runContactRetentionWork} from '../../../modules/agent-commerce/operations/contact-retention.js';
 import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefront-gallery.js';
 import {createStorefrontAppearanceLifecycle} from '../../../modules/assets/storefront-appearance.js';
@@ -420,6 +421,7 @@ export type WorkerDependencies = {
   syncGitHub?: typeof syncGitHubRepositories;
   githubFetcher?: typeof fetch;
   guildDiscovery?: typeof refreshGuildDiscoveryReports;
+  sharesRefresh?: typeof refreshDueRepositories;
   /** Test seam. Production uses pruneExpiredAuthRecords. */
   authPrune?: typeof pruneExpiredAuthRecords;
   commerceDueWork?:typeof runDueCommerceWork;
@@ -598,6 +600,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               await (deps.commerceFlushJournal??flushControlEvents)(pool,createR2EffectJournal(resolveFreedomEnv(env.FREEDOM_ENV),env.COMMERCE_JOURNAL),{limit:200});
             }catch{console.error('commerce_control_journal_failed');}
           }
+          try{await (deps.sharesRefresh??refreshDueRepositories)(pool,{fetcher:deps.githubFetcher,token},20);}catch{console.error('shares_refresh_failed');}
           try{await syncGitHub(pool, {fetcher: deps.githubFetcher, token, budget: GITHUB_SYNC_REQUEST_BUDGET});}
           catch(error){const name=error instanceof Error&&/^[A-Za-z][A-Za-z0-9_]*$/.test(error.name)?error.name:'unknown';console.error('github_sync_failed',name);}
           if(env.FREEDOM_REGISTRATION_COMMUNITY_ID){

@@ -23,7 +23,7 @@ test('logo stays whole and RPG modules remain navigable across desktop and narro
   await page.getByLabel('電子郵件', { exact: true }).fill('maker@local.test');
   await page.getByLabel('密碼', { exact: true }).fill('freedom-local-demo');
   await page.getByRole('button', { name: '登入', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '會員首頁', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '動態', exact: true })).toBeVisible();
   await expandHomeSections(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
   for(const cover of await page.locator('.home-module-cover').all()){
@@ -31,9 +31,9 @@ test('logo stays whole and RPG modules remain navigable across desktop and narro
   }
   await page.screenshot({ path: 'test-results/design-home-desktop.png', fullPage: true });
   const destinations = [
-    ['會員首頁', '會員首頁'], ['我的定位', '我的定位'], ['職業公會', '職業公會'], ['技能書架', '技能書架'], ['工坊夥伴', '工坊夥伴'], ['小隊集合', '小隊集合'],
-    ['AI 整理供貨商品', '我有東西要賣'], ['AI 製作銷售網站', '我可以賣東西'], ['開源投稿', '開源投稿'], ['一起開發', '一起開發'],
-    ['行銷工作室', '行銷工作室'], ['任務協作', '任務協作'], ['作品與合作', '作品與合作'], ['合作紀錄', '合作紀錄'], ['自由工坊社群', '自由工坊社群'],
+    ['會員首頁', '動態'], ['我的定位', '定位測驗'], ['職業公會', '公會'], ['技能書架', '探索'], ['工坊夥伴', '探索'], ['小隊集合', '我的'],
+    ['AI 整理供貨商品', '供貨工具'], ['AI 製作銷售網站', '零售工具'], ['開源投稿', '動態'], ['一起開發', '作品共創'],
+    ['行銷工作室', '行銷'], ['任務協作', '工作'], ['作品與合作', '探索'], ['合作紀錄', '合作紀錄'], ['自由工坊社群', '公會'],
   ];
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });

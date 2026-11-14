@@ -77,16 +77,16 @@ test('new member completes required positioning, chooses primary guild and gets 
   await completeOrientation(page);
   // An attempted deep link while gated must not steal the first completed member landing.
   await expect(page).toHaveURL(/#home$/);
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
   await expect(page.locator('.member-card')).toContainText('工坊新夥伴');
   await expect(page.locator('.member-card')).toContainText('主要公會');
   await expect(page.locator('.member-card .positioning-title')).not.toHaveText('探索自己的方向');
   // Once onboarding is complete, ordinary deep links still open their requested module.
   await page.goto('/#retail');
-  await expect(page.getByRole('heading',{name:'我可以賣東西',exact:true}).first()).toBeVisible();
-  await expect(page).toHaveURL(/#retail$/);
+  await expect(page.getByRole('heading',{name:'零售工具',level:1,exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/retail-kit$/);
   await navigate(page, '我的名片');await openAccountSettings(page,'誰能看到我');
-  await expect(page.getByRole('heading',{name:'我的名片',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'我的',level:1,exact:true})).toBeVisible();
   await expect(page.getByLabel('聯絡 E-mail',{exact:true})).toHaveValue(email);
   await expect(page.getByLabel('聯絡 E-mail',{exact:true})).toHaveJSProperty('readOnly',true);
   await page.getByLabel('Discord 帳號',{exact:true}).fill('new.member');
@@ -105,7 +105,7 @@ test('new member completes required positioning, chooses primary guild and gets 
   await expect(page.getByRole('button',{name:'儲存修改',exact:true})).toBeEnabled();
   await navigate(page, '職業公會');
   await expect(page).toHaveURL(/#guilds$/);
-  await expect(page.getByRole('heading',{name:'職業公會',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'公會',level:1,exact:true})).toBeVisible();
   await expect(page.locator('.primary-guild')).toHaveCount(1);
   await expect(page.locator('.primary-guild .guild-master .guild-leadership-name')).toHaveText('待任命');
   await expect(page.locator('.guild-card').first()).toHaveClass(/primary-guild/);
@@ -157,14 +157,14 @@ test('mobile registration and mandatory orientation remain usable without horizo
   let dimensions=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
   await page.screenshot({path:'test-results/member-onboarding-phone.png',fullPage:true});
   await completeOrientation(page);
-  await navigate(page, '我的名片');await expect(page.getByRole('heading',{name:'我的名片',level:1,exact:true})).toBeVisible();
+  await navigate(page, '我的名片');await expect(page.getByRole('heading',{name:'我的',level:1,exact:true})).toBeVisible();
   dimensions=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.width);
 });
 test('member explicitly approves then revokes a scoped supplier client read connection',async({page})=>{
   await register(page,'客戶端連線夥伴');await completeOrientation(page);
   const start=await page.request.post('/api/v1/client-connections/start',{headers:{Origin:e2eOrigin()},data:{kind:'supplier',client_name:'我的供應端測試客戶端'}});expect(start.status()).toBe(201);
   const pending=await start.json();
-  await navigate(page, '我的名片');await openAccountSettings(page,'連結 GitHub 與其他工具');await page.getByLabel('客戶端一次性代碼',{exact:true}).fill(pending.user_code);
+  await navigate(page, '我的名片');await openAccountSettings(page,'連結 GitHub 與其他工具');await page.getByRole('link',{name:'工具連線',exact:true}).click();await page.getByLabel('客戶端一次性代碼',{exact:true}).fill(pending.user_code);
   await page.getByRole('button',{name:'查看連線請求',exact:true}).click();await expect(page.getByText('你自己的商品與供貨條件',{exact:false})).toBeVisible();
   await page.getByRole('button',{name:'確認並允許這次讀取連線',exact:true}).click();await expect(page.getByText('讀取連線已核准，請回到你的客戶端繼續。')).toBeVisible();
   const poll=await page.request.post('/api/v1/client-connections/poll',{headers:{Origin:e2eOrigin()},data:{device_secret:pending.device_secret}});expect(poll.status()).toBe(200);
@@ -497,7 +497,7 @@ for(const width of [1280,320])test(`missing primary guild has an actionable hint
   await finish.click();await expect(page.getByRole('heading',{name:'你的第一段旅程，現在開始。',exact:true})).toBeVisible();
   expect(completionWrites).toHaveLength(1);expect(completionWrites[0].primary_guild_key).toBe(chosen.guild_key);expect(completionWrites[0].guild_keys).not.toContain(first.guild_key);
   const saved=await (await page.request.get('/api/v1/me/onboarding')).json();expect(saved.completed).toBe(true);expect(saved.primary_guild_key).toBe(chosen.guild_key);
-  await page.getByRole('button',{name:'進入自由工坊 →',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'進入自由工坊 →',exact:true}).click();await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
 });
 
 test('a pending guild join keeps the primary card from opening a dialog',async({page})=>{
@@ -551,9 +551,9 @@ test('positioning returns to the confirmed result without discarding unsaved ans
   await page.unroute('**/api/v1/me/onboarding');
   page.once('dialog',dialog=>dialog.dismiss());
   await navigate(page,'工坊夥伴');
-  await expect(page).toHaveURL(/#positioning$/);await expect(radio).toBeChecked();
+  await expect(page).toHaveURL(/#guilds\/guild_talent_direction\/tools\/assessment$/);await expect(radio).toBeChecked();
   page.once('dialog',dialog=>dialog.accept());
-  await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#members$/);
+  await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#explore\/people$/);
 });
 
 test('positioning preserves the original command after a lost ACK and later refusal',async({page})=>{
@@ -611,10 +611,24 @@ test('removing saved custom choices alone protects unsaved positioning changes',
   await page.getByRole('button',{name:'看看適合我的公會',exact:true}).click();await finishGuild(page);
   await navigate(page,'我的定位');await page.getByRole('button',{name:'重新探索定位',exact:true}).click();await answerQuestions(page);
   await page.getByRole('button',{name:'移除能力：已保存的能力',exact:true}).click();
-  page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#positioning$/);
+  page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#guilds\/guild_talent_direction\/tools\/assessment$/);
   await expect(page.getByRole('button',{name:'移除能力：已保存的能力',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'保存，繼續下一步 →',exact:true}).click();
   await page.getByRole('button',{name:'移除裝備：已保存的裝備',exact:true}).click();
-  page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#positioning$/);
+  page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#guilds\/guild_talent_direction\/tools\/assessment$/);
   await expect(page.getByRole('button',{name:'移除裝備：已保存的裝備',exact:true})).toHaveCount(0);
+});
+
+test('guilds place renders partial directory items without skill_books before opening positioning',async({page})=>{
+  await register(page,'部分公會目錄');await completeOrientation(page);
+  const item={guild_key:'test_guild',name:'測試公會',question_set_version:'v1',outdated:false,answers:null,aggregate_version:null,updated_at:null};
+  await page.route('**/api/v1/me/guild-answers',route=>route.fulfill({json:{items:[item]}}));
+  await page.route('**/api/v1/guilds/directory',route=>route.fulfill({json:{items:[{guild_key:'test_guild',name:'測試公會',entry_questions:{questions:[{id:'q1',prompt:'想練習什麼？',options:[{id:'a',label:'練習寫作'},{id:'b',label:'練習設計'}]}]}}]}}));
+  await navigate(page,'職業公會');
+  const directoryCard=page.locator('.guild-card').filter({hasText:'測試公會'});
+  await expect(directoryCard).toBeVisible();
+  await expect(directoryCard).toContainText('技能書整理中');
+  await expect(directoryCard.getByRole('button',{name:'公會技能書庫 · 0',exact:true})).toBeVisible();
+  await navigate(page,'我的定位');
+  await expect(page.getByRole('article',{name:'測試公會',exact:true}).getByRole('button',{name:'回答',exact:true})).toBeVisible();
 });

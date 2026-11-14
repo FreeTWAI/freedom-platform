@@ -110,12 +110,12 @@ test('unknown survives GET and later definitive 403; exact retry ACK settles wit
   expect(await page.evaluate(() => {const event = new Event('beforeunload', {cancelable: true}); window.dispatchEvent(event); return event.defaultPrevented;})).toBe(true);
   await panel(page).getByRole('button', {name: '重新讀取到場紀錄'}).click(); await expect(memberRow(page)).toContainText('已撤回確認');
   await expect(panel(page).getByRole('button', {name: '確認 合成會員小明 到場'})).toBeDisabled();
-  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(new RegExp(`#events/${eventA}$`));
+  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(new RegExp(`#explore/events/${eventA}$`));
   await retry.click(); await expect(retry).toBeVisible(); expect(writes[1]).toEqual(writes[0]);
   resolve = true; await retry.click(); await expect(retry).toHaveCount(0); expect(writes[2]).toEqual(writes[0]);
   await expect(memberRow(page)).toContainText('已撤回確認'); await expect(memberRow(page)).not.toContainText('主辦已確認到場');
   expect(await page.evaluate(() => {const event = new Event('beforeunload', {cancelable: true}); window.dispatchEvent(event); return event.defaultPrevented;})).toBe(false);
-  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(/#events$/);
+  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(/#explore\/events$/);
 });
 
 test('canonical ACK releases navigation before a failing refresh and never offers a duplicate command', async ({page}) => {
@@ -126,7 +126,7 @@ test('canonical ACK releases navigation before a failing refresh and never offer
   await page.route(`**/api/v1/events/${eventA}/attendance/${member}`, async route => {written = true; writes++; await route.fulfill({json: ack(tuple(route))});});
   await open(page); await confirm(page); await expect(panel(page)).toContainText('原操作已確認'); await expect(panel(page).getByRole('alert')).toBeVisible();
   await expect(panel(page).getByRole('button', {name: '重試原到場操作'})).toHaveCount(0);
-  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(/#events$/); expect(writes).toBe(1);
+  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(/#explore\/events$/); expect(writes).toBe(1);
 });
 
 for (const bad of ['member', 'event', 'key', 'version', 'reason'] as const) test(`a mismatched ${bad} ACK cannot release the frozen attempt`, async ({page}) => {
@@ -137,7 +137,7 @@ for (const bad of ['member', 'event', 'key', 'version', 'reason'] as const) test
     await route.fulfill({json: ack(command, valid ? {} : overrides)});
   });
   await open(page); await confirm(page); const retry = panel(page).getByRole('button', {name: '重試原到場操作'}); await expect(retry).toBeVisible();
-  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(new RegExp(`#events/${eventA}$`));
+  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(new RegExp(`#explore/events/${eventA}$`));
   valid = true; await retry.click(); await expect(retry).toHaveCount(0); expect(writes[1]).toEqual(writes[0]);
   await expect(panel(page)).toContainText('讀到較舊的到場紀錄'); await expect(panel(page)).not.toContainText('主辦已確認到場');
 });

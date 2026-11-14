@@ -41,11 +41,11 @@ export function PositioningPanel({client,session,onNavigate,registerPendingLeave
   },[client,session.user.user_id]);
   useEffect(()=>{void loadSummary();const refresh=()=>{void loadSummary();};window.addEventListener('freedom-profile-updated',refresh);return()=>{summaryGeneration.current++;window.removeEventListener('freedom-profile-updated',refresh);};},[loadSummary]);
   useEffect(()=>{if(!retaking&&!summaryLoading&&retakeButton.current&&focusResult.current){focusResult.current=false;retakeButton.current.focus();}},[retaking,summaryLoading,summary]);
-  const assessment=summary?.assessment,member=summary?.member;
-  const abilityLabels=member?[...member.capabilities.map(id=>summary?.labels[id]??id),...(member.custom_capabilities??[])]:[];
-  const equipmentLabels=member?[...member.equipment.map(id=>summary?.labels[id]??id),...(member.custom_equipment??[])]:[];
-  const featuredLabels=member?(member.featured_capabilities??member.capabilities.slice(0,3)).slice(0,3).map(id=>id.startsWith('custom:')?id.slice(7):summary?.labels[id]??id):[];
-  const firstBook=assessment?.skill_books.find(book=>member?.primary_guild&&book.guild_keys.includes(member.primary_guild.guild_key))??assessment?.skill_books[0];
+  const assessment=summary?.assessment,member=summary?.member,books=assessment?.skill_books??[];
+  const abilityLabels=member?[...(member.capabilities??[]).map(id=>summary?.labels[id]??id),...(member.custom_capabilities??[])]:[];
+  const equipmentLabels=member?[...(member.equipment??[]).map(id=>summary?.labels[id]??id),...(member.custom_equipment??[])]:[];
+  const featuredLabels=member?(member.featured_capabilities??(member.capabilities??[]).slice(0,3)).slice(0,3).map(id=>id.startsWith('custom:')?id.slice(7):summary?.labels[id]??id):[];
+  const firstBook=books.find(book=>member?.primary_guild&&(book.guild_keys??[]).includes(member.primary_guild.guild_key))??books[0];
 
   return <section className="module-panel positioning-panel" aria-label="定位結果">
     {leaveNotice&&<p role="alert" className="banner banner-info">{leaveNotice}</p>}
@@ -58,9 +58,9 @@ export function PositioningPanel({client,session,onNavigate,registerPendingLeave
     {!summaryLoading&&!summaryError&&assessment&&member&&<section className="card positioning-result" aria-labelledby="positioning-result-title">
       <div className="positioning-result-heading"><h2 id="positioning-result-title" data-guide-anchor="positioning:result">我的定位結果</h2>{assessment.completed&&<span className="badge">{assessment.entry_mode==='quick'?'已選擇公會':'已完成定位'}</span>}</div>
       {member.positioning_title&&<p className="positioning-result-role">{member.positioning_title}</p>}
-      {member.category_primaries?<dl className="positioning-result-guilds">{member.category_primaries.map(item=><div key={item.category}><dt>{SECTION_LABELS[item.category]}</dt><dd>{item.guild?.name??'尚未選擇'}</dd></div>)}</dl>:<dl className="positioning-result-guilds"><div><dt>主要公會</dt><dd>{member.primary_guild?.name??'尚未選擇'}</dd></div><div><dt>次要公會</dt><dd>{member.secondary_guilds.map(g=>g.name).join('、')||'先專注在主要公會'}</dd></div></dl>}
+      {member.category_primaries?<dl className="positioning-result-guilds">{member.category_primaries.map(item=><div key={item.category}><dt>{SECTION_LABELS[item.category]}</dt><dd>{item.guild?.name??'尚未選擇'}</dd></div>)}</dl>:<dl className="positioning-result-guilds"><div><dt>主要公會</dt><dd>{member.primary_guild?.name??'尚未選擇'}</dd></div><div><dt>次要公會</dt><dd>{(member.secondary_guilds??[]).map(g=>g.name).join('、')||'先專注在主要公會'}</dd></div></dl>}
       {featuredLabels.length>0&&<div className="positioning-featured"><h3>擅長的能力</h3><div className="tag-list">{featuredLabels.map((label,index)=><span className="pill" key={`${index}-${label}`}>{label}</span>)}</div></div>}
-      <div className="positioning-result-next"><div className="actions"><button type="button" className="btn btn-primary" onClick={()=>onNavigate?.('guilds')}>前往我的公會</button>{firstBook&&<SkillBookIntro book={firstBook} guildName={firstBook.guild_keys.includes(member.primary_guild?.guild_key??'')?member.primary_guild?.name:undefined} label="閱讀我的技能書"/>}</div></div>
+      <div className="positioning-result-next"><div className="actions"><button type="button" className="btn btn-primary" onClick={()=>onNavigate?.('guilds')}>前往我的公會</button>{firstBook&&<SkillBookIntro book={firstBook} guildName={(firstBook.guild_keys??[]).includes(member.primary_guild?.guild_key??'')?member.primary_guild?.name:undefined} label="閱讀我的技能書"/>}</div></div>
       <div className="positioning-result-adjust">{!assessmentDraft&&<button type="button" className="btn btn-ghost" ref={retakeButton} onClick={()=>{if(risks.current.questions.locked){setLeaveNotice('小問答操作尚未確認，請先重試原小問答。');return;}if(!assessmentDraft)setAssessmentDraft(assessment);setRetaking(true);setLeaveNotice('');}}>{assessment.entry_mode==='quick'?'補充／繼續探索定位':assessment.completed?'重新探索定位':'開始探索我的定位'}</button>}{assessment.completed&&assessment.entry_mode!=='quick'&&assessment.state!=='completed'&&<p className="field-hint">調整中的草稿尚未取代這份已確認的定位。</p>}</div>
       <details className="positioning-result-skills"><summary>我的能力與裝備 · {abilityLabels.length} 項能力／{equipmentLabels.length} 項裝備</summary><div><section><h3>我的能力</h3><div className="tag-list">{abilityLabels.length?abilityLabels.map((label,index)=><span className="pill" key={`${index}-${label}`}>{label}</span>):<p className="muted">可以隨時補充，也可以先開始閱讀技能書。</p>}</div></section><section><h3>我的裝備</h3><div className="tag-list">{equipmentLabels.length?equipmentLabels.map((label,index)=><span className="pill" key={`${index}-${label}`}>{label}</span>):<p className="muted">尚未填寫裝備，不影響參與公會。</p>}</div></section></div></details>
     </section>}
@@ -106,7 +106,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     try{
       const [g,p,a]=await Promise.all([client.get<{items:GuildSummary[]}>('/guilds/directory'),client.get<GuildPreferences>('/me/guild-preferences'),client.get<{items:GuildApplication[]}>('/guild-applications')]);
       if(sequence!==generation.current)return;
-      setGuilds(g.items);setPreferences(p);setApplications(a.items);if(quiet)setLoadError(null);
+      setGuilds(g.items??[]);setPreferences(p);setApplications(a.items??[]);if(quiet)setLoadError(null);
       if(!launchpadEnabled){setBoard(null);return;}
       try{
         const view=await client.get<PreferenceView>('/me/guild-preferences/v2',{background:true});
@@ -255,7 +255,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   const secondaryKeys=(preferences?.secondary_guild_keys??guilds.filter(g=>g.is_secondary).sort((a,b)=>(a.secondary_position??0)-(b.secondary_position??0)).map(g=>g.guild_key)).filter((key,index,keys)=>key!==primaryKey&&keys.indexOf(key)===index&&guilds.some(g=>g.guild_key===key&&g.membership?.state==='active')).slice(0,2);
   const classified=guilds.map(g=>({...g,is_primary:g.guild_key===primaryKey&&g.membership?.state==='active',is_secondary:secondaryKeys.includes(g.guild_key)}));
   const search=query.trim().toLocaleLowerCase();
-  const visible=classified.filter(g=>(scope==='all'||g.membership?.state==='active')&&(!topic||g.tags?.includes(topic))&&(!search||[g.name,g.alias,g.purpose,guildMasterLabel(g),...(g.guild_experts??[]).map(expert=>expert.display_name),...g.skill_books.map(book=>book.title)].join(' ').toLocaleLowerCase().includes(search)));
+  const visible=classified.filter(g=>(scope==='all'||g.membership?.state==='active')&&(!topic||g.tags?.includes(topic))&&(!search||[g.name,g.alias,g.purpose,guildMasterLabel(g),...(g.guild_experts??[]).map(expert=>expert.display_name),...(g.skill_books??[]).map(book=>book.title)].join(' ').toLocaleLowerCase().includes(search)));
   const chosenKeys=new Set(board?.view.primaries.flatMap(item=>item.guild_key?[item.guild_key]:[])??[]);
   const groups=board?[
     {key:'joined',title:'其他已加入公會',items:visible.filter(g=>g.membership?.state==='active'&&!chosenKeys.has(g.guild_key))},

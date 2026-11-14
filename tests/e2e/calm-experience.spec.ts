@@ -3,12 +3,12 @@ import {openChat,closeChat} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
 import {DEMO_USERS,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
-import {navigate,openFeatureSearch,openHomeGuide,openHomeLearning} from './navigation.js';
+import {navigate,openHomeGuide,openHomeLearning} from './navigation.js';
 import {quickJoin} from './quick-join.js';
 import {chatPollClock} from './chat-poll-clock.js';
 
 async function login(page:Page,email='maker@local.test'){
-  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 
 test('a resumed private conversation keeps older history and pages through every new-message gap in order',async({page})=>{
@@ -40,7 +40,7 @@ test('synthetic entry budget: two required fields and one guild choice reach use
   await page.getByLabel('電子郵件',{exact:true}).pressSequentially(email,{delay:100});await page.getByLabel('密碼',{exact:true}).pressSequentially('freedom-entry-2026',{delay:100});
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();await expect(page.locator('.welcome-optional')).not.toHaveAttribute('open','');
   await page.getByLabel('找感興趣的公會').fill('AI 開發公會');await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open',false);
   await openHomeGuide(page);
   await openHomeLearning(page);
@@ -61,8 +61,9 @@ test('synthetic entry budget: two required fields and one guild choice reach use
   await next.getByRole('button',{name:'進入AI 開發公會聊天室',exact:true}).click();await expect(page.getByRole('heading',{name:'AI 開發公會・公會閒聊',exact:true})).toBeVisible();await expect(page.getByRole('textbox',{name:'在 AI 開發公會 發言'})).toBeVisible();
 });
 test('feature search finds chat and selling functions, and all themes work at 320 pixels',async({page})=>{
-  await login(page);await openFeatureSearch(page);const search=page.getByLabel('搜尋功能');await search.fill('聊天室');await page.locator('.nav-search-results').getByRole('button',{name:'我的訊息',exact:true}).click();await expect(page.getByRole('heading',{name:'我的訊息',level:2})).toBeVisible();
-  await openFeatureSearch(page);await search.fill('電商');await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'AI 製作銷售網站',exact:true}).click();await expect(page.getByRole('heading',{name:'我可以賣東西',level:1})).toBeVisible();
+  // The five-place menu replaces feature search; keep both task destinations reachable.
+  await login(page);await navigate(page,'我的訊息');await expect(page.getByRole('heading',{name:'我的訊息',level:2})).toBeVisible();
+  await navigate(page,'我可以賣東西');await expect(page.getByRole('heading',{name:'零售工具',level:1,exact:true})).toBeVisible();
   await navigate(page,'會員首頁');await page.setViewportSize({width:320,height:720});
   for(const [label,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
     const settings=page.getByRole('button',{name:'設定',exact:true});if(await settings.getAttribute('aria-expanded')!=='true')await settings.click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();await expect(page.locator('html')).toHaveAttribute('data-theme',theme);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

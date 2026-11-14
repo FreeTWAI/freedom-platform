@@ -36,7 +36,7 @@ async function login(page: Page) {
   await page.getByLabel('電子郵件', { exact: true }).fill(DEMO_USERS[0].email);
   await page.getByLabel('密碼', { exact: true }).fill(DEMO_PASSWORD);
   await page.getByRole('button', { name: '登入', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '會員首頁', exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { name: '動態', exact: true })).toBeVisible({ timeout: 20_000 });
 }
 
 async function settleIllustration(dialog: Locator) {

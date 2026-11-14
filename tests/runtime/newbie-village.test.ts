@@ -1,3 +1,4 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
@@ -217,7 +218,7 @@ function villageHistoryHarness(){
   assert.ok(writerStart>=0&&writerEnd>writerStart,'actual village history writer');
   const clone=<T,>(value:T):T=>JSON.parse(JSON.stringify(value));
   const initial={freedomNewbieView:{step:'overview',index:0,result:false},preserved:'presentation'};
-  const location={href:'http://localhost/#newbie-village',hash:'#newbie-village',pathname:'/',search:''};
+  const location={href:'http://localhost/'+canonicalHash('#newbie-village'),hash:canonicalHash('#newbie-village'),pathname:'/',search:''};
   const calls={guard:0,route:0,open:0,close:0,push:0,replace:0,after:0};
   const move=(hash:string)=>{location.hash=hash;location.href=`http://localhost/${hash}`};
   const history={state:clone(initial) as any,
@@ -233,6 +234,10 @@ function villageHistoryHarness(){
     setTab:()=>{calls.route++},setLocationHash:()=>{},setMessagesOpen:(open:boolean)=>{if(!open)calls.close++},
     launchpadEnabled:false,tabFromHash:()=>'',openMessages:()=>{calls.open++},
   };
+  // Load the real resolver into this VM so browser-bound helpers use its window.
+  const routeModule={exports:{}};
+  runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/portal-route.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code,{module:routeModule,exports:routeModule.exports,window:state.window,URLSearchParams});
+  Object.assign(state,routeModule.exports);
   changed=runInNewContext(`${app.slice(start,end+7)};changed`,state);
   const write=runInNewContext(`${village.slice(writerStart,writerEnd+2)};writeVillageView`,state) as (view:{step:string;index:number;result:boolean},replace?:boolean)=>void;
   const event=(type='popstate')=>changed({type});
@@ -245,7 +250,7 @@ test('village metadata pushes/replaces update the shell cancellation snapshot wi
   h.write({step:'card',index:0,result:false});h.write(guild);
   assert.equal(h.calls.push,2);assert.equal(h.calls.route,0);assert.equal(h.calls.guard,0);
   assert.deepEqual(h.clone(h.state.messageLocation.current.state),{freedomNewbieView:guild,preserved:'presentation'});
-  h.depart();assert.equal(h.state.window.location.hash,'#newbie-village');
+  h.depart();assert.equal(h.state.window.location.hash,canonicalHash('#newbie-village'));
   assert.deepEqual(h.history.state.freedomNewbieView,guild);assert.equal(h.calls.guard,1);assert.equal(h.calls.route,0);
   const quiz={step:'quiz',index:7,result:false};h.write(quiz,true);assert.equal(h.calls.push,2);
   h.depart();assert.deepEqual(h.history.state.freedomNewbieView,quiz);assert.equal(h.calls.guard,2);

@@ -90,7 +90,7 @@ for (const [label, viewport] of viewports) {
     await page.setViewportSize(viewport);
     await register(page, `審查${label}`, label);
     await onboard(page, label);
-    for (const [nav, title] of [['會員首頁', '會員首頁'], ['我的定位', '我的定位'], ['職業公會', '職業公會'], ['工坊夥伴', '工坊夥伴'], ['小隊集合', '小隊集合']] as const) {
+    for (const [nav, title] of [['會員首頁', '動態'], ['我的定位', '定位測驗'], ['職業公會', '公會'], ['工坊夥伴', '探索'], ['小隊集合', '我的']] as const) {
       await navigate(page, nav);
       await expect(page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible();
       await page.waitForLoadState('networkidle');
@@ -99,7 +99,7 @@ for (const [label, viewport] of viewports) {
       await page.screenshot({ path: `${shots}/${label}-${title}.png`, fullPage: true });
     }
     await navigate(page, '我的名片');
-    await expect(page.getByRole('heading', { level: 1, name: '我的名片', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '我的', exact: true })).toBeVisible();
     await page.waitForLoadState('networkidle');
     await oneTitle(page, `${label} 我的名片`);
     await page.screenshot({ path: `${shots}/${label}-我的名片.png`, fullPage: true });
@@ -199,7 +199,7 @@ test('a failed guild directory load offers a styled retry that recovers', async 
 test('a failed member card load keeps quick links, claims nothing and recovers in place on phone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await register(page, '名片重試'); await onboard(page);
-  await expect(page.getByRole('heading', { level: 1, name: '會員首頁', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: '動態', exact: true })).toBeVisible();
   // Fail UUID card reads only; the independent recommendation endpoint stays live.
   const card = (url: URL) => /^\/api\/v1\/members\/[0-9a-f-]{36}$/.test(url.pathname);
   let mode: 'fail' | 'hold' | 'pass' = 'fail', release!: () => void, requests = 0;

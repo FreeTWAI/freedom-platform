@@ -58,7 +58,7 @@ function harness(options:Options={}){
  const diagnostics=runInNewContext(compiled+'\nactivityDiagnostics();',{AggregateError,Buffer,require:(name:string)=>{
   if(name==='node:crypto')return {randomUUID};
   if(name==='./fixtures.js')return {test:register,expect};
-  if(name==='./navigation.js')return {navigate:async()=>{calls.push('body');fail('body');}};
+  if(name==='./navigation.js')return {navigate:async()=>{calls.push('body');fail('body');},openEventOptions:async()=>{}};
   if(name.endsWith('/testing/seed.js'))return {DEMO_COMMUNITY:'synthetic-community',DEMO_PASSWORD:'synthetic-password'};
   if(name.endsWith('/identity-membership/service.js'))return {hashPassword:()=> 'synthetic-hash'};
   throw new Error(`Unexpected spec dependency: ${name}`);

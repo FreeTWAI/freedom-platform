@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { Pool } from 'pg';
 import { openIsolatedPostgres, runPostgresProcess } from '../portable/postgres.mjs';
 import { deriveCandidateContract } from '../portable/candidate-contract.mjs';
+import { sourceMigrationProfile } from '../portable/migration.mjs';
 import { readMigrationSources } from '../../../packages/db/migration-files.mjs';
 import { resolveMigrationPlan } from '../../../packages/db/migration-plan.mjs';
 import { verifyBackup } from './backup-integration.mjs';
@@ -30,8 +31,9 @@ try {
   const sourceRoot = join(root, 'migration-source-tree');
   const git = args => execFileSync('/usr/bin/git', args, { cwd: sourceRoot, encoding: 'utf8' }).trim();
   const workRoot = join(root, 'contract'); await mkdir(workRoot, { mode: 0o700 });
-  const names = git(['ls-tree', '--name-only', 'HEAD:migrations']).split('\n');
-  const profile = { format: 'freedom.migrations/legacy-v1', first: 1, last: Math.max(...names.map(name => Number(name.slice(0, 3)))), known_gaps: [22] };
+  const profile = sourceMigrationProfile(sourceRoot, { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] });
+  assert.deepEqual(profile.known_gaps, [22]);
+  assert.equal(profile.last, 209); // Current frontier 208 plus the synthetic pending migration.
   const contract = await deriveCandidateContract({ sourceRoot, sourceSha: git(['rev-parse', 'HEAD']),
     sourceTree: git(['rev-parse', 'HEAD^{tree}']), workRoot, binDirectory, materialPolicySha256: 'a'.repeat(64),
     profile, beforeLedger: resolveMigrationPlan(readMigrationSources(join(sourceRoot, 'migrations')), profile).ledger,

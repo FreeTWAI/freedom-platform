@@ -22,6 +22,8 @@ export async function mountSharingFixture(page:Page, kind='probe') {
     import {ShareLauncher,SHARE_TARGETS} from './apps/portal-web/src/ShareLauncher';
     import {MyContent} from './apps/portal-web/src/modules/MyContent';
     import {Navigation} from './apps/portal-web/src/Navigation';
+    import {PlaceView} from './apps/portal-web/src/features/PlaceView';
+    import {portalHash} from './apps/portal-web/src/portal-route';
     import {LanguageProvider} from './apps/portal-web/src/language';
     import {CommunitySearch} from './apps/portal-web/src/modules/CommunitySearch';
     const owner='10000000-0000-4000-8000-000000000001',other='10000000-0000-4000-8000-000000000002';
@@ -72,15 +74,16 @@ export async function mountSharingFixture(page:Page, kind='probe') {
       return <><output aria-label="Load cycles">{loads}</output><output aria-label="Error value">{error??'none'}</output><button onClick={()=>setRenders(v=>v+1)}>Unrelated render {renders}</button><button onClick={()=>setError('Synthetic error')}>Set error</button><button onClick={()=>setError(null)}>Clear error</button></>;
     }
     function Fixture(){
-      const [mounted,setMounted]=useState(true),[version,setVersion]=useState(0),[guided,setGuided]=useState(false),[target,setTarget]=useState('');render=()=>setVersion(v=>v+1);
+      const [mounted,setMounted]=useState(true),[version,setVersion]=useState(0),[guided,setGuided]=useState(false),[target,setTarget]=useState(''),[contentHash,setContentHash]=useState('#me/content');render=()=>setVersion(v=>v+1);
       const session={user:{user_id:user},csrf_token:token};
+      const selectContent=(id,hash)=>{setTarget(id);setContentHash(hash??portalHash(id));};
       const value={session,pending:null,error:null,mutate:()=>{throw Error('Authoring must use exact request identity')},clearError:()=>{},isMe:ref=>ref===user};
       return <><button onClick={()=>setMounted(v=>!v)}>Toggle form</button><button onClick={()=>setGuided(v=>!v)}>Toggle guidance</button>
         <output aria-label="Destination">{target}</output>
         {user&&mounted&&<PortalContext.Provider value={value}><div key={user+':'+client.sessionGeneration}>
           {${JSON.stringify(kind)}==='identity'?<ErrorIdentityProbe/>:${JSON.stringify(kind)}==='probe'?<Probe/>:${JSON.stringify(kind)}==='skill'?<SimpleSkillSubmission client={client} userId={user} onPublished={async()=>{}}/>:
           ${JSON.stringify(kind)}==='resume'?<SimpleSkillSubmission client={client} userId={user} resumeId={resumeId} onPublished={async()=>{}} onOpenDraft={id=>setTarget('advanced:'+id)}/>:
-          ${JSON.stringify(kind)}==='content'?<LanguageProvider><Navigation current="my-content" onSelect={id=>setTarget(id)} canManageGuild={false} guildLaunchpadEnabled={false} communitySearchEnabled={false} personalContentEnabled={enabled} mobileOpen/><ShareLauncher onChoose={()=>{}} onMyContent={enabled?()=>setTarget('my-content'):undefined}/><MyContent/></LanguageProvider>:
+          ${JSON.stringify(kind)}==='content'?<LanguageProvider><Navigation current="my-content" currentHash={contentHash} onSelect={selectContent} canManageGuild={false} guildLaunchpadEnabled={false} communitySearchEnabled={false} personalContentEnabled={enabled} mobileOpen/><PlaceView defaultTab="my-content" context={{client,session,locationHash:contentHash,site:{personal_content_enabled:enabled},selectTab:selectContent}} render={()=>null}/><ShareLauncher onChoose={()=>{}} onMyContent={enabled?()=>setTarget('my-content'):undefined}/><MyContent/></LanguageProvider>:
           ${JSON.stringify(kind)}==='relations'?<CommunitySearch client={client} authKey={user+':'+client.sessionGeneration} relationsEnabled={enabled}/>:
           ${JSON.stringify(kind)}==='cooperation'?<CoCreationPanel client={client} session={session}/>:
           ${JSON.stringify(kind)}==='showcase'?<ShowcasePanel/>:
@@ -340,20 +343,22 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
       await page.setViewportSize({width,height:844});await mountSharingFixture(page,'content');
       await page.evaluate(value=>{document.documentElement.dataset.theme=value},theme);
       await expect(page.getByRole('heading',{name:'草稿與已發布內容'})).toBeVisible();
-      const primary=page.locator('.nav-primary').getByRole('button',{name:'我的個人空間',exact:true});
+      const primary=page.locator('.nav-primary').getByRole('button',{name:'我的',exact:true});
       await primary.focus();await page.keyboard.press('Enter');await expect(page.getByLabel('Destination')).toHaveText('profile');
       await expect(page.locator('.nav-primary').getByRole('button',{name:'我的內容',exact:true})).toHaveCount(0);
-      await page.locator('.nav-more > summary').click();
-      await page.getByRole('searchbox').fill('我的內容');
-      await page.getByRole('button',{name:'我的內容',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByLabel('Destination')).toHaveText('my-content');
+      await expect(page.locator('.nav-more, .nav-search')).toHaveCount(0);
+      const views=page.getByRole('combobox',{name:'我的檢視',exact:true});
+      await views.focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
+      await expect(views).toHaveValue('#me/content');await expect(page.getByLabel('Destination')).toHaveText('my-content');
       const trigger=page.getByRole('button',{name:'分享或提交'});await trigger.focus();await page.keyboard.press('Enter');
       await expect(page.getByRole('dialog')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       await page.keyboard.press('Escape');await expect(trigger).toBeFocused();
       await trigger.click();await page.getByRole('dialog').getByRole('button',{name:/我的內容/}).focus();await page.keyboard.press('Enter');
       await expect(page.getByRole('dialog')).not.toBeVisible();await expect(trigger).toBeFocused();
       await fixture(page,f=>f.enabled(false));await trigger.click();await expect(page.getByRole('dialog').getByRole('button',{name:/我的內容/})).toHaveCount(0);
-      await page.keyboard.press('Escape');await page.locator('.nav-more > summary').click();
-      await page.getByRole('searchbox').fill('我的內容');await expect(page.getByRole('button',{name:'我的內容',exact:true})).toHaveCount(0);
+      await page.keyboard.press('Escape');
+      await expect(views.getByRole('option',{name:'草稿',exact:true})).toHaveCount(0);
+      await expect(page.locator('.nav-primary').getByRole('button',{name:'我的內容',exact:true})).toHaveCount(0);
     }
   },
   'private content late reads never cross same-user replacement account switch logout or expiry':async page=>{

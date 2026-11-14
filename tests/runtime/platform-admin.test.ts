@@ -76,16 +76,38 @@ for(const method of ['GET','HEAD'])test(`admin ${method} refuses a member projec
 });
 
 test('platform admin reviews public events with transactional announcement and notification',async()=>{
- const session=await login();const body={title:'公開活動審核測試',description:'會員提交由平台審核。',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'https://example.org/event',capacity:20,guild_key:null};
- const submitted=await member('/events',session.cookie,body,session.csrf);assert.equal(submitted.status,201,JSON.stringify(submitted.data));assert.equal(submitted.data.state,'pending');
- const queue=await request('/events');assert.equal(queue.status,200);assert.equal(queue.data.items[0].event_id,submitted.data.event_id);
- const approved=await request(`/events/${submitted.data.event_id}/review`,{decision:'approve',reason:'活動資訊完整，可以公開。'},1);assert.equal(approved.status,200,JSON.stringify(approved.data));assert.equal(approved.data.state,'published');
- assert.equal((await request(`/events/${submitted.data.event_id}/review`,{decision:'reject',reason:'重複審核。'},1)).status,412);
- const bulletin=await member('/events/bulletins',session.cookie);assert.deepEqual(bulletin.data.items.map((item:any)=>item.kind).sort(),['approved','submitted']);
- const notices=await member('/me/notifications',session.cookie);assert.ok(notices.data.items.some((item:any)=>item.kind==='event_approved'));
- const next=await member('/events',session.cookie,{...body,title:'需退回的活動'},session.csrf);assert.equal(next.status,201);
- const rejected=await request(`/events/${next.data.event_id}/review`,{decision:'reject',reason:'請補上更清楚的活動說明。'},1);assert.equal(rejected.status,200);assert.equal(rejected.data.state,'rejected');
- assert.equal((await member('/events',session.cookie)).data.items.find((item:any)=>item.event_id===next.data.event_id).state,'rejected');
+ const session=await login();const body={title:'公開活動審核測試',description:'會員發布後由檢舉處理。',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'https://example.org/event',capacity:20,guild_key:null};
+ const submitted=await member('/events',session.cookie,body,session.csrf);assert.equal(submitted.status,201,JSON.stringify(submitted.data));assert.equal(submitted.data.state,'published');
+ assert.deepEqual((await request('/events')).data.items,[]);
+ assert.equal((await request(`/events/${submitted.data.event_id}/review`,{decision:'approve',reason:'已發布不需審核。'},1)).data.code,'event_reviewed');
+ const bulletin=await member('/events/bulletins',session.cookie);assert.deepEqual(bulletin.data.items.map((item:any)=>item.kind),['approved']);assert.match(bulletin.data.items[0].message,/發布了/);
+ const reporters:{cookie:string;csrf:string}[]=[];
+ for(let i=0;i<3;i++){
+  const id=randomUUID(),token=randomBytes(32).toString('base64url');
+  await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active,onboarding_required,created_at)
+    SELECT $1,community_id,$2,'合成檢舉會員',password_hash,$3,true,false,now()-interval '8 days' FROM users WHERE user_id=$4`,[id,`${id}@example.com`,randomUUID(),DEMO_USERS[0].user_id]);
+  await pool.query("INSERT INTO sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$1,now()+interval '1 day')",[tokenHash(token),id]);
+  reporters.push({cookie:`freedom_local_session=${token}`,csrf:tokenHash(token)});
+ }
+ const report=async(event:any)=>{
+  for(const [index,reporter] of reporters.entries()){
+   const result=await member(`/shares/${event.share_id}/report`,reporter.cookie,{reason:'合成檢舉需要處理'},reporter.csrf);assert.equal(result.status,200,JSON.stringify(result.data));
+   assert.equal((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[event.event_id])).rows[0].state,index===2?'pending':'published');
+  }
+ };
+ await report(submitted.data);
+ const queue=await request('/shares/held');assert.equal(queue.status,200);assert.equal(queue.data.items[0].share_id,submitted.data.share_id);
+ assert.equal((await member(`/shares/${submitted.data.share_id}/restore`,session.cookie,{reason:'會員不能還原'},session.csrf)).status,404);
+ const restored=await request(`/shares/${submitted.data.share_id}/restore`,{reason:'活動資訊完整，可以公開。'});assert.equal(restored.status,200,JSON.stringify(restored.data));assert.equal(restored.data.state,'published');
+ assert.equal((await member('/events',session.cookie)).data.items.find((item:any)=>item.event_id===submitted.data.event_id).state,'published');
+ assert.equal((await request(`/shares/${submitted.data.share_id}/confirm`,{reason:'沒有未處理檢舉。'})).status,409);
+ const next=await member('/events',session.cookie,{...body,title:'需確認檢舉的活動'},session.csrf);assert.equal(next.status,201);await report(next.data);
+ const confirmed=await request(`/shares/${next.data.share_id}/confirm`,{reason:'檢舉內容成立。'});assert.equal(confirmed.status,200);assert.equal(confirmed.data.state,'hidden');
+ assert.equal((await member('/events',session.cookie)).data.items.find((item:any)=>item.event_id===next.data.event_id).state,'pending');
+ assert.equal((await member('/events/'+next.data.event_id,session.cookie)).data.can_review,false);
+ assert.equal((await member('/events/'+next.data.event_id,reporters[0].cookie)).status,404);
+ const audit=await request('/audit');assert.ok(audit.data.items.some((item:any)=>item.action==='share_restore'));assert.ok(audit.data.items.some((item:any)=>item.action==='share_confirm'));
+ assert.deepEqual((await request('/shares/held')).data.items,[]);
 });
 
 test('member errors persist as bounded metadata and appear only in the community admin log',async()=>{

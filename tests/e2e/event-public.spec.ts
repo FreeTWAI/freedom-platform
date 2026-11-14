@@ -1,3 +1,4 @@
+import {eventAppPath} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect} from './fixtures.js';
 import {test as featureTest} from './member-feature-fixture.js';
@@ -20,7 +21,7 @@ test('public referral event keeps its share code when the URL query loses it',as
   let registered:string|null=null;
   await page.route(`**/api/v1/public/events/${id}`,route=>route.fulfill({json:publicEvent}));
   await page.route(`**/api/v1/public/events/${id}/register`,async route=>{registered=route.request().postDataJSON().referral_code;await route.fulfill({json:{registered:true,provider_status:'provider_accepted'}})});
-  await page.goto(`/events/${id}?ref=${code}`);
+  await page.goto(eventAppPath(`/events/${id}?ref=${code}`));
   await expect(page.getByRole('heading',{name:'公開共學活動'})).toBeVisible();
   await expect(page.getByText('線上參與資料將寄至報名信箱')).toBeVisible();
   await page.setViewportSize({width:390,height:844});
@@ -28,7 +29,7 @@ test('public referral event keeps its share code when the URL query loses it',as
   await page.screenshot({path:'test-results/event-public-phone.png',fullPage:true});
   await page.setViewportSize({width:1440,height:900});
   await page.screenshot({path:'test-results/event-public-desktop.png',fullPage:true});
-  await page.goto(`/events/${id}`);
+  await page.goto(eventAppPath(`/events/${id}`));
   await expect(page.getByRole('button',{name:'報名並寄送參與資料'})).toBeEnabled();
   await page.getByLabel('你的名字').fill('訪客');
   await page.getByLabel('接收參與資料的 Email').fill('guest@example.org');
@@ -50,7 +51,7 @@ for(const malformed of [null,{registered:false,provider_status:'provider_accepte
     if(writes.length===2)return route.fulfill({status:409,json:{type:'about:blank',title:'Conflict',status:409,code:'event_closed',detail:'活動已開始或取消。'}});
     return route.fulfill({json:{registered:true,provider_status:'provider_accepted'}});
   });
-  await page.goto(`/events/${id}?ref=${code}`);
+  await page.goto(eventAppPath(`/events/${id}?ref=${code}`));
   const name=page.getByLabel('你的名字',{exact:true}),email=page.getByLabel('接收參與資料的 Email',{exact:true});
   await name.fill('合成訪客');await email.fill('synthetic@example.test');
   await page.getByRole('button',{name:'報名並寄送參與資料',exact:true}).click();
@@ -76,7 +77,7 @@ test('public registration locks same-render repeated submit and restores editing
     expect(route.request().postDataJSON().email).toBe('corrected@example.test');
     return route.fulfill({json:{registered:true,provider_status:'provider_accepted'}});
   });
-  await page.goto(`/events/${id}?ref=${code}`);
+  await page.goto(eventAppPath(`/events/${id}?ref=${code}`));
   const email=page.getByLabel('接收參與資料的 Email',{exact:true});
   await page.getByLabel('你的名字',{exact:true}).fill('合成訪客');await email.fill('first@example.test');
   try{
@@ -97,7 +98,7 @@ test('public refresh failure preserves the unknown registration retry without se
     writes.push(route.request().postDataJSON());
     return route.fulfill({json:writes.length===1?{}:{registered:true,provider_status:'provider_accepted'}});
   });
-  await page.goto(`/events/${id}`);
+  await page.goto(eventAppPath(`/events/${id}`));
   await page.getByLabel('你的名字',{exact:true}).fill('合成訪客');await page.getByLabel('接收參與資料的 Email',{exact:true}).fill('synthetic@example.test');
   await page.getByRole('button',{name:'報名並寄送參與資料',exact:true}).click();
   const retry=page.getByRole('button',{name:'重試原報名與寄信',exact:true});await expect(retry).toBeEnabled();
@@ -111,9 +112,9 @@ test('public refresh failure preserves the unknown registration retry without se
 for(const routeKind of ['path','hash'] as const)test(`public event ${routeKind} login preserves only the referral and keeps browser history intact`,async({page})=>{
   await page.route(`**/api/v1/public/events/${id}`,route=>route.fulfill({json:publicEvent}));
   await page.goto('/#home');
-  const eventPath=routeKind==='path'?`/events/${id}?ref=${code}&utm_campaign=return-test`:`/?utm_campaign=return-test#events/${id}?ref=${code}`;
+  const eventPath=routeKind==='path'?eventAppPath(`/events/${id}?ref=${code}&utm_campaign=return-test`):`/?utm_campaign=return-test#events/${id}?ref=${code}`;
   await page.goto(eventPath);
-  const safePath=routeKind==='path'?`/events/${id}?ref=${code}`:`/#events/${id}?ref=${code}`;
+  const safePath=routeKind==='path'?eventAppPath(`/events/${id}?ref=${code}`):`/#explore/events/${id}?ref=${code}`;
   const eventUrl=new URL(safePath,page.url()).href,heading=page.getByRole('heading',{name:publicEvent.title,exact:true});
   const memberLogin=page.getByRole('button',{name:'會員登入',exact:true}),returnButton=page.getByRole('button',{name:'返回活動',exact:true});
   await expect(heading).toBeVisible();
@@ -136,9 +137,9 @@ for(const routeKind of ['path','hash'] as const)test(`public event ${routeKind} 
 
 test('returning from event login never restores a private participation fragment',async({page})=>{
   // This synthetic token is not issued by the server and is never submitted.
-  const token='t'.repeat(43),safePath=`/events/${id}`;
+  const token='t'.repeat(43),safePath=eventAppPath(`/events/${id}`);
   await page.route(`**/api/v1/public/events/${id}`,route=>route.fulfill({json:publicEvent}));
-  await page.goto(`${safePath}?utm_campaign=private-return-test#participation=${token}`);
+  await page.goto(`${safePath}&utm_campaign=private-return-test#participation=${token}`);
   await page.getByRole('button',{name:'會員登入',exact:true}).click();
   await expect(page.getByRole('button',{name:'返回活動',exact:true})).toBeVisible();
   const safeUrl=new URL(safePath,page.url()).href;
@@ -162,7 +163,7 @@ test('the member calendar opens a future event on its dedicated page',async({pag
   await navigate(page,'社群活動');
   if(starts.getMonth()!==new Date().getMonth())await page.getByRole('button',{name:'下個月'}).click();
   await page.getByRole('button',{name:title}).click();
-  await expect(page).toHaveURL(new RegExp(`#events/${id}$`));
+  await expect(page).toHaveURL(new RegExp(`#explore/events/${id}$`));
   await expect(page.getByRole('region',{name:'活動專頁'}).getByRole('heading',{name:title})).toBeVisible();
 });
 
@@ -307,9 +308,9 @@ for(const discovery of [false,true])for(const routeKind of ['path','hash'] as co
     memberEvent.my_rsvp='going';memberEvent.attending_count=1;memberEvent.aggregate_version++;
     await route.fulfill({json:memberEvent});
   });
-  const eventPath=routeKind==='path'?`/events/${id}?ref=${code}`:`/#events/${id}?ref=${code}`;
+  const eventPath=routeKind==='path'?eventAppPath(`/events/${id}?ref=${code}`):`/#events/${id}?ref=${code}`;
   const missingReferralEntry=!discovery&&routeKind==='path';
-  await page.goto(missingReferralEntry?`/events/${id}`:eventPath);await expect(page.getByRole('heading',{name:publicEvent.title,exact:true})).toBeVisible();
+  await page.goto(missingReferralEntry?eventAppPath(`/events/${id}`):eventPath);await expect(page.getByRole('heading',{name:publicEvent.title,exact:true})).toBeVisible();
   if(missingReferralEntry)await expect(page.getByText('這場活動須從會員分享的連結報名，請向分享者取得連結。',{exact:true})).toBeVisible();
   await expect(page.getByLabel('你的名字',{exact:true})).toHaveCount(0);await expect(page.getByLabel('接收參與資料的 Email')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'建立帳號後報名',exact:true})).toBeVisible();
@@ -322,7 +323,7 @@ for(const discovery of [false,true])for(const routeKind of ['path','hash'] as co
   if(missingReferralEntry){await expect(detail.getByRole('button',{name:'我要參加',exact:true})).toBeDisabled();await expect(detail).toContainText('登入不會取代分享碼');await page.goto(eventPath);}
   await expect(detail.getByRole('button',{name:'我要參加',exact:true})).toBeEnabled();expect(writes).toBe(0);expect(guestWrites).toBe(0);
   await detail.getByRole('button',{name:'我要參加',exact:true}).click();await expect(detail.getByRole('button',{name:'取消報名',exact:true})).toBeVisible();
-  expect(writes).toBe(1);expect(guestWrites).toBe(0);await expect(page).toHaveURL(new URL(eventPath,page.url()).href);
+  expect(writes).toBe(1);expect(guestWrites).toBe(0);await expect(page).toHaveURL(new URL(eventPath.replace('/#events/', '/#explore/events/'),page.url()).href);
   await page.reload();await expect(page.getByRole('button',{name:'取消報名',exact:true})).toBeVisible();expect(writes).toBe(1);
 });
 
@@ -330,8 +331,8 @@ test('member-only public event does not offer guest management intake when parti
   await page.unroute('**/api/v1/site');
   await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),community_discovery_enabled:false,event_participation_enabled:true}})});
   await page.route(`**/api/v1/public/events/${id}`,route=>route.fulfill({json:{...publicEvent,registration_policy:'community_member'}}));
-  await page.goto(`/events/${id}`);await expect(page.getByText('這場活動須從會員分享的連結報名，請向分享者取得連結。',{exact:true})).toBeVisible();
-  await page.goto(`/events/${id}?ref=${code}`);await expect(page.getByRole('button',{name:'登入後報名',exact:true})).toBeVisible();
+  await page.goto(eventAppPath(`/events/${id}`));await expect(page.getByText('這場活動須從會員分享的連結報名，請向分享者取得連結。',{exact:true})).toBeVisible();
+  await page.goto(eventAppPath(`/events/${id}?ref=${code}`));await expect(page.getByRole('button',{name:'登入後報名',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'寄送私人管理連結',exact:true})).toHaveCount(0);await expect(page.getByLabel('你的名字',{exact:true})).toHaveCount(0);
 });
 
@@ -349,7 +350,7 @@ featureTest('new member keeps referral through required guild joining and explic
     SELECT $1,community_id,user_id,$2,'合成活動：完成加入後自行確認報名',now()+interval '2 days',now()+interval '2 days 1 hour','online','合成教室','published','referral','other','community_member' FROM users WHERE email='maker@local.test'`,[eventId,title]);
   await e2eAuthPool.query(`INSERT INTO community_event_share_codes(event_id,user_id,code) SELECT $1,user_id,$2 FROM users WHERE email='maker@local.test'`,[eventId,shareCode]);
   let writes=0;page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname===`/api/v1/events/${eventId}/rsvp`)writes++;});
-  const destination=`/events/${eventId}?ref=${shareCode}`;
+  const destination=eventAppPath(`/events/${eventId}?ref=${shareCode}`);
   try{
     await page.goto(destination);await page.getByRole('button',{name:'建立帳號後報名',exact:true}).click();
     await page.getByLabel('社群顯示名稱',{exact:true}).fill('活動新夥伴');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill('synthetic-event-newcomer-2026');

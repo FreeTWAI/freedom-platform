@@ -1,5 +1,5 @@
 import {test,expect,type Page,type Route} from './fixtures.js';
-import {openFeatureSearch} from './navigation.js';
+import {openFeatureSearch,navigate} from './navigation.js';
 
 // The real-database admin test creates fp_admin_browser_*. A timed-out body never reaches its finally.
 async function workspaceFixture(page:Page,onStatus?:(route:Route)=>Promise<void>){
@@ -352,7 +352,7 @@ async function memberAdminEntryFixture(page:Page){
   return route.fulfill({response,json:{...body,admin_entry_visible:current==='missing'?undefined:current==='allow'||current==='hold'}});
  });
  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
- await expect(page.locator('.shell')).toBeVisible();await openFeatureSearch(page);
+ await expect(page.locator('.shell')).toBeVisible();await navigate(page,'我的個人空間');
  return {set:(next:typeof mode)=>{mode=next;},started:()=>started,release};
 }
 
@@ -360,8 +360,8 @@ test('a confirmed admin entry remains usable on desktop and mobile without bypas
  // Synthetic presentation fixture only; the real server has no admin identity.
  const fixture=await memberAdminEntryFixture(page);try{
   const link=page.locator('a[href="/admin"]');await expect(link).toHaveCount(1);
-  await page.getByRole('navigation',{name:'主要工作區'}).locator('details > summary').filter({hasText:/^管理/}).click();await expect(link).toBeVisible();
-  await page.setViewportSize({width:390,height:844});await openFeatureSearch(page);
+  await expect(page.getByRole('heading',{name:'我的',level:1,exact:true})).toBeVisible();await expect(link).toBeVisible();
+  await page.setViewportSize({width:390,height:844});await navigate(page,'我的個人空間');
   await expect(link).toBeVisible();await link.click();
   await expect(page).toHaveURL(/\/admin$/);await expect(page.getByRole('heading',{name:'需要管理員驗證',exact:true})).toBeVisible();await expect(page.getByRole('navigation',{name:'平台管理選單'})).toHaveCount(0);
  }finally{fixture.release();}

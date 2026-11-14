@@ -6,7 +6,7 @@ import {PromotionShare} from './PromotionShare';
 import './PromotionBoards.css';
 
 type Period = 'week' | 'month' | 'all';
-type Kind = 'member_card' | 'platform' | 'skill_book' | 'social_post' | 'member_service' | 'event';
+type Kind = 'member_card' | 'platform' | 'skill_book' | 'social_post' | 'member_service' | 'event' | 'share';
 type Item = {rank: number; user_id: string; display_name: string; avatar_url: string | null; points: number};
 type Board = {kind: Kind; items: Item[]; me: {rank: number; points: number} | null};
 type Boards = {period: Period; since: string | null; boards: Board[]};
@@ -14,6 +14,7 @@ type Mine = {period: Period; items: {kind: Kind; target: string; code: string; p
 
 const PERIODS: {id: Period; label: string}[] = [{id: 'week', label: '本週'}, {id: 'month', label: '本月'}, {id: 'all', label: '累計'}];
 const COPY: Record<Kind, {title: string; how: string; label: string}> = {
+  share: {title: '分享連結', label: '分享', how: '由分享頁建立連結。'},
   member_card: {title: '名片點擊排行榜', label: '名片', how: '在我的名片分享名片連結，每次點擊 +1。'},
   platform: {title: '平台推廣排行榜', label: '平台', how: '分享自由工坊連結，每次點擊 +1。'},
   skill_book: {title: '技能推廣排行榜', label: '技能', how: '從技能書架分享技能書，每次點擊 +1。'},
@@ -28,7 +29,7 @@ function periodNote(period: Period, since: string | null): string {
 }
 const WORKSHOP_TEXT = '自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。';
 
-export function PromotionBoards({client}: {client: PortalClient}) {
+export function PromotionBoards({client,resultsOnly=false}: {client: PortalClient;resultsOnly?:boolean}) {
   const [period, setPeriod] = useState<Period>('week');
   const [boards, setBoards] = useState<Board[] | null>(null);
   const [range, setRange] = useState<{period: Period; since: string | null}>({period: 'week', since: null});
@@ -61,7 +62,7 @@ export function PromotionBoards({client}: {client: PortalClient}) {
     }
   }
   return <section className="promotion-page stack" aria-label="推廣排行榜">
-    <section className="card promotion-start" aria-label="選擇分享內容">
+    {resultsOnly?<h2>分享成效</h2>:<section className="card promotion-start" aria-label="選擇分享內容">
       <h2>把用得上的內容分享給需要的人</h2>
       <p>看到適合朋友的內容再分享；分享完全自願，不需要為了排名大量傳送。</p>
       <div className="promotion-destinations">
@@ -72,7 +73,7 @@ export function PromotionBoards({client}: {client: PortalClient}) {
       </div>
       <p className="promotion-howto">在支援的內容旁選擇「分享」或「推廣原文」，先查看介紹與連結，再由你選擇對象送出。社員服務是找服務的目錄，不是推廣任務。</p>
       <PromotionShare client={client} kind="platform" target="workshop" title="自由工坊" text={WORKSHOP_TEXT} label="分享自由工坊"/>
-    </section>
+    </section>}
     <header className="promotion-head">
       <div className="promotion-periods" data-guide-anchor="promotion:period" role="group" aria-label="統計期間">
         {PERIODS.map(item => <button key={item.id} type="button" className="btn btn-ghost promotion-period" aria-pressed={period === item.id} onClick={() => { setExpanded(false); setPeriod(item.id); }}>{item.label}</button>)}

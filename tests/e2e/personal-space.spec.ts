@@ -7,8 +7,8 @@ const inventory=(n:number)=>({kind:'social_post',id:id(n),title:`我的創作 ${
 const preview=(n:number)=>({post_id:id(n),title:`我的創作 ${n}`,note:`本人貼文正文 ${n}\n這一段保留原本的換行。`,created_at:'2026-10-24T08:00:00Z',thumbnail_url:null,mine:true,author:{user_id:owner}});
 async function login(page:Page,email='maker@local.test'){
  await page.goto('/#profile');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.settings-menu-button')).toBeVisible();
- if(!page.url().endsWith('#profile'))await page.goto('/#profile');
- await expect(page.getByRole('heading',{level:1})).toHaveText('我的個人空間');
+ if(!page.url().endsWith('#me'))await page.goto('/#profile');
+ await expect(page.getByRole('heading',{level:1})).toHaveText('我的');
 }
 async function synthetic(page:Page,count=8){
  const reads:string[]=[];
@@ -118,12 +118,12 @@ for(const width of [320,390,1280])test(`PERSONAL-SPACE-UI-07: ${width}px owner c
 });
 
 test('PERSONAL-SPACE-UI-08: language/theme panels preserve an account form draft, focus and browser history',async({page})=>{
- await login(page);await page.getByRole('link',{name:'編輯資料與分享設定',exact:true}).click();await expect(page).toHaveURL(/#account$/);const input=page.getByLabel('社群顯示名稱',{exact:true});await input.fill('尚未儲存的本人草稿');
+ await login(page);await page.getByRole('link',{name:'編輯資料與分享設定',exact:true}).click();await expect(page).toHaveURL(/#me\/settings$/);const input=page.getByLabel('社群顯示名稱',{exact:true});await input.fill('尚未儲存的本人草稿');
  for(const label of ['English','日本語','한국어','Español','繁體中文']){await openSettingsPanel(page,'language');const option=page.getByRole('menuitemradio',{name:label,exact:true});await option.click();await expect(option).toBeFocused();await expect(input).toHaveValue('尚未儲存的本人草稿');await closeSettingsMenu(page);}
  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'自由工坊－夜航',exact:true}).click();await closeSettingsMenu(page);await expect(input).toHaveValue('尚未儲存的本人草稿');
  // This journey intentionally leaves the unsaved form; accept only this confirmation.
  page.once('dialog',dialog=>{expect(dialog.type()).toBe('confirm');expect(dialog.message()).toContain('尚未儲存');void dialog.accept();});
- await page.locator('.settings-menu-button').click();await page.goBack();await expect(page).toHaveURL(/#profile$/);await expect(page.getByRole('menu')).toHaveCount(0);
+ await page.locator('.settings-menu-button').click();await page.goBack();await expect(page).toHaveURL(/#me$/);await expect(page.getByRole('menu')).toHaveCount(0);
 });
 
 test('PERSONAL-SPACE-UI-09: long post clamps to four lines, expands and collapses with keyboard, and the photo stays bounded',async({page})=>{
@@ -154,7 +154,7 @@ test('PERSONAL-SPACE-UI-11: all five interface languages preserve the selected p
  const reads=await synthetic(page,8);await login(page);await page.getByRole('button',{name:'下一頁',exact:true}).click();await expect(page.getByText('本人貼文正文 7',{exact:false})).toBeVisible();expect(reads).toHaveLength(8);
  const writes:string[]=[];page.on('request',request=>{if(request.method()!=='GET'&&/\/api\/v1\/(me\/content|social-posts|me\/share|me\/account)/.test(request.url()))writes.push(request.url());});
  for(const [label,language,title,pagination] of [
-  ['English','en','My space','Page 2 of 2'],['日本語','ja','マイスペース','2 ページ中 2 ページ'],['한국어','ko','내 공간','2페이지 중 2페이지'],['Español','es','Mi espacio','Página 2 de 2'],['繁體中文','zh-Hant','我的個人空間','第 2 / 2 頁'],
+  ['English','en','我的','Page 2 of 2'],['日本語','ja','我的','2 ページ中 2 ページ'],['한국어','ko','我的','2페이지 중 2페이지'],['Español','es','我的','Página 2 de 2'],['繁體中文','zh-Hant','我的','第 2 / 2 頁'],
  ]){
   await openSettingsPanel(page,'language');const option=page.getByRole('menuitemradio',{name:label,exact:true});await option.click();await expect(option).toBeFocused();await closeSettingsMenu(page);
   await expect(page.locator('html')).toHaveAttribute('lang',language);await expect(page.getByRole('heading',{level:1})).toHaveText(title);await expect(page.locator('.personal-space-pagination span')).toHaveText(pagination);

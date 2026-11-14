@@ -56,11 +56,11 @@ test('cancelled navigation keeps account edits and accepted back discards only l
   const name=page.getByLabel('社群顯示名稱',{exact:true});await name.fill('保留中的草稿');
   page.once('dialog',dialog=>dialog.dismiss());
   await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
-  await expect(page).toHaveURL(/#account$/);await expect(name).toHaveValue('保留中的草稿');
+  await expect(page).toHaveURL(/#me\/settings$/);await expect(name).toHaveValue('保留中的草稿');
   page.once('dialog',dialog=>dialog.dismiss());await page.goBack();
-  await expect(page).toHaveURL(/#account$/);await expect(name).toHaveValue('保留中的草稿');
+  await expect(page).toHaveURL(/#me\/settings$/);await expect(name).toHaveValue('保留中的草稿');
   page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
-  await expect(page).toHaveURL(/#profile$/);
+  await expect(page).toHaveURL(/#me$/);
 });
 
 test('uncertain profile save locks edits and retries the exact body, version and idempotency key',async({page})=>{
@@ -82,7 +82,7 @@ test('uncertain profile save locks edits and retries the exact body, version and
   await expect(page.getByRole('button',{name:'確認儲存結果',exact:true})).toBeVisible();
   await expect(page.getByLabel('社群顯示名稱',{exact:true})).toBeDisabled();
   await expect(page.getByRole('button',{name:'返回我的個人空間',exact:true})).toBeDisabled();
-  await page.goBack();await expect(page).toHaveURL(/#account$/);
+  await page.goBack();await expect(page).toHaveURL(/#me\/settings$/);
   await page.getByRole('button',{name:'確認儲存結果',exact:true}).click();
   await expect(page.getByText('修改已儲存。',{exact:true})).toBeVisible();
   expect(requests).toHaveLength(2);expect(requests[1]).toEqual(requests[0]);

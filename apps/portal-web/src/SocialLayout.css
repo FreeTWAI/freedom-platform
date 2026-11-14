@@ -29,6 +29,12 @@
 .app-frame.social-layout .workspace-topbar:has(.page-tools--compact){display:grid;grid-template-columns:minmax(0,1fr) 44px;width:100%;align-items:center;gap:12px;border:0;padding:0;margin-bottom:18px;scroll-margin-top:96px}
 .app-frame.social-layout .workspace-topbar h1{font-size:1.25rem;letter-spacing:0}
 .app-frame.social-layout .workspace-page{min-width:0}
+/* Keep the new place picker compact so the first content item stays on screen. */
+.app-frame.social-layout .place-view-picker{flex-direction:row;align-items:center;gap:8px}
+.app-frame.social-layout .place-view-picker select{flex:1;width:auto}
+.app-frame.social-layout .workspace-main:has(.place-view-picker) .workspace-topbar{margin-bottom:0}
+.app-frame.social-layout .workspace-page:has(>.place-view-picker){gap:8px}
+.app-frame.social-layout .place-view-picker+.stack{margin-top:0}
 .app-frame.social-layout .card{border-color:var(--line);background:var(--bg-elev);box-shadow:none;border-radius:14px}
 .app-frame.social-layout .freedom-home .home-layout{display:grid;grid-template-columns:minmax(0,680px) minmax(260px,320px);max-width:1040px;gap:24px;align-items:start}
 .app-frame.social-layout .freedom-home .home-main{min-width:0;display:block}

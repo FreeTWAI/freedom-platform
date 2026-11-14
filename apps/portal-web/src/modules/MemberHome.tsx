@@ -1,3 +1,4 @@
+import {RecentEvents} from '../share/RecentEvents';
 import {useLanguage} from '../language';
 import {FirstParticipation} from './FirstParticipation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -73,7 +74,7 @@ type HomeMember = HomeValue<MemberCardData> & {reason: HomeRefreshReason};
 type HomeGuildScope = {scope: HomeScope; guildKey: string | null};
 type HomeGuildValue<T> = {guildScope: HomeGuildScope; value: T};
 
-export function MemberHome({ client, session, onNavigate, openHomeJournal, firstParticipationEnabled=false, guildLaunchpadEnabled=false, personalContentEnabled=false, shortVideos=false, bookmarksEnabled=false, onOpenSupply }: ModulePanelProps&{openHomeJournal:()=>boolean; firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; personalContentEnabled?:boolean; shortVideos?:boolean; bookmarksEnabled?:boolean; onOpenSupply?:()=>void}) {
+export function MemberHome({ client, session, onNavigate, openHomeJournal, firstParticipationEnabled=false, guildLaunchpadEnabled=false, personalContentEnabled=false, shortVideos=false, bookmarksEnabled=false, onOpenSupply, focusPost }: ModulePanelProps&{openHomeJournal:()=>boolean; firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; personalContentEnabled?:boolean; shortVideos?:boolean; bookmarksEnabled?:boolean; onOpenSupply?:()=>void;focusPost?:{id:string;sequence:number}}) {
   const {t} = useLanguage();
   const [wide,setWide]=useState(()=>window.matchMedia('(min-width:861px)').matches);
   useEffect(()=>{const media=window.matchMedia('(min-width:861px)'),update=()=>setWide(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
@@ -250,9 +251,9 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
     </details>
     <nav className="home-discovery-links" aria-label="共創誌與遊戲">
       <HomeJournal onOpen={openHomeJournal}/>
-      <a className="btn btn-ghost" href="/play" target="_blank" rel="noopener noreferrer">遊戲大廳<span className="sr-only">（另開分頁）</span></a>
+      <a className="btn btn-ghost" href="#guilds/guild_games/tools/arcade">遊戲大廳</a>
     </nav>
-    <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
+    <RecentEvents client={client}/><section className="home-timeline" aria-label="首頁社群動態"><SocialZone focusPost={focusPost} client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>
     <div className="home-support">

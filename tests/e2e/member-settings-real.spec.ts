@@ -72,7 +72,7 @@ test('two synthetic members exchange a private message and a friend notification
     await expectZero(r);
 
     // The GitHub task shows whatever the local server really reports; it is never started from here.
-    await settings(r).click();await r.getByRole('menuitem',{name:'入門指南',exact:true}).click();await expect(r).toHaveURL(/#todos$/);
+    await settings(r).click();await r.getByRole('menuitem',{name:'入門指南',exact:true}).click();await expect(r).toHaveURL(/#me\/start$/);
     const task=r.locator('[data-task="github"]');
     await expect(task.getByRole('status')).toHaveText(/^(尚未啟用|待完成|已完成)$/);
     await noOverflow(r);await shot(r,'tasks-320');
@@ -205,7 +205,7 @@ test('two synthetic members exchange a private message and a friend notification
     await noOverflow(r);await shot(r,'notifications-320');
     // 1 → 0: the action reads first, then opens the fixed members page with focus in main.
     await notice.getByRole('button',{name:'前往工坊夥伴',exact:true}).click();
-    await expect(r).toHaveURL(/#members$/);await expect(r.locator('#main-content')).toBeFocused();
+    await expect(r).toHaveURL(/#explore\/people$/);await expect(r.locator('#main-content')).toBeFocused();
     expect(await receiverSide.unread('notifications')).toBe(0);expect(await receiverSide.unread('conversations')).toBe(0);
     expect((await db.query('SELECT read_at FROM member_notifications WHERE notification_id=$1',[notices[0].notification_id])).rows[0].read_at).not.toBeNull();
     await expectZero(r);

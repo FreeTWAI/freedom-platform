@@ -1,20 +1,20 @@
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import {test,expect,type Page} from './fixtures.js';
-import {navigate,openFeatureSearch,reachByKeyboard} from './navigation.js';
+import {navigate,openExploreFeatureSearch,reachByKeyboard} from './navigation.js';
 import {DEMO_USERS} from '../../packages/testing/seed.js';
 
 async function login(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 
 test('home and navigation reveal secondary functions on demand and page tools return keyboard focus',async({page})=>{
-  await login(page);
+  await login(page);const homeUrl=page.url();
   await expect(page.locator('.nav-primary > button')).toHaveCount(5);
-  await expect(page.locator('.nav-primary > button')).toHaveText(['會員首頁','我的個人空間','職業公會','技能書架','搜尋社群內容']);
-  await expect(page.locator('.nav-more')).not.toHaveAttribute('open','');
+  await expect(page.locator('.nav-primary > button')).toHaveText(['動態','探索','公會','自動化','我的']);
+  await expect(page.locator('.nav-more')).toHaveCount(0);
   await expect(page.locator('.home-personal')).not.toHaveAttribute('open','');
   await expect(page.locator('.home-destinations')).toBeVisible();
   await expect(page.locator('.home-destinations button')).toHaveCount(4);
@@ -24,11 +24,12 @@ test('home and navigation reveal secondary functions on demand and page tools re
   await page.locator('.topbar').getByRole('button',{name:'頁面說明',exact:true}).click();
   const help=page.getByRole('dialog',{name:'會員首頁：頁面說明',exact:true});await expect(help).toBeVisible();
   await page.keyboard.press('Escape');await expect(help).toHaveCount(0);await expect(tools).toBeFocused();
-  await navigate(page,'社群活動');await expect(page).toHaveURL(/#events$/);
-  await page.goBack();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
-  await openFeatureSearch(page);
+  await navigate(page,'社群活動');await expect(page).toHaveURL(/#explore\/events$/);
+  await page.goBack();await expect(page).toHaveURL(/#explore$/);await expect(page.getByRole('heading',{name:'探索',level:1})).toBeVisible();
+  await page.goBack();await expect(page).toHaveURL(homeUrl);await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
+  await openExploreFeatureSearch(page);
   await page.getByLabel('搜尋功能').fill('聊天室');
-  await page.getByRole('navigation',{name:'主要工作區'}).getByRole('region',{name:'功能搜尋結果'}).getByRole('button',{name:'我的訊息',exact:true}).click();
+  await page.locator('.place-feature-search').getByRole('region',{name:'功能搜尋結果'}).getByRole('button',{name:'我的訊息',exact:true}).click();
   await expect(page.locator('.floating-message-panel')).toBeVisible();
 });
 
@@ -95,7 +96,7 @@ for(const language of [
     await form.locator('[name=email]').fill('maker@local.test');
     await form.locator('[name=password]').fill('freedom-local-demo');
     await form.getByRole('button',{name:language.login,exact:true}).click();
-    await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
     await expect(page.locator('.brand-home')).toHaveAccessibleName(`自由工坊 · ${language.home}`);
     const disclosure=page.locator('.home-participation-disclosure'),toggle=disclosure.locator(':scope > summary');
     await expect(disclosure).toHaveJSProperty('open',false);

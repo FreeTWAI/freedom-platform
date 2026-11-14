@@ -38,7 +38,9 @@
     "tests/runtime/guild-member-operation.test.ts",
     "tests/e2e/guild-member-operations.spec.ts",
     "tests/e2e/guild-members.spec.ts",
-    "tests/e2e/onboarding-members.spec.ts"
+    "tests/e2e/onboarding-members.spec.ts",
+    "migrations/206_creative_tool_guilds.sql",
+    "tests/runtime/creative-tool-guilds.test.ts"
   ],
   "public_exports": [
     "modules/positioning/guild-search.ts",

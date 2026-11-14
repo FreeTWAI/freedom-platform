@@ -40,6 +40,8 @@ test.describe('Social Post uses the existing isolated member model pipeline',()=
     if(lostAck){
       await expect(dialog.getByRole('button',{name:'確認原請求結果',exact:true})).toBeVisible();
       await dialog.getByRole('button',{name:'關閉發文',exact:true}).click();
+      // Home and social now share 動態; visit another place to preserve the original remount test.
+      await navigate(page,'技能書架');
       await navigate(page,'社群分享');
       await page.getByRole('button',{name:'建立貼文',exact:true}).click();
       await dialog.getByRole('button',{name:'文案與分享',exact:true}).click();
@@ -67,7 +69,7 @@ async function login(page: Page) {
   await page.getByRole('button', { name: '登入', exact: true }).click();
   await expect(page.locator('.shell')).toBeVisible();
   await navigate(page, '私人 AI 工作室');
-  await expect(page.getByRole('heading', { level: 1, name: '私人 AI 工作室' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: '自動化' })).toBeVisible();
   const tools = page.getByRole('group', { name: '私人 AI 工作室頁面工具', exact: true });
   await openPageTools(page);
   await expect(tools.getByRole('button')).toHaveCount(3);

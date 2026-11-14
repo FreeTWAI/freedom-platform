@@ -141,7 +141,7 @@ test('cross-event, wrong, malformed, query-only and Authorization capabilities d
     for(const query of [`?token=${g.token}`,`?participation=${g.token}`]){
       const denied=await call(path(eventId,suffix)+query);assert.equal(denied.status,404);clean(denied.data,[g.token,g.email]);
     }
-    assert.equal((await call(path(eventId,suffix),{headers:{Authorization:`Bearer ${g.token}`}})).status,404);
+    const bearer=await call(path(eventId,suffix),{headers:{Authorization:`Bearer ${g.token}`}});assert.equal(bearer.status,404);clean(bearer.data,[g.token,g.email]); // Not an agent token: the agent door leaves it to the route, as on main.
   }
   assert.equal((await pool.query('SELECT count(*)::int AS total FROM community_event_guest_commands')).rows[0].total,0);
 });

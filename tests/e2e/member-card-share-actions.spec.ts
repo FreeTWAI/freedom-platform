@@ -41,7 +41,7 @@ async function signup(page:Page,name:string,width=1280){
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   await expect(page.getByRole('heading',{name:`${name}，歡迎來到自由工坊。`,exact:true})).toBeVisible();
   await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   const origin=new URL(page.url()).origin;
   const accountResponse=page.waitForResponse(response=>{const url=new URL(response.url());return response.request().method()==='GET'&&url.origin===origin&&url.pathname==='/api/v1/me/account'&&url.search==='';});
   await navigate(page,'我的名片');

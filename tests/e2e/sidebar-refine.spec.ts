@@ -1,5 +1,4 @@
 import { test, expect, type Page } from './fixtures.js';
-import {openFeatureSearch} from './navigation.js';
 
 async function login(page: Page) {
   await page.goto('/');
@@ -13,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/me/github', route => route.fulfill({ json: { configured: false, connected: false, github_user: null } }));
 });
 
-// Primary actions stay visible; secondary groups and search open from More.
+// Five places stay visible; feature choices live inside each place.
 for (const width of [1280, 390]) {
   for (const theme of ['light', 'versefolk']) {
     test(`navigation is quiet and still touch-sized at ${width}px in ${theme} theme`, async ({ page }) => {
@@ -24,7 +23,8 @@ for (const width of [1280, 390]) {
       if (await menu.isVisible()) await menu.click();
       const nav = page.getByRole('navigation', { name: '主要工作區' });
       await expect(nav).toBeVisible();
-      await openFeatureSearch(page);
+      await expect(nav.locator('.nav-primary').getByRole('button')).toHaveText(['動態', '探索', '公會', '自動化', '我的']);
+      await expect(nav.locator('.nav-more, .nav-search')).toHaveCount(0);
 
       const active = nav.locator('.nav-item.is-active');
       await expect(active).toHaveCount(1);
@@ -35,23 +35,19 @@ for (const width of [1280, 390]) {
       expect(await active.evaluate(el => getComputedStyle(el).boxShadow)).toBe('none');
       expect(await style('.nav-item:not(.is-active)', 'font-weight')).toBe('500');
 
-      // More stays quiet; nested groups use a thin divider inside its menu.
-      expect(await style('.nav-more', 'border-top-width')).toBe('0px');
-      expect(await style('.nav-more-content .nav-section', 'border-top-width')).toBe('1px');
-      expect(await style('.nav-search input', 'background-image')).toContain('data:image/svg+xml');
-
-      // The search icon takes room on the left; the placeholder must still fit unclipped.
-      const fit = await nav.locator('.nav-search input').evaluate(el => {
-        const css = getComputedStyle(el), hint = getComputedStyle(el, '::placeholder'), ctx = document.createElement('canvas').getContext('2d')!;
-        ctx.font = `${css.fontWeight} ${hint.fontSize} ${css.fontFamily}`;
-        ctx.letterSpacing = css.letterSpacing === 'normal' ? '0px' : css.letterSpacing;
-        const room = el.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
-        return { text: ctx.measureText((el as HTMLInputElement).placeholder).width, room };
-      });
-      expect(fit.text, `${theme} ${width}px placeholder width`).toBeLessThanOrEqual(fit.room);
+      // Each visible place label fits without clipping in both themes and widths.
+      for (const item of await nav.locator('.nav-item').all()) {
+        const fit = await item.evaluate(el => {
+          const css = getComputedStyle(el), ctx = document.createElement('canvas').getContext('2d')!;
+          ctx.font = `${css.fontWeight} ${css.fontSize} ${css.fontFamily}`;
+          return { text: ctx.measureText((el.textContent ?? '').trim()).width,
+            room: el.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight) };
+        });
+        expect(fit.text, `${theme} ${width}px place label width`).toBeLessThanOrEqual(fit.room);
+      }
 
       // Every visible target is at least 44px tall.
-      for (const selector of ['.nav-item', '.nav-more > summary', '.nav-section > summary', '.nav-search input']) {
+      for (const selector of ['.nav-item']) {
         for (const box of await nav.locator(selector).evaluateAll(els => els.filter(el => (el as HTMLElement).offsetParent).map(el => el.getBoundingClientRect().height))) {
           expect(box, `${theme} ${width}px ${selector} height`).toBeGreaterThanOrEqual(44);
         }

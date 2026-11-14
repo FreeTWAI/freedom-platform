@@ -10,7 +10,7 @@ test('supplier and retailer use distinct modules, agree on exact selection, and 
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   const title='瀏覽器演練・山茶 150g';
   await login(page,'maker@local.test');await navigate(page, 'AI 整理供貨商品');await page.getByText('查看舊版商品與合作資料',{exact:true}).click();
-  await expect(page.getByRole('heading',{name:'我有東西要賣',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'供貨工具',level:1,exact:true})).toBeVisible();
   await page.getByLabel('商品名稱',{exact:true}).fill(title);
   await page.getByLabel('商品規格與介紹',{exact:true}).fill('合成茶葉範例。150g 茶罐裝，供內部選品練習。');
   await page.getByLabel('供貨價（新台幣）',{exact:true}).fill('300.00');
@@ -83,7 +83,7 @@ test('supplier and retailer use distinct modules, agree on exact selection, and 
   await expect(page.getByText('供貨商已確認（內部演練）',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'結帳',exact:true})).toHaveCount(0);
   await page.setViewportSize({width:390,height:844});
-  await expect(page.getByRole('heading',{name:'我可以賣東西',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'零售工具',level:1,exact:true})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await page.screenshot({path:'test-results/retail-module-mobile.png',fullPage:true});
   expect(errors).toEqual([]);

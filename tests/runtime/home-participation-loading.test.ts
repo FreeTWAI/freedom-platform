@@ -49,6 +49,11 @@ function fixture(file: string, edit: (code: string) => string = code => code) {
     if (name === 'react') return hooks;
     if (name === 'react/jsx-runtime') return {jsx, jsxs: jsx};
     if (name === './member-home-loading') return reads;
+    if (name === '../share/RecentEvents') return compile(source('../share/RecentEvents.tsx'), dependency => {
+      if (dependency === 'react') return hooks;
+      if (dependency === 'react/jsx-runtime') return {jsx, jsxs: jsx};
+      throw Error(`unexpected recent events import: ${dependency}`);
+    });
     if (name === '../language') return {useLanguage: () => ({t: (key: string) => key})};
     if (name === './Membership') return {loadLabels: () => new Promise(() => {})};
     if (name === '../game-console-core') return {logConsoleEvent() {}};

@@ -132,6 +132,10 @@ function fixture(t:TestContext){
  shell={useCallback:(fn:any)=>fn,acceptedHash:{current:'#friends'},pageLeaveGuard:{current:null},messageHistoryTransition:{current:null},isMessagesHistoryEntry:(state:any)=>state?.messages===true,messagesHistoryState:(messages:boolean)=>({messages}),messageLocation:{current:null},setMessagesMounted(){},
  setTab(value:string){route=value;},setLocationHash(){},setFriendScope(){},setMessagesOpen(value:boolean){messagesOpen=value;},setMobileOpen(){},mainContent:{current:{focus(){}}},
  window:{location:{pathname:'/',search:'',hash:'#friends'},history:{state:null,back(){shell.window.history.state=null;const transition=shell.messageHistoryTransition.current;shell.messageHistoryTransition.current=null;transition?.after?.();},pushState(state:any){shell.window.history.state=state;},replaceState:noNetwork},dispatchEvent:noNetwork}};
+ // Load the real resolver into this VM so browser-bound helpers use its window.
+ const routeModule={exports:{}};
+ runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/portal-route.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code,{module:routeModule,exports:routeModule.exports,window:shell.window,URLSearchParams});
+ Object.assign(shell,routeModule.exports);
  runInNewContext(transformSync(actualRegister+';'+actualOpen+';'+actualClose+';'+actualSelect+';globalThis.selectTab=selectTab;globalThis.registerPageLeave=registerPageLeave;globalThis.closeMessagesThen=closeMessagesThen;', {loader:'tsx',format:'cjs'}).code,shell);
  const sourceSelect=shell.selectTab;shell.selectTab=(next:string)=>React.act(()=>{navigations.push(next);sourceSelect(next);render();});
  function render(change:any={}){props={...props,...change};flush(()=>root.render(route==='friends'?friendEntry.render({client:props.client,session:props.session,site:{member_blocking_enabled:false},selectTab:shell.selectTab,friendScope:props.initialScope,openMemberMessage:noNetwork,registerPageLeave:shell.registerPageLeave}):React.createElement('p',null,'合成路由目的地')));}

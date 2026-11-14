@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {canonicalHash} from '../../apps/portal-web/src/portal-route.js';
 import type {Route, Browser, TestInfo} from '@playwright/test';
 import type {Pool} from 'pg';
 import {test, expect, type Page} from './seller-console-fixture.js';
@@ -53,7 +54,7 @@ async function blocked(page: Page, hash: string) {
 
 test('HO-SUI01 owner entry, committed stale cancel ACK, original tuple guards and one stock release', async ({page, browser, baseURL, e2eAuthPool}, testInfo) => {
   test.setTimeout(120000);
-  const s = await reserved(e2eAuthPool, browser, baseURL!); const hash = `#stores/${s.tenant}/${s.instance}/orders`;
+  const s = await reserved(e2eAuthPool, browser, baseURL!); const hash = canonicalHash(`#stores/${s.tenant}/${s.instance}/orders`);
   await buyerLogin(page, s.seller.email, `#stores/${s.tenant}/${s.instance}`);
   await surface(page).getByRole('link', {name: '預留訂單', exact: true}).click();
   await expect(surface(page).getByRole('button', {name: '查看這筆預留'})).toBeEnabled();

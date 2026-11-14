@@ -71,8 +71,8 @@ for(const width of [1280,390])test(`registration roster follows accepted Back/Fo
     await card(0).getByRole('link',{name:'活動專頁',exact:true}).click();
     await expect(page.getByRole('region',{name:'活動專頁',exact:true})).toBeVisible();
     await card(0).getByRole('button',{name:'報名名單',exact:true}).click();await expect(dialog).toContainText('目前 1 人報名');await expect(dialog).toContainText(titles[0]);const firstReads=reads;
-    await page.goBack();await expect.poll(()=>new URL(page.url()).hash).toBe('#events');await expect(dialog).toBeHidden();await expect(card(1)).toBeVisible();
-    await page.goForward();await expect.poll(()=>new URL(page.url()).hash).toBe(`#events/${ids[0]}`);await expect(dialog).toBeHidden();expect(reads).toBe(firstReads);
+    await page.goBack();await expect.poll(()=>new URL(page.url()).hash).toBe('#explore/events');await expect(dialog).toBeHidden();await expect(card(1)).toBeVisible();
+    await page.goForward();await expect.poll(()=>new URL(page.url()).hash).toBe(`#explore/events/${ids[0]}`);await expect(dialog).toBeHidden();expect(reads).toBe(firstReads);
     // Returning is not consent to reopen a private list; an explicit new open
     // reads current server data instead of reusing the previous roster snapshot.
     await e2eAuthPool.query(`INSERT INTO community_event_guest_rsvps(event_id,email,name,email_sent_at,created_at) VALUES($1,'roster-new@example.org','另一個私人姓名',now(),now())`,[ids[0]]);
@@ -84,7 +84,7 @@ for(const width of [1280,390])test(`registration roster follows accepted Back/Fo
       try{const response=await route.fetch();await held;await route.fulfill({response});}finally{settled();}
     });
     await triggerA.click();await started;await expect(dialog).toContainText('正在讀取報名名單');
-    await page.goBack();await expect.poll(()=>new URL(page.url()).hash).toBe('#events');await expect(dialog).toBeHidden();
+    await page.goBack();await expect.poll(()=>new URL(page.url()).hash).toBe('#explore/events');await expect(dialog).toBeHidden();
     await card(1).getByRole('link',{name:'活動專頁',exact:true}).click();const triggerB=card(1).getByRole('button',{name:'報名名單',exact:true});await triggerB.click();await expect(dialog).toContainText(titles[1]);await expect(dialog).toContainText('目前 1 人報名');
     release();await finished;await expect(dialog).toContainText(titles[1]);await expect(dialog).not.toContainText(titles[0]);await expect(dialog.locator('.event-attendee-list li')).toHaveCount(1);await expect(dialog).not.toContainText('example.org');await expect(dialog).not.toContainText('私人姓名');
     await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await expect(triggerB).toBeFocused();

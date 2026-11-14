@@ -1,8 +1,9 @@
+import {legacyHash} from '../portal-route';
 import {useEffect,useId,useRef,useState,type FormEvent,type ReactNode} from 'react';
 import {useModuleMutation,type ModulePanelProps} from './shared';
 import {AccountDeactivation} from './AccountDeactivation';
 import {EmailChangePanel} from './EmailChange';
-import {ClientConnections} from './ClientConnections';
+
 import {AvatarEditor} from './AvatarEditor';
 import type {AvatarMetadata} from './MemberAvatar';
 import {GitHubConnectionPanel} from './GitHubSocial';
@@ -50,7 +51,7 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
     const frame=requestAnimationFrame(()=>{
       const summary=details.querySelector('summary');
       const active=document.activeElement;
-      if(!details.isConnected||!details.open||window.location.hash!=='#account?view=connections'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
+      if(!details.isConnected||!details.open||legacyHash(window.location.hash)!=='#account?view=connections'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
       if(active===document.body||active?.id==='main-content'||active===summary)summary?.focus();
     });
     return()=>cancelAnimationFrame(frame);
@@ -173,7 +174,7 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
         <details className="account-settings-more"><summary>兩步驟驗證</summary>{account&&account.has_password!==false&&<TotpSettings key={session.user.user_id} client={client} email={account.login_email}/>}</details>
         <details className="account-settings-more"><summary>更換登入信箱</summary>{account&&account.has_password!==false&&<EmailChangePanel client={client} email={account.login_email}/>}</details>
         {typeof children==='function'?children(childGuards.register):children}
-        <details ref={connectionsRef} className="account-settings-more" data-account-connections><summary>連結 GitHub 與其他工具</summary><GitHubConnectionPanel/><ClientConnections client={client}/></details>
+        <details ref={connectionsRef} className="account-settings-more" data-account-connections><summary>連結 GitHub 與其他工具</summary><GitHubConnectionPanel/><a className="btn btn-secondary btn-small" href="#automation/connections">工具連線</a></details>
         <OwnReports client={client}/>
         <details className="account-settings-more"><summary>停用帳號</summary>{account&&account.has_password!==false&&<AccountDeactivation client={client} version={account.aggregate_version} disabled={locked}/>}</details>
       </div>

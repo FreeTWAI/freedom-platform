@@ -41,8 +41,8 @@ meetup('closing a held read ignores delivery and setup is explicit with a normal
     await trigger.click();await started;await dialog.getByRole('button',{name:'關閉名片'}).click();release();held=false;
     await expect(dialog).toBeHidden();await expect(trigger).toBeFocused();
     await trigger.click();await expect(dialog.getByRole('heading',{name:'你的名片還沒有開放分享'})).toBeVisible();await expect(dialog.getByRole('img')).toHaveCount(0);
-    await dialog.getByRole('link',{name:'前往名片設定'}).click();await expect(page).toHaveURL(/#account$/);
+    await dialog.getByRole('link',{name:'前往名片設定'}).click();await expect(page).toHaveURL(/#me\/settings$/);
     const entry=page.locator('.account-panel > details').first();await expect(entry).toContainText('分享名片設定（免登入）');
-    expect(writes).toEqual([]);await page.goBack();await expect(page).toHaveURL(new RegExp('#events/'+meetupId+'$'));await expect(trigger).toBeVisible();await expect(dialog).toBeHidden();
+    expect(writes).toEqual([]);await page.goBack();await expect(page).toHaveURL(new RegExp('#explore/events/'+meetupId+'$'));await expect(trigger).toBeVisible();await expect(dialog).toBeHidden();
   }finally{release();await page.unrouteAll({behavior:'wait'});}
 });

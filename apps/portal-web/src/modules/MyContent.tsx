@@ -1,3 +1,4 @@
+import {currentLegacyHash} from '../portal-route';
 import {useLanguage} from '../language';
 import {personalPostPath} from './personal-space-model';
 import { lazy, useCallback, useEffect, useRef, useState } from 'react';
@@ -15,7 +16,7 @@ const kinds: Record<PersonalContentItem['kind'], string> = { showcase: '作品',
 const statuses: Record<string, string> = { draft: '私人草稿', withdrawn: '已撤下', awaiting_upload: '等待上傳', ready_for_review: '準備發布', revoked: '已撤銷', pending: '待審核', rejected: '需補充／已退回', cancelled: '已取消', published: '已發布', active: '已發布', hidden: '已隱藏', deleted: '已刪除' };
 const visibility: Record<string, string> = { private: '僅本人可見', community: '本社群會員可見', public: '公開可索引', workshop: '工坊會員可見', guild: '指定公會可見', referral: '活動頁公開；報名需推薦連結', open: '公開活動頁' };
 const actionLabels: Record<string, string> = { manage: '管理作品', continue: '繼續', edit: '編輯', view: '查看', withdraw: '撤下', cancel: '取消活動', cancel_review: '取消審核', publish: '檢查並發布' };
-const selectedShowcase = () => /^#my-content\/showcases\/([^/?]+)$/.exec(window.location.hash)?.[1] ?? null;
+const selectedShowcase = () => /^#my-content\/showcases\/([^/?]+)$/.exec(currentLegacyHash())?.[1] ?? null;
 export function personalContentActionPath(item: PersonalContentItem, action: string): string | null {
   if (item.kind === 'social_post') return action === 'view' ? personalPostPath(item) : null;
   const id = encodeURIComponent(item.id);

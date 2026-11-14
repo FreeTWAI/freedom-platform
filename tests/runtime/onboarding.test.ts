@@ -116,7 +116,7 @@ test('guild applications remain pending, scoped to applicant, and never create g
  assert.equal(applied.data.aggregate_version,1);assert.equal(typeof applied.data.aggregate_version,'number');assert.match(applied.data.created_at,/^\d{4}-\d{2}-\d{2}T/);assert.equal(applied.data.reviewed_at,null);assert.equal(applied.data.review_reason,null);assert.equal(applied.data.approved_guild_key,null);assert.equal(applied.data.approved_guild_name,null);
  assert.deepEqual((await request('/guild-applications',member,input,undefined,key)).data,applied.data);assert.equal((await request('/guild-applications',member,input)).status,409);
  assert.equal((await request('/guild-applications',member)).data.items.length,1);assert.deepEqual(Object.keys((await request('/guild-applications',member)).data.items[0]).sort(),memberApplicationKeys);assert.equal((await request('/guild-applications',other)).data.items.length,0);
- assert.equal((await pool.query('SELECT count(*) FROM positioning_guild_catalog')).rows[0].count,'18');assert.equal((await pool.query('SELECT count(*) FROM positioning_guild_officers')).rows[0].count,'0');
+ assert.equal((await pool.query('SELECT count(*) FROM positioning_guild_catalog')).rows[0].count,'20');assert.equal((await pool.query('SELECT count(*) FROM positioning_guild_officers')).rows[0].count,'0');
  assert.equal((await request('/me/onboarding',other)).data.draft,null);assert.deepEqual((await request('/me/skill-books',other)).data.items,[]);
 });
 
@@ -136,11 +136,11 @@ test('a reviewed application returns the renamed guild and the rejection reason 
   await reviewGuildApplication(pool,{admin,operation:'POST /guild-applications/review',key:randomUUID(),expected:'1',body:{decision:'reject',reason:'請把第一步寫得更具體。'}},declined.data.application_id);
   const rejected=(await request('/guild-applications',member)).data.items.find((row:any)=>row.application_id===declined.data.application_id);
   assert.equal(rejected.state,'declined');assert.equal(rejected.review_reason,'請把第一步寫得更具體。');assert.equal(rejected.approved_guild_key,null);assert.equal(rejected.approved_guild_name,null);assert.match(rejected.reviewed_at,/^\d{4}-\d{2}-\d{2}T/);
-  assert.equal((await request('/guild-applications',other)).data.items.length,0);assert.equal((await pool.query('SELECT count(*) FROM positioning_guild_catalog')).rows[0].count,'19');
+  assert.equal((await request('/guild-applications',other)).data.items.length,0);assert.equal((await pool.query('SELECT count(*) FROM positioning_guild_catalog')).rows[0].count,'21');
  }finally{
   for(const key of created){await pool.query('DELETE FROM guild_skill_book_bindings WHERE guild_key=$1',[key]);await pool.query('UPDATE guild_creation_applications SET approved_guild_key=NULL WHERE approved_guild_key=$1',[key]);await pool.query('DELETE FROM positioning_guild_catalog WHERE guild_key=$1',[key]);}
  }
- assert.equal((await pool.query('SELECT count(*) FROM positioning_guild_catalog')).rows[0].count,'18');
+ assert.equal((await pool.query('SELECT count(*) FROM positioning_guild_catalog')).rows[0].count,'20');
 });
 
 test('retaking the assessment preserves the last confirmed public capabilities until a new completion',async()=>{
@@ -159,7 +159,7 @@ for(const [choice,guildKey,bookId] of [['security','guild_security','security-sc
  const evaluated=await request('/me/onboarding/evaluate',member,{},saved.data.draft.aggregate_version);assert.equal(evaluated.data.result.recommendations[0].guild_key,guildKey);
  const complete=await request('/me/onboarding/complete',member,{guild_keys:[guildKey],primary_guild_key:guildKey,confirmed:true},evaluated.data.draft.aggregate_version);assert.equal(complete.status,200,JSON.stringify(complete.data));assert.equal(complete.data.primary_guild_key,guildKey);
  const books=(await request('/me/skill-books',member)).data.items;assert.equal(books[0].book_id,bookId);assert.match(books[0].repository_url,/^https:\/\/github\.com\/FreeTWAI\//);
- const directory=(await request('/guilds/directory',member)).data.items;assert.equal(directory.length,18);const guild=directory.find((g:any)=>g.guild_key===guildKey);assert.equal(guild.guild_master,null);assert.equal(guild.is_primary,true);
+ const directory=(await request('/guilds/directory',member)).data.items;assert.equal(directory.length,20);const guild=directory.find((g:any)=>g.guild_key===guildKey);assert.equal(guild.guild_master,null);assert.equal(guild.is_primary,true);
 });
 
 const oldVersion='freedom-orientation-v1',oldHash='fa485d9b23a0b7626c85284788297ef4b0425d45f2b7950842646b2a39e844cf';

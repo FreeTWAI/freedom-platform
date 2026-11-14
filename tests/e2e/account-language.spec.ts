@@ -58,12 +58,12 @@ for(const language of cases)test(`${language.id}: browser language, real invalid
     const questions=page.locator('.quick-start .guild-question');await expect(questions.first()).toBeVisible();
     for(const question of await questions.all())await question.getByRole('radio').first().check();
     await page.getByRole('button',{name:language.join,exact:true}).click();
-    await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
     await page.getByRole('button',{name:language.settings,exact:true}).click();
     await openSettingsPanel(page,'language');const menu=page.getByRole('menu');await expect(menu.getByRole('menuitemradio',{name:'日本語',exact:true})).toBeVisible();
     await openSettingsPanel(page,'language');await menu.getByRole('menuitemradio',{name:'English',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang','en');
-    await page.keyboard.press('Escape');await expect(page.getByRole('heading',{name:'Home',level:1,exact:true})).toBeVisible();
-    await page.reload();await expect(page.locator('html')).toHaveAttribute('lang','en');await expect(page.getByRole('heading',{name:'Home',level:1,exact:true})).toBeVisible();
+    await page.keyboard.press('Escape');await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
+    await page.reload();await expect(page.locator('html')).toHaveAttribute('lang','en');await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   }finally{await context.close();}
 });
 
@@ -94,7 +94,7 @@ test('switching language during a real sign-in keeps the pending action and send
     await form.getByRole('button',{name:'Sign in',exact:true}).click();await expect.poll(()=>attempts).toBe(1);
     await page.getByRole('combobox',{name:'Language',exact:true}).selectOption('ko');
     await expect(form.getByRole('button',{name:'처리 중…',exact:true})).toBeDisabled();await expect(form.locator('[name=email]')).toHaveValue('maker@local.test');await expect(form.locator('[name=password]')).toHaveValue('freedom-local-demo');
-    release();await expect(page.getByRole('heading',{name:'홈',level:1,exact:true})).toBeVisible();expect(attempts).toBe(1);
+    release();await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();expect(attempts).toBe(1);
   }finally{release();await context.close();}
 });
 

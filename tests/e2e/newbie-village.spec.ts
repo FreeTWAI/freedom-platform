@@ -338,7 +338,7 @@ for(const member of [false,true])test(`NEWBIE-012 ${member?'member shell':'anony
   page.once('dialog',dialog=>{expect(dialog.type()).toBe('confirm');expect(dialog.message()).toContain('尚未保存');void dialog.dismiss()});
   await page.locator('#nv-guild a[href="#guilds"]').click();
   await expect(page.locator('#nv-guild')).toBeVisible();
-  await expect(page).toHaveURL(/#newbie-village$/);
+  await expect(page).toHaveURL(/#guilds\/guild_talent_direction\/tools\/village$/);
   expect(await page.evaluate(()=>history.state.freedomNewbieView.step)).toBe('guild');
   // Repeated cancellation must retain the accepted cursor and the same draft.
   page.once('dialog',dialog=>{expect(dialog.type()).toBe('confirm');void dialog.dismiss()});
@@ -353,7 +353,7 @@ for(const member of [false,true])test(`NEWBIE-012 ${member?'member shell':'anony
   const dialog=await unload;expect(dialog.type()).toBe('beforeunload');await dialog.dismiss();
   await expect(page.locator('#nv-guild')).toBeVisible();
   await expect(page.getByRole('textbox',{name:'複製備份：展開後選取文字自行保存'})).toHaveValue(/未保存的生活安排/);
-  await expect(page).toHaveURL(/#newbie-village$/);
+  await expect(page).toHaveURL(/#guilds\/guild_talent_direction\/tools\/village$/);
   page.once('dialog',dialog=>{expect(dialog.type()).toBe('confirm');void dialog.accept()});
   await page.locator('#nv-guild a[href="#guilds"]').click();
   await expect(page).toHaveURL(/#guilds$/);

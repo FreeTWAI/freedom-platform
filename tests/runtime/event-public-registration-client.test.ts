@@ -1,3 +1,4 @@
+import {legacyHash} from '../../apps/portal-web/src/portal-route.js';
 import * as prizePhotoRules from '../../apps/portal-web/src/modules/event-prize-photo-client.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,7 +47,7 @@ function harness(revalidatePublic=false){
     fetch:(path:string,options:any)=>new Promise((resolve,reject)=>reads.push({path,options,resolve:(value:unknown)=>resolve({ok:true,json:async()=>value}),reject})),
     localStorage:{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)},
     window:{location,addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name)},
-    require:(name:string)=>{if(name==='react')return react;if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};if(name==='zod')return {z};if(name==='../api')return {ApiError};if(name==='../format')return {formatIsoLocal:(value:string)=>value};if(name.includes('modules/community/event-prize-details'))return prizeRules;if(name==='./EventPrizePhoto')return {EventPrizePhotoEditor:()=>null};if(name==='./event-prize-photo-client')return prizePhotoRules;if(name==='./EventPrizeDetails')return {EventPrizeDetails:()=>null};if(name==='./EventParticipation')return {GuestEventParticipation:()=>null,readEventParticipationToken:()=>null};if(name.endsWith('.css'))return {};throw Error(name);},
+    require:(name:string)=>{if(name==='../portal-route')return {currentLegacyHash:()=>legacyHash(location.hash)};if(name==='react')return react;if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};if(name==='zod')return {z};if(name==='../api')return {ApiError};if(name==='../format')return {formatIsoLocal:(value:string)=>value};if(name.includes('modules/community/event-prize-details'))return prizeRules;if(name==='./EventPrizePhoto')return {EventPrizePhotoEditor:()=>null};if(name==='./event-prize-photo-client')return prizePhotoRules;if(name==='./EventPrizeDetails')return {EventPrizeDetails:()=>null};if(name==='./EventParticipation')return {GuestEventParticipation:()=>null,readEventParticipationToken:()=>null};if(name.endsWith('.css'))return {};throw Error(name);},
   });
   function cleanup(){for(const hook of inner.hooks)hook?.cleanup?.();}
   function render(){scope=outer;outer.index=0;const wrapper=module.exports.PublicEventPage(props);if(wrapper.key!==key){cleanup();inner={hooks:[],index:0,effects:[]};key=wrapper.key;}scope=inner;inner.index=0;const tree=wrapper.type(wrapper.props);while(inner.effects.length)inner.effects.shift()!();return tree;}

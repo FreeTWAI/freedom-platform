@@ -1,3 +1,4 @@
+import {expectDestination} from './navigation.js';
 import {GITHUB_CONNECT_AGENT_INSTRUCTION} from '../../apps/portal-web/src/modules/github-connect-help.js';
 import {navigate} from './navigation.js';
 import {mkdirSync} from 'node:fs';
@@ -206,7 +207,7 @@ test('six tasks in two groups put open work first, fit phone and desktop, and ea
     await expect(button).toBeVisible();
     if(!tab)continue; // OAuth only starts from this button; the settings spec covers that round trip.
     live=true;await button.click();
-    await expect(page).toHaveURL(new RegExp(`#${tab}$`));await expect(page.getByRole('heading',{level:1})).toHaveText(title);
+    await expectDestination(page,'#'+tab);
     expect(await page.evaluate(()=>document.activeElement?.id)).toBe('main-content');
     live=false;
     await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'入門指南',exact:true}).click();
@@ -263,7 +264,7 @@ test('leaving and reopening the guide ignores an earlier clipboard completion',a
   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>new Promise<void>(resolve=>{(window as unknown as {resolveGuide:()=>void}).resolveGuide=resolve;})}}));
   await task(page,'github').getByRole('button',{name:'複製 AI 連結指引',exact:true}).click();
   await navigate(page,'會員首頁');await expect(page).toHaveURL(/#home$/);
-  await navigate(page,'入門指南');await expect(page).toHaveURL(/#todos$/);
+  await navigate(page,'入門指南');await expect(page).toHaveURL(/#me\/start$/);
   await page.evaluate(()=>(window as unknown as {resolveGuide:()=>void}).resolveGuide());await painted(page);
   await expect(task(page,'github').getByRole('button',{name:'複製 AI 連結指引',exact:true})).toBeVisible();
   await expect(task(page,'github').getByRole('textbox',{name:'AI 連結指引',exact:true})).toHaveCount(0);

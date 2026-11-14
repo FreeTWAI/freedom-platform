@@ -1,3 +1,7 @@
+import {exposeEvent} from './event-exposure.js';
+import {publishEventShare} from '../shares/event-ledger.js';
+import {creditEventRegistrations} from '../shares/credit.js';
+import {normalizeShareUrl} from '../../packages/shared/share-url.js';
 import {eventPrizePhotos,lockRemovedEventPrizePhotos,detachEventPrizePhotos,requireEventPrizePhotoMember} from './event-prize-photos.js';
 import {eventVideoStorageMode,type EventVideoAssetService} from '../assets/event-video.js';
 import {readEventVideoHttp} from '../assets/event-video-read.js';
@@ -61,6 +65,15 @@ async function scopedEvent(q:Pick<PoolClient,'query'>,actor:Actor,id:string,lock
   requireCondition(row,404,'not_found','找不到這場活動。');return row;
 }
 
+// Hidden shares remain exclusively under platform share moderation, even after confirmation.
+const eventNotHeldSql="NOT EXISTS(SELECT 1 FROM shares held WHERE held.kind='event' AND held.ref_id=e.event_id AND held.community_id=e.community_id AND held.state='hidden')";
+async function eventIsHeld(q:Pick<PoolClient,'query'>,row:any){
+  return Boolean((await q.query("SELECT 1 FROM shares WHERE kind='event' AND ref_id=$1 AND community_id=$2 AND state='hidden'",[row.event_id,row.community_id])).rowCount);
+}
+async function requireEventNotHeld(q:Pick<PoolClient,'query'>,row:any){
+  requireCondition(!await eventIsHeld(q,row),409,'share_unavailable','這場活動因檢舉暫停公開，請由平台管理員在「檢舉處理」處理。');
+}
+
 export async function canAccessGuildEvent(q:Pick<PoolClient,'query'>,actor:Actor,row:any){
   if(row.visibility!=='guild'||row.organizer_ref===actor.user_id)return true;
   const member=await q.query(`SELECT 1 FROM positioning_profession_memberships
@@ -75,12 +88,12 @@ async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
     (SELECT count(*) FROM community_event_rsvps WHERE event_id=$1 AND state='going' AND NOT is_verification_test_account(user_id))+
     (SELECT count(*) FROM community_event_guest_rsvps WHERE event_id=$1 AND state='going' AND (email_sent_at IS NOT NULL OR confirmed_at IS NOT NULL)) AS total`,[row.event_id])).rows[0].total as string;
   const mine=(await q.query('SELECT state FROM community_event_rsvps WHERE event_id=$1 AND user_id=$2',[row.event_id,actor.user_id])).rows[0]?.state??null;
-  const canReview=row.state==='pending'&&row.review_guild_key&&(await q.query(`SELECT 1 FROM positioning_guild_officers o
+  const canReview=!actor.agent&&row.state==='pending'&&row.review_guild_key&&!await eventIsHeld(q,row)&&(await q.query(`SELECT 1 FROM positioning_guild_officers o
     JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
     WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;
   const media=(await q.query(`SELECT (SELECT orientation FROM community_event_banners WHERE event_id=$1) AS banner_orientation,
     (SELECT mime_type FROM community_event_videos WHERE event_id=$1) AS video_mime`,[row.event_id])).rows[0];
-  const hideOnline=row.visibility==='referral'&&mine!=='going'&&row.organizer_ref!==actor.user_id&&!canReview;
+  const hideOnline=mine!=='going'&&row.organizer_ref!==actor.user_id&&!canReview;
   const cancelledForParticipant=row.state==='cancelled'&&row.organizer_ref!==actor.user_id;
   return {...row,prize_photos:await eventPrizePhotos(q,row.event_id),location:cancelledForParticipant?null:hideOnline&&(row.mode==='online'||/https?:\/\//i.test(row.location))?privateEventLocationHint(row):row.location,
     online_url:cancelledForParticipant||hideOnline?null:row.online_url,
@@ -89,13 +102,14 @@ async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
     organizer_name:(await q.query('SELECT display_name FROM users WHERE user_id=$1',[row.organizer_ref])).rows[0]?.display_name??'社群成員',attending_count:Number(count),my_rsvp:mine,can_review:Boolean(canReview)};
 }
 
-async function bulletin(q:PoolClient,row:any,kind:'submitted'|'approved'|'rejected',actorName:string,organizerName:string){
+async function bulletin(q:PoolClient,row:any,kind:'submitted'|'approved'|'rejected'|'published',actorName:string,organizerName:string){
   const scope=row.visibility==='guild'?'公會內部活動':'公開活動';
-  const message=kind==='submitted'?`${organizerName} 提交了${scope}「${row.title}」，等待審核。`
+  const message=kind==='published'?`${organizerName} 發布了${scope}「${row.title}」。`
+    :kind==='submitted'?`${organizerName} 提交了${scope}「${row.title}」，等待審核。`
     :kind==='approved'?`${actorName} 核准了 ${organizerName} 的${scope}「${row.title}」。`
     :`${actorName} 未核准 ${organizerName} 的${scope}「${row.title}」。`;
   await q.query(`INSERT INTO community_event_bulletins(bulletin_id,event_id,community_id,kind,actor_name,message)
-    VALUES($1,$2,$3,$4,$5,$6)`,[randomUUID(),row.event_id,row.community_id,kind,actorName,message]);
+    VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (event_id,kind) DO NOTHING`,[randomUUID(),row.event_id,row.community_id,kind==='published'?'approved':kind,actorName,message]);
 }
 
 export async function listEventBulletins(db:Pool|PoolClient,actor:Actor){
@@ -110,7 +124,7 @@ export async function listEventBulletins(db:Pool|PoolClient,actor:Actor){
 
 const pastEventLimit=100;
 // Provisional per-member submission budget for #199; adjust these two values only.
-const eventCreateLimit=5,eventCreateWindowSeconds=3600;
+const eventCreateLimit=5,eventCreateWindowSeconds=86400;
 // Current and own rows stay whole. Other ended published rows are the newest slice, so old history cannot crowd them out.
 function rankedEvents(visible:string,columns:string){
   return `WITH visible AS (${visible}), listed AS (
@@ -142,7 +156,7 @@ export async function listEvents(db:Pool|PoolClient,actor:Actor) {
     ((SELECT count(*)::int FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.state='going' AND NOT is_verification_test_account(r.user_id))+
       (SELECT count(*)::int FROM community_event_guest_rsvps g WHERE g.event_id=e.event_id AND g.state='going' AND (g.email_sent_at IS NOT NULL OR g.confirmed_at IS NOT NULL))) AS attending_count,
     (SELECT state FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.user_id=$2) AS my_rsvp,
-    (e.state='pending' AND e.review_guild_key IS NOT NULL AND EXISTS(
+    (NOT $4::boolean AND e.state='pending' AND ${eventNotHeldSql} AND e.review_guild_key IS NOT NULL AND EXISTS(
       SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
         ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
       WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)) AS can_review
@@ -151,14 +165,14 @@ export async function listEvents(db:Pool|PoolClient,actor:Actor) {
       (e.visibility<>'guild' OR e.organizer_ref=$2 OR EXISTS(
         SELECT 1 FROM positioning_profession_memberships gm WHERE gm.community_id=e.community_id
           AND gm.user_id=$2 AND gm.guild_key=e.guild_key AND gm.state='active')))
-      OR e.organizer_ref=$2 OR (e.state='pending' AND e.review_guild_key IS NOT NULL AND EXISTS(
+      OR e.organizer_ref=$2 OR (NOT $4::boolean AND e.state='pending' AND ${eventNotHeldSql} AND e.review_guild_key IS NOT NULL AND EXISTS(
         SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
           ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
         WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)))
-      AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref))`,'*'),args)).rows;
+      AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref))`,'*'),[...args,Boolean(actor.agent)])).rows;
   return rows.map(row=>{
     const {list_rank:_rank,list_time:_time,...rest}=row;
-    return rest.visibility==='referral'&&rest.my_rsvp!=='going'&&rest.organizer_ref!==actor.user_id&&!rest.can_review
+    return rest.my_rsvp!=='going'&&rest.organizer_ref!==actor.user_id&&!rest.can_review
       ?{...rest,location:rest.mode==='online'||/https?:\/\//i.test(rest.location)?privateEventLocationHint(rest):rest.location,online_url:null}:rest;
   });
 }
@@ -247,15 +261,15 @@ export async function eventAttendees(pool:Pool,actor:Actor,id:string,raw:unknown
 
 export async function publicEvent(pool:Pool|PoolClient,id:string){
   const row=(await pool.query(`SELECT e.event_id,e.title,e.description,e.starts_at,e.ends_at,e.mode,e.location,e.online_url,e.event_kind,e.topic,
-    e.visibility,e.registration_policy,e.prize_details,e.capacity,e.aggregate_version,u.display_name AS organizer_name,
+    e.visibility,e.registration_policy,e.prize_details,e.capacity,e.aggregate_version,e.waitlist_enabled,e.source_url,e.source_host,e.imported,e.source_organizer,e.source_cover_url,e.registration_mode,e.external_registration_url,u.display_name AS organizer_name,
     (SELECT orientation FROM community_event_banners b WHERE b.event_id=e.event_id) AS banner_orientation,
     (SELECT mime_type FROM community_event_videos v WHERE v.event_id=e.event_id) AS video_mime,
     ((SELECT count(*)::int FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.state='going' AND NOT is_verification_test_account(r.user_id))+
       (SELECT count(*)::int FROM community_event_guest_rsvps g WHERE g.event_id=e.event_id AND g.state='going' AND (g.email_sent_at IS NOT NULL OR g.confirmed_at IS NOT NULL))) AS attending_count
     FROM community_events e JOIN users u ON u.user_id=e.organizer_ref WHERE e.event_id=$1 AND e.state='published' AND e.visibility IN ('referral','open') AND NOT is_verification_test_account(e.organizer_ref)`,[id])).rows[0];
   requireCondition(row,404,'not_found','找不到這場公開活動。');
-  const referral=row.visibility==='referral';
-  return {event_id:row.event_id,title:row.title,description:row.description,starts_at:row.starts_at,ends_at:row.ends_at,
+  const referral=true;
+  return {source_url:row.source_url,source_host:row.source_host,imported:row.imported,source_organizer:row.source_organizer,source_cover_url:row.source_cover_url,registration_mode:row.registration_mode,external_registration_url:row.external_registration_url,waitlist_enabled:row.waitlist_enabled,event_id:row.event_id,title:row.title,description:row.description,starts_at:row.starts_at,ends_at:row.ends_at,
     mode:row.mode,location:referral&&(row.mode==='online'||/https?:\/\//i.test(row.location))?privateEventLocationHint(row):row.location,
     online_url:referral?null:row.online_url,event_kind:row.event_kind,topic:row.topic,visibility:row.visibility,registration_policy:row.registration_policy,
     prize_details:row.prize_details,prize_photos:await eventPrizePhotos(pool,id,true),capacity:row.capacity,aggregate_version:Number(row.aggregate_version),organizer_name:row.organizer_name,
@@ -275,6 +289,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
   const registration=await transaction(pool,async q=>{
     const row=(await q.query('SELECT * FROM community_events WHERE event_id=$1 FOR UPDATE',[id])).rows[0];
     requireCondition(row&&row.state==='published'&&['referral','open'].includes(row.visibility)&&!(await q.query('SELECT is_verification_test_account($1) AS hidden',[row.organizer_ref])).rows[0].hidden,404,'not_found','找不到這場公開活動。');
+    requireCondition(row.registration_mode==='platform',409,'external_registration','請到原站報名。');
     requireCondition(row.registration_policy!=='community_member',403,'event_member_required','請登入本社群帳號後報名。');
     requireCondition(Date.parse(row.starts_at)>Date.now(),409,'event_closed','活動已開始或取消，無法報名。');
     requireCondition(row.visibility!=='referral'||body.referral_code,422,'share_code_required','請從會員分享的活動連結報名。');
@@ -317,6 +332,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
     // Record that result even if only the hold expires, retaining the final event-start boundary below.
     const confirmed=await q.query("UPDATE community_event_guest_rsvps SET state='going',email_sent_at=now() WHERE event_id=$1 AND email=$2 AND registration_attempt_id=$3 AND state IN ('pending','going')",[id,email,registration.attempt_id]);
     requireCondition(confirmed.rowCount===1,409,'event_closed','報名狀態已變更，請重新確認本人狀態。');
+    await creditEventRegistrations(q,id);
     if(registration.capability)await markGuestCapabilityProviderAccepted(q,id,email);
     if(registration.invitation_id){
       const accepted=await q.query(`UPDATE community_event_waitlist SET status='accepted',aggregate_version=aggregate_version+1
@@ -334,7 +350,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
 export async function readEvent(pool:Pool|PoolClient,actor:Actor,id:string,participationHistory=false){
   const row=await scopedEvent(pool,actor,id);
   const member=await canAccessGuildEvent(pool,actor,row);
-  const reviewer=row.state==='pending'&&row.review_guild_key&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o
+  const reviewer=!actor.agent&&row.state==='pending'&&row.review_guild_key&&!await eventIsHeld(pool,row)&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o
     JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
     WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;
   const ownHistory=participationHistory&&row.state==='cancelled'&&member&&Boolean((await pool.query(
@@ -349,7 +365,7 @@ export async function authorizeEventBannerWrite(q:PoolClient,actor:Actor,id:stri
  const row=await scopedEvent(q,actor,id,lock);
  requireCondition(row.organizer_ref===actor.user_id,403,'organizer_required','只能修改自己活動的 Banner。');
  await refuseInternGuildExchange(q,actor,row);
- if(editable){const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>clock.getTime(),409,'event_closed','只能修改待審核且尚未開始的活動。');}
+ if(editable){const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;requireCondition(['pending','published'].includes(row.state)&&Date.parse(row.starts_at)>clock.getTime(),409,'event_closed','只能修改尚未開始的活動。');}
  return row;
 }
 /** Current organizer authority also protects historical photo receipts. Only
@@ -360,7 +376,7 @@ export async function authorizeEventPrizePhotoOwner(q:PoolClient,actor:Actor,id:
  requireCondition(row.organizer_ref===actor.user_id,403,'organizer_required','只能修改自己活動的獎品照片。');
  await refuseInternGuildExchange(q,actor,row);
  if(editable){const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;
-  requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>clock.getTime(),409,'event_closed','只能修改待審核且尚未開始的活動。');}
+  requireCondition(['pending','published'].includes(row.state)&&Date.parse(row.starts_at)>clock.getTime(),409,'event_closed','只能修改尚未開始的活動。');}
  return row;
 }
 export async function eventBannerResult(q:PoolClient,actor:Actor,id:string){
@@ -381,7 +397,7 @@ export async function saveEventBanner(pool:Pool,input:Command,id:string,upload:{
   },async q=>{
     const row=await scopedEvent(q,input.actor,id,true);
     checkVersion(row.aggregate_version,input.expected);
-    requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>Date.now(),409,'event_closed','只能修改待審核且尚未開始的活動。');
+    requireCondition(['pending','published'].includes(row.state)&&Date.parse(row.starts_at)>Date.now(),409,'event_closed','只能修改尚未開始的活動。');
     if(upload){
       const normalized=await normalizeEventPoster(upload.mime,upload.bytes,orientation);
       await q.query(`INSERT INTO community_event_banners(event_id,image_bytes,orientation) VALUES($1,$2,$3)
@@ -430,7 +446,7 @@ async function bannerSnapshot(pool:Pick<Pool,'query'>,id:string,actor?:Actor):Pr
  WHERE e.event_id=$1 AND ${actor?'e.community_id=$2':"e.state='published' AND e.visibility IN ('referral','open') AND NOT is_verification_test_account(e.organizer_ref)"}`,actor?[id,actor.community_id]:[id])).rows[0];
  if(!row)return undefined;
  let member=false,reviewer=false;
- if(actor){member=await canAccessGuildEvent(pool,actor,row);reviewer=row.state==='pending'&&row.review_guild_key&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active' WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;if(!(row.organizer_ref===actor.user_id||reviewer||row.state==='published'&&member))return undefined;}
+ if(actor){member=await canAccessGuildEvent(pool,actor,row);reviewer=row.state==='pending'&&row.review_guild_key&&!await eventIsHeld(pool,row)&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active' WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;if(!(row.organizer_ref===actor.user_id||reviewer||row.state==='published'&&member))return undefined;}
  return {purpose:'community.event-banner',targetId:id,variant:'banner',domainVersion:String(row.aggregate_version),source:row.storage_source,authorizationVersion:JSON.stringify([row.community_id,row.organizer_ref,row.state,row.visibility,row.guild_key,row.review_guild_key,row.orientation,member,reviewer]),legacyBytes:row.image_bytes,assetId:row.asset_id,scopeId:row.scope_id,representationId:row.representation_id,metadata:row.representation_id?{contentType:row.content_type,byteSize:row.byte_size,sha256:row.content_sha256,transformVersion:row.transform_version,policyRevision:row.policy_revision,profileId:row.profile_id}:null};
 }
 export async function readEventBanner(pool:Pool,actor:Actor,id:string,store?:ObjectStore){return (await readDomainMedia(()=>readWithMemberSession(pool,actor,q=>bannerSnapshot(q,id,actor)),{purpose:'community.event-banner',targetId:id,variant:'banner'},store)).bytes;}
@@ -452,7 +468,7 @@ export async function saveEventVideo(pool:Pool,input:Command,id:string,upload:{b
     await refuseInternGuildExchange(q,input.actor,row);
   },async q=>{
     const row=await scopedEvent(q,input.actor,id,true);checkVersion(row.aggregate_version,input.expected);
-    requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>Date.now(),409,'event_closed','只能修改待審核且尚未開始的活動。');
+    requireCondition(['pending','published'].includes(row.state)&&Date.parse(row.starts_at)>Date.now(),409,'event_closed','只能修改尚未開始的活動。');
     if(upload)await q.query(`INSERT INTO community_event_videos(event_id,media_bytes,mime_type) VALUES($1,$2,$3)
       ON CONFLICT(event_id) DO UPDATE SET media_bytes=EXCLUDED.media_bytes,mime_type=EXCLUDED.mime_type,updated_at=now()`,[id,upload.bytes,upload.mime]);
     else await q.query('DELETE FROM community_event_videos WHERE event_id=$1',[id]);
@@ -487,29 +503,40 @@ export async function refuseInternGuildExchange(q:PoolClient,actor:Actor,row:{ev
   if(tier)requireFullGuildMember(tier);
 }
 
-export async function createEvent(pool:Pool,input:Command) {
-  const body=details.parse(input.body);
+const eventSourceUrl=z.string().trim().max(2048).refine(v=>normalizeShareUrl(v).ok,'請提供安全的 HTTPS 網址。').transform(v=>{const n=normalizeShareUrl(v);return n.ok?n.url:v;});
+const eventSource=z.object({source_url:eventSourceUrl.nullable().default(null),source_organizer:z.string().trim().max(160).nullable().default(null),source_cover_url:eventSourceUrl.nullable().default(null),registration_mode:z.enum(['platform','external']).default('platform'),external_registration_url:eventSourceUrl.nullable().default(null)});
+export function parseNewEvent(raw:unknown) {
+  const input=z.object({title:text(120),starts_at:isoTime,location:text(300)}).passthrough().parse(raw);
+  const guild=typeof input.guild_key==='string'&&input.guild_key?input.guild_key:null;
+  const {source_url,source_organizer,source_cover_url,registration_mode,external_registration_url,...fields}=input;
+  const source=eventSource.parse({source_url,source_organizer,source_cover_url,registration_mode,external_registration_url});
+  requireCondition(source.registration_mode!=='external'||source.external_registration_url,422,'external_registration_required','請填寫原站報名連結。');
+  return {...details.parse({description:input.title,ends_at:new Date(Date.parse(input.starts_at)+3600000).toISOString(),mode:'in_person',capacity:null,
+    ...fields,visibility:input.visibility??(guild?'guild':'open'),event_kind:input.event_kind??(guild?'guild_skill_exchange':'other')}),...source};
+}
+export async function createEvent(pool:Pool,input:Command,eventBody:unknown=input.body) {
+  const body=parseNewEvent(eventBody);let publishedNow=false;
   return command(pool,input,async()=>{},async q=>{
     requireCondition(Date.parse(body.starts_at)>Date.now(),422,'event_in_past','活動開始時間須在未來。');
     if(body.guild_key)requireCondition((await q.query('SELECT 1 FROM positioning_guild_catalog WHERE guild_key=$1',[body.guild_key])).rowCount===1,422,'unknown_guild','請選擇現有公會。');
     if(body.event_kind==='guild_skill_exchange'){const tier=await activeGuildTier(q,input.actor,body.guild_key);requireCondition(tier,403,'event_guild_required','只有主辦公會成員能提交公會技能交流。');requireFullGuildMember(tier);}
-    // The command has already checked receipts; replay never consumes this budget.
+    await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`event-publish/${input.actor.community_id}`]);
+    requireCondition(!(await q.query(`SELECT 1 FROM community_events WHERE community_id=$1 AND ((lower(trim(title))=lower(trim($2)) AND starts_at=$3 AND lower(trim(location))=lower(trim($4))) OR ($5::text IS NOT NULL AND source_url=$5))`,[input.actor.community_id,body.title,body.starts_at,body.location,body.source_url])).rowCount,409,'duplicate_event','這場活動已有人分享。');
     await authRateLimitInTransaction(q,'event-create-member',input.actor.user_id,eventCreateLimit,eventCreateWindowSeconds);
     const id=randomUUID();
-    const row=(await q.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,guild_key,title,description,starts_at,ends_at,mode,location,capacity,event_kind,topic,online_url,review_guild_key,visibility,help_need,registration_policy,prize_details)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb) RETURNING *`,[id,input.actor.community_id,input.actor.user_id,body.guild_key,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,reviewGuildFor(body),body.visibility,body.help_need??null,body.registration_policy??'guest_allowed',JSON.stringify(body.prize_details??[])])).rows[0];
-    const organizer=(await q.query('SELECT display_name FROM users WHERE user_id=$1',[input.actor.user_id])).rows[0].display_name as string;
-    await bulletin(q,row,'submitted',organizer,organizer);
-    await notifyMember(q,{community_id:row.community_id,recipient_ref:row.organizer_ref,kind:'event_submitted',source_key:`event/${id}/submitted`,title:'活動已送出審核',body:`「${body.title}」已送出；核准後才會開放報名。`,action:{tab:'events',resource_id:null}});
-    const reviewers=(await q.query(`SELECT DISTINCT u.user_id FROM users u WHERE u.community_id=$1 AND u.active AND (
-      (u.email_verified_at IS NOT NULL AND EXISTS(SELECT 1 FROM platform_admins p WHERE p.community_id=$1 AND p.active AND p.email=lower(u.email)))
-      OR ($2::text IS NOT NULL AND EXISTS(SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
-        ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
-        WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=u.user_id)))`,[row.community_id,row.review_guild_key])).rows as {user_id:string}[];
-    for(const reviewer of reviewers)if(reviewer.user_id!==row.organizer_ref)await notifyMember(q,{community_id:row.community_id,recipient_ref:reviewer.user_id,kind:'event_review_needed',source_key:`event/${id}/review-needed`,title:'有活動待審核',body:`${organizer} 提交了「${body.title}」。`,action:{tab:'events',resource_id:null}});
-    await journal(q,input.actor,'community_event',id,1,'submit',{title:body.title,guild_key:body.guild_key},'freedom.community.event.submitted.v1');
-    return eventView(q,input.actor,row);
-  });
+    const row=(await q.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,guild_key,title,description,starts_at,ends_at,mode,location,capacity,event_kind,topic,online_url,review_guild_key,visibility,help_need,registration_policy,prize_details,state)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,'published') RETURNING *`,[id,input.actor.community_id,input.actor.user_id,body.guild_key,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,reviewGuildFor(body),body.visibility,body.help_need??null,body.registration_policy??'guest_allowed',JSON.stringify(body.prize_details??[])])).rows[0];
+    await q.query(`UPDATE community_events SET waitlist_enabled=true,response_window_minutes=1440,source_url=$2,source_host=$3,imported=$4,registration_mode=$5,external_registration_url=$6,source_organizer=$7,source_cover_url=$8 WHERE event_id=$1`,[id,body.source_url,body.source_url?new URL(body.source_url).hostname:null,Boolean(body.source_url),body.registration_mode,body.external_registration_url,body.source_organizer,body.source_cover_url]);
+    Object.assign(row,body,{waitlist_enabled:true,response_window_minutes:1440,source_host:body.source_url?new URL(body.source_url).hostname:null,imported:Boolean(body.source_url)});
+    if(input.actor.agent){await q.query('UPDATE community_events SET via_agent=true WHERE event_id=$1',[id]);row.via_agent=true;}
+    const share=await publishEventShare(q,row,true);
+    await exposeEvent(q,row);
+    // Keep the existing admitted-event bulletin kind; publication no longer implies human review.
+    const organizer=(await q.query('SELECT display_name FROM users WHERE user_id=$1',[row.organizer_ref])).rows[0].display_name as string;
+    await bulletin(q,row,'published',organizer,organizer);
+    await journal(q,input.actor,'community_event',id,1,'publish',{title:body.title,guild_key:body.guild_key},'freedom.community.event.published.v1');
+    publishedNow=true;return {...await eventView(q,input.actor,row),share_id:share.share_id};
+  },async q=>{if(publishedNow)requireCondition(Date.parse(body.starts_at)>(await q.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime(),422,'event_in_past','活動開始時間須在未來。');});
 }
 
 export async function updateEvent(pool:Pool,input:Command,id:string) {
@@ -571,6 +598,7 @@ export async function cancelEvent(pool:Pool,input:Command,id:string,participatio
 }
 
 async function applyReview(q:PoolClient,row:any,decision:'approve'|'reject',reason:string,reviewer:{name:string;userId?:string;adminId?:string}){
+  await requireEventNotHeld(q,row);
   requireCondition(row.state==='pending',409,'event_reviewed','這場活動已完成審核。');
   requireCondition(Date.parse(row.starts_at)>Date.now(),409,'event_started','活動開始時間已過，請提交新的活動。');
   const state=decision==='approve'?'published':'rejected';
@@ -584,6 +612,7 @@ async function applyReview(q:PoolClient,row:any,decision:'approve'|'reject',reas
     title:decision==='approve'?'活動已核准':'活動未通過審核',
     body:decision==='approve'?`${reviewer.name} 已核准「${row.title}」，現在可公開報名。`:`${reviewer.name} 未核准「${row.title}」：${reason}`,
     action:{tab:'events',resource_id:null}});
+  if(decision==='approve')await publishEventShare(q,updated);
   return updated;
 }
 
@@ -597,7 +626,7 @@ async function requireGuildReviewer(q:PoolClient,actor:Actor,row:any){
 
 export async function reviewEventAsGuildMaster(pool:Pool,input:Command,id:string){
   const body=reviewInput.parse(input.body);
-  return command(pool,input,async q=>{const row=await scopedEvent(q,input.actor,id);await requireGuildReviewer(q,input.actor,row);},async q=>{
+  return command(pool,input,async q=>{const row=await scopedEvent(q,input.actor,id);await requireGuildReviewer(q,input.actor,row);await requireEventNotHeld(q,row);},async q=>{
     const row=await scopedEvent(q,input.actor,id,true);await requireGuildReviewer(q,input.actor,row);checkVersion(row.aggregate_version,input.expected);
     const name=(await q.query('SELECT display_name FROM users WHERE user_id=$1',[input.actor.user_id])).rows[0].display_name as string;
     const reviewed=await applyReview(q,row,body.decision,body.reason,{name,userId:input.actor.user_id});
@@ -610,7 +639,7 @@ export async function listAdminEventQueue(pool:Pool,admin:AdminActor){
   return (await pool.query(`SELECT e.*,u.display_name AS organizer_name,g.name AS guild_name
     FROM community_events e JOIN users u ON u.user_id=e.organizer_ref
     LEFT JOIN positioning_guild_catalog g ON g.guild_key=e.guild_key
-    WHERE e.community_id=$1 AND e.state='pending' AND NOT is_verification_test_account(e.organizer_ref) ORDER BY e.created_at,e.event_id LIMIT 100`,[admin.community_id])).rows;
+    WHERE e.community_id=$1 AND e.state='pending' AND ${eventNotHeldSql} AND NOT is_verification_test_account(e.organizer_ref) ORDER BY e.created_at,e.event_id LIMIT 100`,[admin.community_id])).rows;
 }
 
 export async function reviewEventAsAdmin(pool:Pool,input:AdminCommand,id:string){
@@ -619,7 +648,7 @@ export async function reviewEventAsAdmin(pool:Pool,input:AdminCommand,id:string)
     const row=(await q.query(`SELECT * FROM community_events WHERE event_id=$1 AND community_id=$2${lock?' FOR UPDATE':''}`,[id,input.admin.community_id])).rows[0];
     requireCondition(row,404,'event_not_found','找不到這場活動。');return row;
   };
-  return adminCommand(pool,input,q=>scoped(q),async q=>{
+  return adminCommand(pool,input,async q=>{const row=await scoped(q);await requireEventNotHeld(q,row);return row;},async q=>{
     const row=await scoped(q,true);checkVersion(row.aggregate_version,input.expected);
     const reviewed=await applyReview(q,row,body.decision,body.reason,{name:input.admin.display_name,adminId:input.admin.admin_id});
     await audit(q,input.admin,'community_event_review','community_event',id,body.reason,
@@ -630,13 +659,20 @@ export async function reviewEventAsAdmin(pool:Pool,input:AdminCommand,id:string)
 
 export async function setRsvp(pool:Pool,input:Command,id:string,participationEnabled=false) {
   const body=z.object({going:z.boolean(),referral_code:shareCode.nullable().optional()}).strict().parse(input.body);
-  return command(pool,input,q=>scopedEvent(q,input.actor,id),async q=>{
+  return command(pool,input,async q=>{
+    await scopedEvent(q,input.actor,id,Boolean(input.actor.agent));
+    // Receipt replay must not restore withdrawn or guild-review-only content.
+    if(input.actor.agent)await readEvent(q,input.actor,id,participationEnabled);
+  },async q=>{
     // Lock the event so simultaneous last-seat requests see the same RSVP count.
     const row=await scopedEvent(q,input.actor,id,true);
+    // An agent never inherits guild-review visibility through a cancellation.
+    if(input.actor.agent)await readEvent(q,input.actor,id,participationEnabled);
     requireCondition(!await testHostHidden(q,row.organizer_ref,input.actor.user_id)&&await canAccessGuildEvent(q,input.actor,row),404,'not_found','找不到這場活動。');
     if(participationEnabled)await reconcileEventWaitlist(q,id);
     const referrer=body.going?await referralOwner(q,id,body.referral_code??null):null;
     if(body.going){
+      requireCondition(row.registration_mode==='platform',409,'external_registration','請到原站報名。');
       requireCondition(row.state==='published'&&Date.parse(row.starts_at)>Date.now(),409,'event_closed','活動已開始或取消，無法報名。');
       if(row.visibility==='guild'){
         const member=await q.query(`SELECT 1 FROM positioning_profession_memberships WHERE community_id=$1 AND guild_key=$2 AND user_id=$3 AND state='active' FOR SHARE`,[row.community_id,row.guild_key,input.actor.user_id]);
@@ -657,6 +693,7 @@ export async function setRsvp(pool:Pool,input:Command,id:string,participationEna
         aggregate_version=community_event_rsvps.aggregate_version+1,updated_at=now()
       RETURNING rsvp_id,aggregate_version`,[randomUUID(),id,input.actor.user_id,body.going?'going':'cancelled',referrer===input.actor.user_id?null:referrer])).rows[0];
     await journal(q,input.actor,'community_event_rsvp',rsvp.rsvp_id,rsvp.aggregate_version,body.going?'rsvp':'withdraw_rsvp',{event_id:id});
+    if(body.going)await creditEventRegistrations(q,id);
     if(body.going){await markEventParticipationGoing(q,id,{member_ref:input.actor.user_id});if(participationEnabled)await reconcileEventWaitlist(q,id);}
     else await cancelEventParticipation(q,id,{member_ref:input.actor.user_id},new Date(),{reconcile:participationEnabled});
     return eventView(q,input.actor,await scopedEvent(q,input.actor,id));

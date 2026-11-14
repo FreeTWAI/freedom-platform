@@ -103,7 +103,7 @@ export async function approveClientPairing(pool:Pool,input:Command,code:string){
  });
 }
 export async function listClientConnections(db:Pool|PoolClient,actor:Actor){
- return (await db.query(`SELECT ${approvedFields} FROM member_client_connections WHERE community_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`,[actor.community_id,actor.user_id])).rows.map(row=>({...row,read_only:true}));
+ return (await db.query(`SELECT ${approvedFields} FROM member_client_connections WHERE community_id=$1 AND user_id=$2 AND kind<>'agent' ORDER BY created_at DESC LIMIT 100`,[actor.community_id,actor.user_id])).rows.map(row=>({...row,read_only:true}));
 }
 export async function revokeClientConnection(pool:Pool,input:Command,id:string){
  z.object({}).strict().parse(input.body);z.uuid().parse(id);
@@ -120,19 +120,19 @@ type ClientResource='connection'|'catalog'|'stores'|'listings'|'products'|'reque
 // Authentication, authorization and reads share a transaction. No browser Actor/session is fabricated.
 async function assertClientConnectionClock(q:PoolClient,connectionId:string){
  // The connection is already locked. Check after the final projection, not inside a waiting SELECT.
- requireCondition((await q.query('SELECT 1 FROM member_client_connections WHERE connection_id=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[connectionId])).rowCount===1,401,'client_token_invalid','讀取連線已失效，請重新配對。');
+ requireCondition((await q.query("SELECT 1 FROM member_client_connections WHERE connection_id=$1 AND kind<>'agent' AND revoked_at IS NULL AND expires_at>clock_timestamp()",[connectionId])).rowCount===1,401,'client_token_invalid','讀取連線已失效，請重新配對。');
 }
 export async function readClientResource(pool:Pool,authorization:string|undefined,resource:ClientResource,requestedStoreId?:string){
  // Only the HTTP scheme is case-insensitive; keep the opaque credential's exact bytes.
  requireCondition(authorization&&/^[Bb][Ee][Aa][Rr][Ee][Rr] +fw_read_[A-Za-z0-9_-]{43}$/.test(authorization),401,'client_token_invalid','讀取連線已失效，請重新配對。');
  return transaction(pool,async q=>{
    const credentialHash=tokenHash(authorization.slice(authorization.lastIndexOf(' ')+1));
-   const owner=(await q.query('SELECT user_id,community_id FROM member_client_connections WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[credentialHash])).rows[0];
+   const owner=(await q.query("SELECT user_id,community_id FROM member_client_connections WHERE kind<>'agent' AND token_hash=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp()",[credentialHash])).rows[0];
    requireCondition(owner,401,'client_token_invalid','讀取連線已失效，請重新配對。');
    // Member → connection is the same lock order as administrative deactivation.
    requireCondition((await q.query('SELECT 1 FROM users WHERE user_id=$1 AND community_id=$2 AND active AND onboarding_completed_at IS NOT NULL FOR SHARE',[owner.user_id,owner.community_id])).rowCount===1,401,'client_token_invalid','讀取連線已失效，請重新配對。');
    const client=(await q.query(`SELECT connection_id,community_id,user_id,kind,scope,store_id,expires_at FROM member_client_connections
-      WHERE token_hash=$1 AND user_id=$2 AND community_id=$3 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,[credentialHash,owner.user_id,owner.community_id])).rows[0];
+      WHERE kind<>'agent' AND token_hash=$1 AND user_id=$2 AND community_id=$3 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,[credentialHash,owner.user_id,owner.community_id])).rows[0];
    requireCondition(client,401,'client_token_invalid','讀取連線已失效，請重新配對。');
    if(resource==='connection'){
      await assertClientConnectionClock(q,client.connection_id);

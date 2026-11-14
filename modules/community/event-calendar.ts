@@ -47,7 +47,7 @@ export async function readMemberEventCalendar(pool:Pool,actor:Actor,id:string){
 export async function readGuestEventCalendar(pool:Pool,id:string,token:string){
   return transaction(pool,async q=>{
     // Match RSVP/cancellation's event → capability order before taking a source snapshot.
-    await q.query('SELECT 1 FROM community_events WHERE event_id=$1 FOR SHARE',[id]);
+    await q.query('SELECT 1 FROM community_events WHERE event_id=$1 FOR UPDATE',[id]);
     const participation=await resolveGuestParticipation(q,id,token);
     return generateEventCalendar(participation.event);
   });

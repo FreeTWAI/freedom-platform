@@ -29,7 +29,7 @@ async function login(page: Page) {
   await page.getByLabel('電子郵件', {exact: true}).fill('maker@local.test');
   await page.getByLabel('密碼', {exact: true}).fill('freedom-local-demo');
   await page.getByRole('button', {name: '登入', exact: true}).click();
-  await expect(page.getByRole('heading', {name: '會員首頁', exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: '動態', exact: true})).toBeVisible();
 }
 
 const paginationHeadings = (page: Page) => page.getByRole('heading', {level: 3, name: /^分頁工作 \d{2}$/});

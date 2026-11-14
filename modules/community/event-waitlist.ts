@@ -1,3 +1,4 @@
+import {creditEventRegistrations} from '../shares/credit.js';
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
@@ -42,13 +43,18 @@ export async function ensureGuestCapability(q:PoolClient,id:string,body:{email:s
 export function eventGuestManagementLink(origin:string,id:string,token:string){return `${origin}/events/${id}#participation=${token}`;}
 export async function markGuestCapabilityProviderAccepted(q:Query,id:string,email:string){await q.query("UPDATE community_event_guest_capabilities SET provider_status='provider_accepted' WHERE event_id=$1 AND email=$2",[id,email.trim().toLowerCase()]);}
 export async function resolveGuestParticipation(q:Query,id:string,token:string):Promise<{event:any;email:string;going:boolean}>{
+  if(!('release' in q))return transaction(q,client=>resolveGuestParticipation(client,id,token));
   requireCondition(/^[A-Za-z0-9_-]{43}$/.test(token),404,'not_found','參與管理連結無效。');
   const cap=(await q.query('SELECT email,name,referral_code FROM community_event_guest_capabilities WHERE event_id=$1 AND token_hash=$2',[id,createHash('sha256').update(token).digest('hex')])).rows[0];
   requireCondition(cap,404,'not_found','參與管理連結無效。');
-  const event=await eventRow(q,id),identity={guest_email:cap.email},rsvp=await ownRsvp(q,id,identity);
+  const event=await eventRow(q,id,true),identity={guest_email:cap.email},rsvp=await ownRsvp(q,id,identity);
   await guestLegal(q,event,cap,Boolean(rsvp?.confirmed_at||rsvp?.email_sent_at||await ownEntry(q,id,identity)));
   await q.query('UPDATE community_event_guest_capabilities SET verified_at=COALESCE(verified_at,now()) WHERE event_id=$1 AND email=$2',[id,cap.email]);
   const going=event.state==='published'&&rsvp?.state==='going';
+  if(going){
+    await q.query("UPDATE community_event_guest_rsvps SET confirmed_at=COALESCE(confirmed_at,now()) WHERE event_id=$1 AND email=$2 AND state='going'",[id,cap.email]);
+    await creditEventRegistrations(q,id);
+  }
   return {event:going?event:{...event,location:null,online_url:null},email:cap.email,going};
 }
 export async function resolveGuestParticipationByEmail(q:Query,id:string,email:string):Promise<{event:any;email:string;going:boolean}>{
@@ -122,6 +128,7 @@ function requireGuestAdmission(event:any,action:string){
 }
 
 async function apply(q:PoolClient,event:any,identity:EventParticipationIdentity,action:string,code:string|null|undefined,now:Date){const id=event.event_id;if(identity.guest_email)requireGuestAdmission(event,action);if(action==='leave'||action==='cancel'){if(action==='cancel'&&identity.guest_email)await q.query("UPDATE community_event_guest_rsvps SET state='cancelled' WHERE event_id=$1 AND email=$2",[id,identity.guest_email]);await cancelEventParticipation(q,id,identity,now);return;}requireCondition(event.state==='published'&&instant(event.starts_at)>now.getTime(),409,'event_closed','活動已開始或取消。');if(action==='join')await reconcileEventWaitlist(q,id,now);const entry=await ownEntry(q,id,identity);if(action==='decline'){if(entry?.status==='invited'){await q.query("UPDATE community_event_waitlist SET status='declined',aggregate_version=aggregate_version+1 WHERE entry_id=$1",[entry.entry_id]);await bump(q,id);await cancelEventReminders(q,id,identity);}await reconcileEventWaitlist(q,id,now);return;}
+if(['join','accept','register'].includes(action))requireCondition(event.registration_mode==='platform',409,'external_registration','請到原站報名。');
 if(action==='join'){requireCondition(event.waitlist_enabled,409,'waitlist_disabled','主辦者尚未開放候補。');requireCondition((await ownRsvp(q,id,identity))?.state!=='going',409,'already_registered','你已報名這場活動。');const sourceCode=code??entry?.referral_code??null;if(event.visibility==='referral')requireCondition(await referralOwner(q,id,sourceCode),422,'share_code_required','請使用有效分享連結。');if(!entry){await q.query("INSERT INTO community_event_waitlist(entry_id,event_id,member_ref,guest_email,referral_code,status,joined_at) VALUES($1,$2,$3,$4,$5,'queued',$6)",[randomUUID(),id,identity.member_ref??null,identity.guest_email??null,sourceCode,now]);await bump(q,id);}else if(!['queued','invited','accepted'].includes(entry.status)){await q.query("UPDATE community_event_waitlist SET status='queued',joined_at=$2,referral_code=$3,invited_at=NULL,expires_at=NULL,invitation_id=NULL,delivery_status='pending',aggregate_version=aggregate_version+1 WHERE entry_id=$1",[entry.entry_id,now,sourceCode]);await bump(q,id);}await reconcileEventWaitlist(q,id,now);return;}
 await reconcileEventWaitlist(q,id,now);const current=await ownEntry(q,id,identity);if(action==='accept'){if(current?.status==='accepted'&&(await ownRsvp(q,id,identity))?.state==='going')return;requireCondition(current?.status==='invited',409,'invitation_unavailable','候補邀請已失效。');requireCondition(await eligible(q,event,current),404,'not_found','找不到可參與的活動。');}
 if(action==='register'){requireCondition(identity.guest_email,403,'guest_required','請使用自己的參與管理連結。');if((await ownRsvp(q,id,identity))?.state==='going')return;const reserved=current?.status==='invited';const pending=(await q.query("SELECT 1 FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2 AND state='pending' AND created_at>$3::timestamptz-interval '10 minutes'",[id,identity.guest_email,now])).rowCount===1;requireCondition(reserved||event.capacity===null||await countEventSeats(q,id,now)-(pending?1:0)<event.capacity,409,'event_full','活動名額已滿。');}
@@ -145,6 +152,7 @@ if(identity.member_ref){
     confirmed_at=EXCLUDED.confirmed_at,registration_attempt_id=EXCLUDED.registration_attempt_id,credited_invitation_id=NULL,referred_by_user_id=COALESCE(community_event_guest_rsvps.referred_by_user_id,EXCLUDED.referred_by_user_id)`,
     [id,identity.guest_email,cap.name,now,referrer]);
 }
+await creditEventRegistrations(q,id);
 await markEventParticipationGoing(q,id,identity);await bump(q,id);await reconcileEventWaitlist(q,id,now);
 return deadline;
 }

@@ -1,3 +1,4 @@
+import {replaceLegacyAddress,canonicalHash,portalHash,legacyHash,resolvePortalRoute} from '../../apps/portal-web/src/portal-route.js';
 import {test,type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -114,18 +115,18 @@ const event=(i:number)=>({event_id:IDS[i],title:labels[i],description:'合成活
 const notices=()=>({items:IDS.map((id,i)=>({notification_id:'n'+i,title:'前往'+labels[i],body:'合成活動通知',created_at:new Date().toISOString(),read_at:new Date().toISOString(),action:{tab:'events',resource_id:id}})),unread_count:0});
 function fixture(t:TestContext,kind='hash',participationEnabled=false){
  const requests:any[]=[],commits:{hash:string;text:string}[]=[],container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container as unknown as HTMLElement);let mounted=true,shell:any;
- Object.assign(window.location,{origin:'https://fixture.invalid',pathname:kind==='path'?'/events/'+IDS[0]:'/',search:'',hash:kind==='path'?'':'#events/'+IDS[0]});
+ Object.assign(window.location,{origin:'https://fixture.invalid',pathname:kind==='path'?'/events/'+IDS[0]:'/',search:'',hash:kind==='path'?'':'#explore/events/'+IDS[0]});
  Object.defineProperty(window.location,'href',{configurable:true,get(){return window.location.origin+window.location.pathname+window.location.search+window.location.hash;}});
  const transport=(method:string)=>(url:string,body?:any,options?:any)=>new Promise((resolve,reject)=>requests.push({method,path:url,body,options,resolve,reject}));
  const client={sessionGeneration:1,csrfToken:'synthetic-csrf',get:transport('GET'),post:transport('POST'),patch:transport('PATCH')};
  let props:any={client,session:{user:{user_id:OWNER}},site:{event_participation_enabled:participationEnabled},locationHash:window.location.hash};
  function Host(){
   const [hash,setHash]=React.useState(props.locationHash);props.locationHash=hash;
-  shell={useCallback:React.useCallback,acceptedHash:React.useRef(hash),pageLeaveGuard:React.useRef(null),messageHistoryTransition:React.useRef(null),isMessagesHistoryEntry:()=>false,messagesHistoryState:()=>null,messageLocation:React.useRef(null),messageLeaveGuard:React.useRef(null),notificationSequence:React.useRef(0),canEndConsoleSession:()=>true,orderNotificationDestination:()=>null,
+  shell={replaceLegacyAddress,canonicalHash,portalHash,legacyHash,resolvePortalRoute,useCallback:React.useCallback,acceptedHash:React.useRef(hash),pageLeaveGuard:React.useRef(null),messageHistoryTransition:React.useRef(null),isMessagesHistoryEntry:()=>false,messagesHistoryState:()=>null,messageLocation:React.useRef(null),messageLeaveGuard:React.useRef(null),notificationSequence:React.useRef(0),canEndConsoleSession:()=>true,orderNotificationDestination:()=>null,
    setMessagesMounted(){},setTab(){},setLocationHash:setHash,setFriendScope(){},setMessagesOpen(){},setMobileOpen(){},mainContent:{current:{focus(){}}},setNotificationTarget(){},window,HashChangeEvent:class{constructor(public type:string){}}};
   runInNewContext(transformSync(shellSource,{loader:'tsx',format:'cjs'}).code,shell);
   React.useLayoutEffect(()=>{commits.push({hash,text:container.textContent});});
-  return React.createElement(React.Fragment,null,React.createElement(NotificationBell,{client:props.client,preferencesEnabled:false,onNavigate:shell.route.navigateNotification}),entry.render({...props,registerPageLeave:shell.route.registerPageLeave,selectTab:shell.route.selectTab}));
+  return React.createElement(React.Fragment,null,React.createElement(NotificationBell,{client:props.client,preferencesEnabled:false,onNavigate:shell.route.navigateNotification}),entry.render({...props,locationHash:props.locationHash?legacyHash(props.locationHash):'',registerPageLeave:shell.route.registerPageLeave,selectTab:shell.route.selectTab}));
  }
  (window as any).history={state:null,replaceState(state:any,_unused:any,url:string){this.state=state;const target=new URL(url,window.location.href);Object.assign(window.location,{pathname:target.pathname,search:target.search,hash:target.hash});},pushState:noNetwork,back:noNetwork};
  const render=()=>flush(()=>root.render(React.createElement(Host)));
@@ -167,41 +168,41 @@ for(const kind of ['hash','path'])test(`member accept pending and unknown retain
  h.click(h.button('重試原操作（保留原內容）')!);const retry=h.writes().at(-1);assert.equal(tuple(retry),tuple(original));
  await h.settle(retry,accepted());assert.equal(beforeUnload(),false);assert(h.reads('/events/'+IDS[0]+'/participation').length>1);
  // The canonical write is settled even though both post-ACK reads are held.
- await h.navigate(1);assert.equal(window.location.hash,'#events/'+IDS[1]);assert.equal(h.button('重試原操作（保留原內容）'),undefined);
+ await h.navigate(1);assert.equal(window.location.hash,'#explore/events/'+IDS[1]);assert.equal(h.button('重試原操作（保留原內容）'),undefined);
 });
 for(const destination of ['notification','return'])test(`accept and ${destination} in the same React turn cannot discard the pending command`,async t=>{
  const h=await ready(t);if(destination==='notification')await h.openBell();
  const accept=h.button('接受邀請並報名')!,target=destination==='return'?h.button('返回活動列表與行事曆')!:h.nodes().find(n=>n.nodeName==='BUTTON'&&n.textContent.startsWith('前往'+labels[1]))!;
  assert(target);flush(()=>{accept.dispatchEvent({type:'click',button:0});target.dispatchEvent({type:'click',button:0});});
- assert.equal(h.writes().length,1);assert.equal(window.location.hash,'#events/'+IDS[0]);assert.equal(beforeUnload(),true);
+ assert.equal(h.writes().length,1);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);assert.equal(beforeUnload(),true);
  await h.settle(h.writes()[0],unknown(),true);assert(h.button('重試原操作（保留原內容）'));
 });
 for(const status of [400,403,404,409,412,422,429])test(`first definite ${status} releases navigation, including stale 412`,async t=>{
  const h=await ready(t);h.click(h.button('接受邀請並報名')!);await h.settle(h.writes()[0],denied(status),true);
  assert.equal(h.button('重試原操作（保留原內容）'),undefined);assert.equal(beforeUnload(),false);
  if(status===412){assert(h.button('載入最新狀態並保留輸入'));assert.equal(h.propsOf(h.button('接受邀請並報名')!).disabled,true);}
- h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events');assert.equal(h.writes().length,1);
+ h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events');assert.equal(h.writes().length,1);
 });
 for(const failedReads of [false,true])test(`ACK releases navigation while post-ACK reads ${failedReads?'fail':'remain pending'}`,async t=>{
  const h=await ready(t);h.click(h.button('接受邀請並報名')!);await h.settle(h.writes()[0],accepted());
  if(failedReads){await h.settle(h.reads('/events/'+IDS[0]+'/participation').at(-1),denied(503),true);await h.settle(h.reads('/events/'+IDS[0]+'/reminder').at(-1),denied(503),true);}
- assert.equal(beforeUnload(),false);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events');assert.equal(h.writes().length,1);
+ assert.equal(beforeUnload(),false);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events');assert.equal(h.writes().length,1);
 });
 test('stale reload followed by a fresh command has a new key and holds navigation again',async t=>{
  const h=await ready(t);h.click(h.button('接受邀請並報名')!);const first=h.writes()[0];await h.settle(first,denied(412),true);
  h.click(h.button('載入最新狀態並保留輸入')!);await h.settle(h.reads('/events/'+IDS[0]+'/participation').at(-1),participation(0,{event_version:7}));await h.settle(h.reads('/events/'+IDS[0]+'/reminder').at(-1),reminder);
  h.click(h.button('婉拒邀請')!);const fresh=h.writes().at(-1);assert.equal(fresh.body.action,'decline');assert.equal(fresh.options.ifMatch,7);assert.notEqual(fresh.options.idempotencyKey,first.options.idempotencyKey);
- h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events/'+IDS[0]);await h.settle(fresh,participation(0,{event_version:7,waitlist:{...participation().waitlist,status:'declined'}}));
- h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events');
+ h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);await h.settle(fresh,participation(0,{event_version:7,waitlist:{...participation().waitlist,status:'declined'}}));
+ h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events');
 });
 test('ordinary state reload cannot release an unknown command or alter its original tuple',async t=>{
  const h=await ready(t);h.click(h.button('接受邀請並報名')!);const first=h.writes()[0];await h.settle(first,unknown(),true);
  h.click(h.button('更新本人狀態')!);await h.settle(h.reads('/events/'+IDS[0]+'/participation').at(-1),participation(0,{event_version:9}));await h.settle(h.reads('/events/'+IDS[0]+'/reminder').at(-1),reminder);
- h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events/'+IDS[0]);h.click(h.button('重試原操作（保留原內容）')!);assert.equal(tuple(h.writes().at(-1)),tuple(first));
+ h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);h.click(h.button('重試原操作（保留原內容）')!);assert.equal(tuple(h.writes().at(-1)),tuple(first));
 });
 test('session generation change releases only the obsolete owner even before rerender',async t=>{
  const h=await ready(t);h.click(h.button('接受邀請並報名')!);assert.equal(beforeUnload(),true);h.client.sessionGeneration++;assert.equal(beforeUnload(),false);
- flush(()=>h.shell().route.selectTab('events'));assert.equal(window.location.hash,'#events');
+ flush(()=>h.shell().route.selectTab('events'));assert.equal(window.location.hash,'#explore/events');
 });
 for(const change of ['client','session','account'])test(`late old completion cannot clear the new pending ${change} owner`,async t=>{
  const h=await ready(t);h.click(h.button('接受邀請並報名')!);const old=h.writes()[0];
@@ -211,7 +212,7 @@ for(const change of ['client','session','account'])test(`late old completion can
  // A new member/client lifetime must finish its own read before becoming actionable.
  const ownRead=h.reads('/events/'+IDS[0]+'/participation').at(-1);await h.settle(ownRead,participation());await h.settle(h.reads('/events/'+IDS[0]+'/reminder').at(-1),reminder);
  h.click(h.button('接受邀請並報名')!);const fresh=h.writes().at(-1);assert.notEqual(fresh.options.idempotencyKey,old.options.idempotencyKey);
- await h.settle(old,accepted());assert.equal(beforeUnload(),true);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events/'+IDS[0]);
+ await h.settle(old,accepted());assert.equal(beforeUnload(),true);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);
  await h.settle(fresh,unknown(),true);h.click(h.button('重試原操作（保留原內容）')!);assert.equal(tuple(h.writes().at(-1)),tuple(fresh));
 });
 test('unmount removes its pending registration and ignores a late completion',async t=>{
@@ -221,7 +222,7 @@ test('unmount removes its pending registration and ignores a late completion',as
 test('a newer command stays protected when older post-ACK reads finish',async t=>{
  const h=await ready(t);h.click(h.button('接受邀請並報名')!);await h.settle(h.writes()[0],accepted());const oldReads=[h.reads('/events/'+IDS[0]+'/participation').at(-1),h.reads('/events/'+IDS[0]+'/reminder').at(-1)];
  h.click(h.button('婉拒邀請')!);const fresh=h.writes().at(-1);assert.notEqual(fresh.options.idempotencyKey,h.writes()[0].options.idempotencyKey);
- await h.settle(oldReads[0],accepted());await h.settle(oldReads[1],reminder);assert.equal(beforeUnload(),true);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events/'+IDS[0]);await h.settle(fresh,unknown(),true);assert(h.button('重試原操作（保留原內容）'));
+ await h.settle(oldReads[0],accepted());await h.settle(oldReads[1],reminder);assert.equal(beforeUnload(),true);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);await h.settle(fresh,unknown(),true);assert(h.button('重試原操作（保留原內容）'));
 });
 // Execute the actual parent registration, not a replacement implementation, to
 // exercise cleanup ordering that React's normal commit order need not encounter.
@@ -240,13 +241,13 @@ function submitReminder(h:Awaited<ReturnType<typeof ready>>){
 }
 test('actual member ReminderForm pending and unknown PATCH keep the original tuple, then ACK releases before GET',async t=>{
  const h=await ready(t);submitReminder(h);const original=h.writes()[0];assert.equal(original.method,'PATCH');assert.equal(original.path,'/events/'+IDS[0]+'/reminder');assert.equal(JSON.stringify(original.body),JSON.stringify({enabled:false}));assert.equal(original.options.ifMatch,1);
- assert.equal(beforeUnload(),true);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events/'+IDS[0]);
- await h.settle(original,unknown(),true);await h.navigate(1);assert.equal(window.location.hash,'#events/'+IDS[0]);assert.equal(h.writes().length,1);assert.equal(beforeUnload(),true);
+ assert.equal(beforeUnload(),true);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);
+ await h.settle(original,unknown(),true);await h.navigate(1);assert.equal(window.location.hash,'#explore/events/'+IDS[0]);assert.equal(h.writes().length,1);assert.equal(beforeUnload(),true);
  h.click(h.button('重試原操作（保留原內容）')!);const retry=h.writes().at(-1);assert.equal(tuple(retry),tuple(original));await h.settle(retry,reminder);
- assert(h.reads('/events/'+IDS[0]+'/reminder').length>1);assert.equal(beforeUnload(),false);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events');
+ assert(h.reads('/events/'+IDS[0]+'/reminder').length>1);assert.equal(beforeUnload(),false);h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events');
 });
 for(const status of [400,412])test(`actual member ReminderForm first definite ${status} permits leaving`,async t=>{
  const h=await ready(t);submitReminder(h);await h.settle(h.writes()[0],denied(status),true);assert.equal(h.button('重試原操作（保留原內容）'),undefined);assert.equal(beforeUnload(),false);
  if(status===412){assert(h.button('載入最新狀態並保留輸入'));assert.equal(h.propsOf(h.button('儲存提醒選擇')!).disabled,true);}
- h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events');assert.equal(h.writes().length,1);
+ h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#explore/events');assert.equal(h.writes().length,1);
 });

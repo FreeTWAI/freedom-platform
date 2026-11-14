@@ -1,3 +1,4 @@
+import {clearMemberAgentEvents} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
 import {test,expect,type Browser,type BrowserContext,type Page,type Route,type APIResponse} from './fixtures.js';
@@ -30,6 +31,7 @@ test.afterEach(async()=>{
     await q.query('DELETE FROM member_notifications WHERE recipient_ref=ANY($1::uuid[])',[ids]);
     await q.query('DELETE FROM outbox WHERE transition_id IN (SELECT transition_id FROM transition_journal WHERE actor_ref=ANY($1::uuid[]))',[ids]);
     await q.query('DELETE FROM transition_journal WHERE actor_ref=ANY($1::uuid[])',[ids]);
+    await clearMemberAgentEvents(q,ids);
     await q.query('DELETE FROM users WHERE user_id=ANY($1::uuid[])',[ids]);await q.query('COMMIT');
   }catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();await db.end();}
 });
