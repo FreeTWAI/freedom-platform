@@ -727,8 +727,8 @@ test('unknown /s/:id and /events/:id return a Chinese 404 page with security hea
   const { createEvent } = await import('../../modules/community/events.js');
   const origin = 'http://127.0.0.1:4310';
   const app = createApp(pool, origin, 'local');
-  const share = await createShare(pool, cmd(actors[0], { url: 'https://example.com/public-v02' }), { previewFetch: async () => new Response('<title>公開連結</title>', { headers: { 'content-type': 'text/html' } }) });
-  const openEvent = await createEvent(pool, cmd(actors[0], { title: '公開活動範例', starts_at: '2099-01-01T10:00:00Z', location: '合成場地', visibility: 'open' }, 'POST /events'));
+  const share = await createShare(pool, cmd(actors[3], { url: 'https://example.com/public-v02' }), { previewFetch: async () => new Response('<title>公開連結</title>', { headers: { 'content-type': 'text/html' } }) });
+  const openEvent = await createEvent(pool, cmd(actors[3], { title: '公開活動範例', starts_at: '2099-01-01T10:00:00Z', location: '合成場地', visibility: 'open' }, 'POST /events'));
   const unknownId = '00000000-0000-4000-8000-000000009999';
   const badId = '<script>alert(1)</script>';
   const headerNames = ['cache-control', 'x-content-type-options', 'referrer-policy', 'content-security-policy'];
@@ -772,8 +772,8 @@ test('unknown /s/:id and /events/:id return a Chinese 404 page with security hea
 test('public /s/:id and /events/:id have one primary CTA, unique link destinations, light portal theme, and short pre-action text', async () => {
   const { eventPageHtml } = await import('../../modules/community/event-page.js');
   const { publicSharePage } = await import('../../modules/shares/public-page.js');
-  const repoShare = await createShare(pool, cmd(actors[0], { url: 'https://github.com/fixture/v10-repo' }), { fetcher: async () => Response.json({ ...original, id: 990, full_name: 'fixture/v10-repo' }) });
-  const linkShare = await createShare(pool, cmd(actors[0], { url: 'https://example.com/v10-link' }), { previewFetch: async () => new Response('<title>外部文章</title>', { headers: { 'content-type': 'text/html' } }) });
+  const repoShare = await createShare(pool, cmd(actors[3], { url: 'https://github.com/fixture/v10-repo' }), { fetcher: async () => Response.json({ ...original, id: 990, full_name: 'fixture/v10-repo' }) });
+  const linkShare = await createShare(pool, cmd(actors[3], { url: 'https://example.com/v10-link' }), { previewFetch: async () => new Response('<title>外部文章</title>', { headers: { 'content-type': 'text/html' } }) });
 
   for (const id of [repoShare.share_id, linkShare.share_id]) {
     const { html } = await publicSharePage(pool, id, 'https://platform.example.com');
