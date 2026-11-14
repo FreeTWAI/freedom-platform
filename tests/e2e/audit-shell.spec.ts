@@ -121,9 +121,11 @@ for (const viewport of VIEWPORTS) {
       expect(form!.y + form!.height).toBeGreaterThan(poster!.y);
     }
 
-    const switcher = page.getByRole('group', { name: '登入或建立帳號' });
-    await expect(switcher.getByRole('button', { name: '會員登入', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect(switcher.getByRole('button', { name: '建立帳號', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByRole('group', { name: '登入或建立帳號' })).toHaveCount(0);
+    await expect(page.locator('.login-layout .btn-primary')).toHaveCount(1);
+    await expect(page.locator('.login-layout .btn-primary')).toHaveText('免費加入');
+    await expect(page.locator('.login-card form button[type=submit]')).toHaveText('登入');
+    await expect(page.locator('.login-card form button[type=submit]')).toHaveClass(/\bbtn-secondary\b/);
 
     // Secondary tools have one keyboard stop; account controls keep their order.
     const seen:string[]=[];
@@ -138,7 +140,7 @@ for (const viewport of VIEWPORTS) {
       await expect(page.locator(':focus')).toBeInViewport();
       if(label==='登入')break;
     }
-    let position=-1;for(const stop of ['會員登入','建立帳號','email','password','登入']){const next=seen.indexOf(stop,position+1);expect(next,`${viewport.name}: ${stop} in ${seen.join(' → ')}`).toBeGreaterThan(position);position=next;}
+    let position=-1;for(const stop of ['語言','免費加入','email','password','登入']){const next=seen.indexOf(stop,position+1);expect(next,`${viewport.name}: ${stop} in ${seen.join(' → ')}`).toBeGreaterThan(position);position=next;}
     await page.screenshot({ path: `test-results/audit-shell-login-${viewport.name}.png`, fullPage: true });
   });
 }
@@ -147,11 +149,11 @@ test('registration mode switches by keyboard, keeps one email field and states t
   for (const viewport of [VIEWPORTS[0], VIEWPORTS[2]]) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/');
-    const register = page.getByRole('button', { name: '建立帳號', exact: true });
+    const register = page.getByRole('button', { name: '免費加入', exact: true });
     await register.focus();
     await page.keyboard.press('Space');
-    await expect(register).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('button', { name: '會員登入', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await expect(register).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '會員登入', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: '加入自由工坊', exact: true })).toBeVisible();
     // The accessible name is exactly the label; the hint is a description, not part of the name.
     const nickname = page.getByLabel('社群顯示名稱', { exact: true });
@@ -163,10 +165,7 @@ test('registration mode switches by keyboard, keeps one email field and states t
     await expect(page.locator('.login-card input')).toHaveCount(3);
     await expect(page.locator('.login-card input[type=email]')).toHaveCount(1);
     await expectTouchTargets(page, '.login-card button, .login-card input', `${viewport.name} registration controls`);
-    // The collapsed tools remain reachable, then required fields precede optional nickname.
-    await page.keyboard.press('Tab');
-    await expect(page.getByLabel('頁面工具',{exact:true})).toBeFocused();
-    await page.keyboard.press('Tab');
+    // 免費加入 focuses the email field, and required fields precede optional nickname.
     await expect(page.getByLabel('電子郵件', { exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.getByLabel('密碼', { exact: true })).toBeFocused();
@@ -193,7 +192,9 @@ test('registration mode switches by keyboard, keeps one email field and states t
     await expect(page.getByText('目前未開放信箱找回。', { exact: false })).toBeVisible();
     await expect(page.getByRole('button', { name: '建立帳號，先逛工坊', exact: true })).toBeVisible();
     await noHorizontalOverflow(page, `${viewport.name} registration`);
-    // Demo shortcuts belong to sign-in only.
+    // Demo shortcuts belong to sign-in only; collapsed tools remain reachable behind 更多.
+    await page.locator('details.login-more > summary').click();
+    await expect(page.getByLabel('頁面工具',{exact:true})).toBeVisible();
     await expect(page.getByRole('complementary', { name: '示範帳號' })).toHaveCount(0);
   }
 });

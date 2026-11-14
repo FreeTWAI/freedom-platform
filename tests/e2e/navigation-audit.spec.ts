@@ -1,5 +1,25 @@
-import { test, expect, type Page } from './fixtures.js';
+import { test, expect, type Page, type Locator } from './fixtures.js';
 import { navigate } from './navigation.js';
+
+async function openFilterDrawer(shelf: Locator) {
+  const drawer = shelf.locator('details.skill-library-filter-drawer');
+  await expect(drawer).toBeAttached();
+  if (!await drawer.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await drawer.locator(':scope > summary').click();
+  }
+  await expect(drawer).toHaveJSProperty('open', true);
+}
+
+async function expandShelf(shelf: Locator, expectedCount: number) {
+  const cards = shelf.locator('article[data-book-id]');
+  const more = shelf.locator(':scope > .actions').getByRole('button', { name: '更多', exact: true });
+  await expect(cards).toHaveCount(Math.min(20, expectedCount));
+  for (let shown = 20; shown < expectedCount; shown += 20) {
+    await more.click();
+    await expect(cards).toHaveCount(Math.min(shown + 20, expectedCount));
+  }
+  await expect(more).toHaveCount(0);
+}
 
 async function login(page: Page) {
   await page.goto('/');
@@ -132,7 +152,7 @@ test('unlocked and locked shelves partition the authoritative catalog and free p
   await expect(cards.getByRole('button', { name: '閱讀技能書', exact: true })).toHaveCount(2);
   await expect(cards.getByRole('button', { name: '預覽技能書', exact: true })).toHaveCount(0);
   await locked.click(); await expect(locked).toHaveAttribute('aria-pressed', 'true');
-  await expect(cards).toHaveCount(allIds.length - chosen.length);
+  await expandShelf(library, allIds.length - chosen.length);
   const lockedIds = await ids();
   expect(lockedIds.filter(id => chosen.includes(id))).toEqual([]);
   expect([...chosen, ...lockedIds].sort()).toEqual(allIds);
@@ -143,6 +163,7 @@ test('unlocked and locked shelves partition the authoritative catalog and free p
   await expect(cards.getByRole('button', { name: '預覽技能書', exact: true })).toHaveCount(lockedIds.length);
   await expect(cards.getByRole('button', { name: '閱讀技能書', exact: true })).toHaveCount(0);
   // A category absent from the unlocked subset must not leave that subset empty.
+  await openFilterDrawer(library);
   const category = library.getByRole('combobox', { name: '依工坊用途篩選', exact: true });
   await category.selectOption({ label: '資訊安全' }); await expect(cards).toHaveCount(1);
   await expect(cards).toHaveAttribute('data-book-id', 'security-scanner');
@@ -153,8 +174,9 @@ test('unlocked and locked shelves partition the authoritative catalog and free p
   await expect(preview.getByRole('link', { name: '查看原作 Repo ↗', exact: true })).toBeVisible();
   await preview.getByRole('button', { name: '關閉技能書介紹', exact: true }).click();
   await unlocked.click(); await expect(cards).toHaveCount(2); expect(await ids()).toEqual(chosen);
+  await openFilterDrawer(library);
   await expect(category).toHaveValue(''); await expect(category.locator('option').filter({ hasText: /^資訊安全$/ })).toHaveCount(0);
-  await locked.click(); await expect(cards).toHaveCount(lockedIds.length); expect(await ids()).toEqual(lockedIds);
+  await locked.click(); await expandShelf(library, lockedIds.length); expect(await ids()).toEqual(lockedIds);
   expect(await (await page.request.get('/api/v1/me/skill-books')).json()).toEqual(actualGrants);
 });
 
@@ -174,7 +196,8 @@ test('an unavailable grant list never classifies all books as locked and retry p
   await expect(page.locator('.community-library article[data-book-id]')).toHaveCount(0);
   failing = false;
   await page.getByRole('button', { name: '重新載入解鎖紀錄', exact: true }).click();
-  await expect(page.locator('.community-library article[data-book-id]')).toHaveCount(catalog.skill_books.filter((book: { official_guild_keys: string[] }) => book.official_guild_keys.length > 0).length - 1);
+  const library = page.locator('.community-library');
+  await expandShelf(library, catalog.skill_books.filter((book: { official_guild_keys: string[] }) => book.official_guild_keys.length > 0).length - 1);
   await expect(page.locator('.community-library article[data-book-id="social-post"]')).toHaveCount(0);
   await expect(tabs.getByRole('button', { name: '未解鎖', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('alert')).toHaveCount(0);

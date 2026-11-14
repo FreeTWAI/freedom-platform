@@ -51,8 +51,8 @@ for(const [width,height] of [[390,844],[320,568]])test(`one place navigation at 
  await expect(page.locator('.home-timeline')).toBeVisible();await primary(page);
  for(const text of ['遊戲大廳','技能與工具','社群活動','合作夥伴','作品交流','商品與供貨','作品與活動','常用入口'])await expect(page.locator('.member-home').getByText(text,{exact:true})).toHaveCount(0);
  await page.getByText('我的名片與推薦夥伴',{exact:true}).click();await page.getByRole('link',{name:'編輯個人頁',exact:true}).click();await expect(page).toHaveURL(/#me\/settings$/);
- await go(page,'#explore/people');await expect(page.getByText('搜尋功能',{exact:true})).toHaveCount(0);await primary(page);
- await go(page,'#explore');await page.locator('.place-feature-search summary').click();await page.getByRole('searchbox',{name:'搜尋功能'}).fill('技能');await expect(page.locator('.place-feature-search').getByRole('button',{name:'技能書架',exact:true})).toHaveCount(0);await primary(page);
+ await go(page,'#explore/people');await expect(page.getByRole('region',{name:'社群內容搜尋條件',exact:true})).toHaveCount(0);await primary(page);
+ await go(page,'#explore');await page.getByRole('searchbox',{name:'關鍵字',exact:true}).fill('技能');await expect(page.getByRole('region',{name:'功能搜尋結果',exact:true})).toBeVisible();await expect(page.getByRole('region',{name:'功能搜尋結果',exact:true}).getByRole('button',{name:'技能書架',exact:true})).toHaveCount(0);await primary(page);
  for(const hash of ['#guilds/guild_games/start','#guilds/guild_games/tools']){
   await go(page,'#guilds');await expect(page.locator('.guilds-panel')).toBeVisible();await go(page,hash);await expect(page).toHaveURL(/#guilds\/guild_games\/tools\/arcade$/);await expect(page.locator('.fw-arcade-root')).toBeVisible();await expect(page.getByRole('button',{name:'工具列表',exact:true})).toHaveCount(0);await primary(page);await page.goBack();await expect(page).toHaveURL(/#guilds$/);
  }

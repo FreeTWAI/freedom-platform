@@ -18,6 +18,11 @@ test.beforeEach(async({page,e2eAuthPool})=>{
 // Catalog books no guild designates: they sit on the 社群技能書 shelf and are not granted by joining a guild.
 const communityBookIds=['anti-gambling-trader-tw','web-card-game-skill','ai-avatar-bot','ai-manga-translator','line-persona','hao-studio','ai-sister','multi-ai-desktop','multi-ai-chat','video-to-podcast-toolkit','autovtuber','coding-audit-harness','hrflow','hdsljp-api','usage','photo-border-remover','ga4-lp-analytics','sns-feedback-collect','ultracode-token-optimization','keynote-pptx-doctor','webchat-mcp','gemini-voice-lab','story-bible','human-mode','project-hub','taiwanese-english-checker'];
 
+async function openFilterDrawer(shelf:Locator){
+  const drawer=shelf.locator('details.skill-library-filter-drawer');
+  if(await drawer.count()>0&&!await drawer.evaluate(element=>(element as HTMLDetailsElement).open))await drawer.locator(':scope > summary').click();
+}
+
 async function openLibrary(page:Page){
   await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
@@ -27,6 +32,8 @@ async function openLibrary(page:Page){
   const library=page.locator('.community-library');
   await expect(page.getByRole('heading',{name:'探索',level:1,exact:true})).toBeVisible();
   await page.getByRole('button',{name:'未解鎖',exact:true}).click();
+  await expect(library.locator('.skill-library-book')).toHaveCount(20);
+  await library.locator('> .actions').getByRole('button',{name:'更多',exact:true}).click();
   await expect(library.locator('.skill-library-book')).toHaveCount(29);
   return library;
 }
@@ -87,6 +94,7 @@ test('the guild shelf and 社群技能書 hold all 55 books once each; guild sea
     expect(response.status(),url!).toBe(200);
     expect(response.headers()['content-type'],url!).toMatch(/^image\/webp/);
   }
+  await openFilterDrawer(library);
   const search=library.getByLabel('搜尋技能書',{exact:true}),category=library.getByRole('combobox',{name:'依工坊用途篩選',exact:true});
   await category.selectOption({label:'資訊安全'});
   await expect(cards).toHaveCount(1);
@@ -101,6 +109,8 @@ test('the guild shelf and 社群技能書 hold all 55 books once each; guild sea
   await expect(cards.first().getByRole('heading')).toHaveText('Hao 社群貼文技能書');
   await expect(library.getByRole('status')).toHaveText('顯示 1 / 29 個原作資源');
   await search.fill('');await category.selectOption({label:'全部用途'});
+  await expect(cards).toHaveCount(20);
+  await library.locator('> .actions').getByRole('button',{name:'更多',exact:true}).click();
   await expect(cards).toHaveCount(29);
   const grantedAfter=await (await page.request.get('/api/v1/me/skill-books')).json();
   expect(grantedAfter).toEqual(grantedBefore);
@@ -141,13 +151,13 @@ test('book cards credit the original GitHub author and offer direct reading acti
   await expect(card.locator('.skill-library-purpose')).toBeVisible();
   await expect(card).not.toContainText('你能做出什麼');
   await expect(card.locator('.skill-book-illustration')).toHaveAttribute('src',book.cover_url!);
-  await card.locator('.github-metrics-details > summary').click();
+  await card.locator('.skill-card-more > summary').click();
   const star=card.getByRole('link',{name:'原作者 GitHub ↗',exact:true});
   await expect(star).toHaveAttribute('href','https://github.com/Hao0321/claude-skill-social-post');
   await expect(star).toHaveAttribute('target','_blank');
   await expect(star).toHaveAttribute('rel',/\bnoopener\b/);
   await expect(star).toHaveAttribute('rel',/\bnoreferrer\b/);
-  await card.locator('.github-metrics-details > summary').click();
+  await card.locator('.skill-card-more > summary').click();
   expect(book.repository_url).toBe('https://github.com/FreeTWAI/claude-skill-social-post');
   const trigger=card.getByRole('button',{name:/^(閱讀|預覽)技能書$/});
   await trigger.click();
@@ -156,7 +166,8 @@ test('book cards credit the original GitHub author and offer direct reading acti
   await expect(modal.locator('.skill-intro-primary-actions > .btn-primary')).toHaveCount(1);
   await expect(modal.getByRole('button',{name:'開始用',exact:true})).toHaveClass(/btn-primary/);
   await expect(modal.getByRole('link',{name:'查看原作 Repo ↗',exact:true})).toHaveAttribute('href',book.upstream_url);
-  await expect(modal.getByRole('button',{name:'GitHub 連結尚未啟用',exact:true})).toBeDisabled();
+  await expect(modal.locator('.github-star-control')).toHaveCount(0);
+  await expect(modal.getByRole('button',{name:'GitHub 連結尚未啟用',exact:true})).toHaveCount(0);
   const practice=modal.locator('.skill-intro-usage-notes');
   await expect(practice).not.toHaveAttribute('open');
   await practice.locator('summary').click();
@@ -265,7 +276,6 @@ test('every bookshelf uses compact illustrated rows with full copy, live counts 
   async function check(card:Locator,width:number){
     await page.setViewportSize({width,height:900});await card.scrollIntoViewIfNeeded();
     await expect(card.locator('.skill-library-purpose')).toHaveText(book.guide!.beginner.purpose);
-    await expect(card.locator('.github-star-count,.github-fork-count')).toHaveText(['127','18']);
     const sizes=await card.evaluate(element=>{
       const cover=element.querySelector('.skill-library-heading > img')!,heading=element.querySelector('.skill-library-copy')!,purpose=element.querySelector<HTMLElement>('.skill-library-purpose')!,title=element.querySelector<HTMLElement>('.skill-library-title')!;
       return {cover:cover.getBoundingClientRect().toJSON(),heading:heading.getBoundingClientRect().toJSON(),cardHeight:element.getBoundingClientRect().height,purposeHeight:purpose.clientHeight,purposeScroll:purpose.scrollHeight,titleHeight:title.clientHeight,titleScroll:title.scrollHeight,font:parseFloat(getComputedStyle(purpose).fontSize),overflow:element.scrollWidth>element.clientWidth};
@@ -278,11 +288,16 @@ test('every bookshelf uses compact illustrated rows with full copy, live counts 
     await expect(card.locator('.skill-library-result p')).toHaveText(book.guide!.first_result);
     expect(await card.locator('.skill-library-result p').evaluate(element=>element.scrollHeight<=element.clientHeight+1)).toBe(true);
     await expect(card.getByRole('button',{name:/^(閱讀|預覽)技能書$/})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    for(const control of [card.getByRole('button',{name:/^(閱讀|預覽)技能書$/}),card.getByRole('button',{name:'分享技能',exact:true})])expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const moreSummary=card.locator('.skill-card-more > summary');
+    for(const control of [card.getByRole('button',{name:/^(閱讀|預覽)技能書$/}),moreSummary])expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await moreSummary.click();
+    await expect(card.locator('.github-star-count,.github-fork-count')).toHaveText(['127','18']);
+    expect((await card.getByRole('button',{name:'分享技能',exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await moreSummary.click();
   }
   const card=library.locator('article[data-book-id="social-post"]');
   for(const width of [320,390,1440]){await check(card,width);await card.screenshot({path:`test-results/skill-shelf-compact-${width}.png`});}
-  const more=card.locator('.github-metrics-details');await expect(more).not.toHaveAttribute('open');await expect(more.locator('dd').first()).not.toBeVisible();await more.locator('summary').click();await expect(more.locator('dd')).toHaveText(['4','6','2026/9/20']);await expect(more.getByText('數據更新',{exact:false})).toBeVisible();await more.locator('summary').click();
+  const more=card.locator('.skill-card-more');await expect(more).not.toHaveAttribute('open');await expect(more.locator('dd').first()).not.toBeVisible();await more.locator('> summary').click();await expect(more.locator('dd')).toHaveText(['4','6','2026/9/20']);await expect(more.getByText('數據更新',{exact:false})).toBeVisible();await more.locator('> summary').click();
   await page.setViewportSize({width:320,height:900});await card.getByRole('button',{name:/^(閱讀|預覽)技能書$/}).click();const modal=page.getByRole('dialog',{name:book.title,exact:true});await modal.locator('.skill-intro-usage-notes > summary').click();expect((await modal.locator('.skill-intro-art').boundingBox())!.height).toBeLessThanOrEqual(48);await expect(modal.locator('.skill-intro-usage-notes .skill-intro-purpose')).toHaveText(book.guide!.beginner.purpose);expect(await modal.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);await page.screenshot({path:'test-results/skill-dialog-compact-phone.png'});await page.keyboard.press('Escape');
   await navigate(page, '會員首頁');await navigate(page, '技能書架');
   await page.getByRole('button',{name:/^已解鎖(?: · \d+)?$/}).click();await check(page.locator('.community-library article[data-book-id="social-post"]'),320);
@@ -305,7 +320,7 @@ test('cards in one shelf row share a height and keep the GitHub footer on one li
         const rows=await shelf.locator('article.skill-library-book').evaluateAll(cards=>{
           const byTop=new Map<number,{height:number;footer:number}[]>();
           for(const card of cards){
-            const box=card.getBoundingClientRect(),footer=card.querySelector(':scope > .github-book-social'),key=Math.round(box.top);
+            const box=card.getBoundingClientRect(),footer=card.querySelector(':scope > .skill-library-actions'),key=Math.round(box.top);
             byTop.set(key,[...(byTop.get(key)??[]),{height:box.height,footer:footer?footer.getBoundingClientRect().bottom:NaN}]);
           }
           return [...byTop.values()];
@@ -347,12 +362,12 @@ test('a published member work is packaged as a community skill book like every c
   await expect(cover).toHaveAttribute('src',item.cover_url);
   await cover.scrollIntoViewIfNeeded();
   await expect.poll(()=>cover.evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
-  await expect(card.getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',repo);
-  await expect(card.getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',`${repo}/fork`);
+  await expect(card.getByRole('link',{name:'前往 GitHub 加星 ↗',exact:true})).toHaveAttribute('href',repo);
+  await expect(card.getByRole('link',{name:'複製專案 ↗',exact:true})).toHaveAttribute('href',`${repo}/fork`);
   for(const width of [320,390,1440]){
     await page.setViewportSize({width,height:900});await card.scrollIntoViewIfNeeded();
     const box=(await cover.boundingBox())!;expect(box.width).toBeLessThanOrEqual(width<=600?64:80);
-    for(const control of [card.getByRole('button',{name:'閱讀技能書',exact:true}),card.getByRole('button',{name:'分享技能',exact:true}),card.getByRole('link',{name:'到 GitHub Star ↗',exact:true})])expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    for(const control of [card.getByRole('button',{name:'閱讀技能書',exact:true}),card.getByRole('button',{name:'分享技能',exact:true}),card.getByRole('link',{name:'前往 GitHub 加星 ↗',exact:true})])expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
   const trigger=card.getByRole('button',{name:'閱讀技能書',exact:true});await trigger.click();
@@ -457,11 +472,13 @@ test('reading-first library gives newcomers a clear entry and recoverable search
   const search=library.getByRole('searchbox',{name:'搜尋技能書',exact:true});
   await search.fill('no-such-skill-unique-fixture');
   await expect(library.locator('article.skill-library-book')).toHaveCount(0);
+  await openFilterDrawer(library);
   await library.getByRole('button',{name:'清除篩選',exact:true}).click();
   await expect(search).toHaveValue('');await expect(search).toBeFocused();
+  await expect(library.locator('article.skill-library-book')).toHaveCount(20);
+  await library.locator('> .actions').getByRole('button',{name:'更多',exact:true}).click();
   await expect(library.locator('article.skill-library-book')).toHaveCount(29);
-  await page.getByRole('link',{name:'探索社群技能書 ↓',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'社群技能書',exact:true})).toBeFocused();
+  await expect(page.getByRole('link',{name:'探索社群技能書 ↓'})).toHaveCount(0);
   const community=page.locator('.community-skill-library'),communitySearch=community.getByRole('searchbox',{name:'搜尋社群技能書',exact:true});
   await communitySearch.fill('no-such-skill-unique-fixture');
   await expect(community.getByText('沒有符合的社群技能書。試試另一個關鍵字或用途。',{exact:true})).toBeVisible();
@@ -554,6 +571,7 @@ for(const width of [1280,390])test(`both shelves combine content uses, business 
     [guild,'搜尋技能書','social-post','文字','內容與行銷',29,'技能書','原作資源'],
     [community,'搜尋社群技能書','photo-border-remover','圖片','內容與行銷',26,'社群技能書','社群原作資源'],
   ] as const){
+    await openFilterDrawer(shelf);
     const search=shelf.getByRole('searchbox',{name:searchLabel,exact:true});
     const uses=shelf.getByRole('combobox',{name:'依內容與技術用途篩選',exact:true});
     const business=shelf.getByRole('combobox',{name:'依工坊用途篩選',exact:true});
@@ -726,14 +744,17 @@ test('guild book with null-full_name original_cache uses live metrics, upstream 
   }));
   const library=await openLibrary(page);
   const card=library.locator('article[data-book-id="security-scanner"]');
-  await card.locator('.github-book-social').scrollIntoViewIfNeeded();
-  await expect(card.locator('.github-star-count')).toHaveText('777');
-  await card.locator('.github-metrics-details > summary').click();
+  await card.locator('.skill-card-more > summary').click();
+  await expect(card.locator('.github-star-control')).toHaveCount(0);
+  await expect(card.locator('.github-fork-count,.github-book-metrics dd')).toHaveText(['12','3','4',new Date('2026-10-01T00:00:00Z').toLocaleDateString('zh-TW')]);
   await expect(card.locator('.github-social-source a').nth(0)).toHaveAttribute('href',baseBook.upstream_url!);
   await expect(card.locator('.github-social-source a').nth(1)).toHaveAttribute('href',`https://github.com/${upstreamOwner}`);
+  await card.locator('.skill-card-more > summary').click();
   await card.getByRole('button',{name:'預覽技能書',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:baseBook.title,exact:true});
+  await expect(dialog.locator('.skill-intro-original-head')).toContainText('★ 654');
   await dialog.locator('.skill-intro-usage-notes > summary').click();
-  await expect(dialog.locator('.skill-intro-usage-notes .github-star-count')).toHaveText('654');
+  await expect(dialog.locator('.skill-intro-usage-notes .github-star-control')).toHaveCount(0);
+  await expect(dialog.locator('.skill-intro-usage-notes .github-fork-count')).toHaveText('—');
   await dialog.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();
 });

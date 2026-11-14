@@ -13,7 +13,7 @@ for(const width of [1440,390,320])test(`skill hero exposes Star Fork share and a
  await page.route('**/api/v1/skills/video-autopilot/author-card',route=>{reads++;return route.fulfill({json:publicAuthorFixture});});
  await page.goto('/development/skills/video-autopilot?intro=63');
  const hero=page.locator('.public-skill-entry'),author=hero.locator('[data-skill-author]'),share=hero.locator('[data-share-launch]');
- for(const control of [author,hero.getByRole('link',{name:'開始用'}),hero.getByRole('link',{name:'到 GitHub Star ↗'}),share,hero.getByRole('link',{name:'查看原作 Repo ↗'})]){
+ for(const control of [author,hero.getByRole('link',{name:'開始用'}),hero.getByRole('link',{name:'前往 GitHub 加星 ↗'}),share,hero.getByRole('link',{name:'查看原作 Repo ↗'})]){
   await expect(control).toBeVisible();const box=await control.boundingBox();expect(box!.height).toBeGreaterThanOrEqual(44);expect(box!.y).toBeGreaterThanOrEqual(0);expect(box!.y+box!.height).toBeLessThanOrEqual(844);
  }
  expect(reads).toBe(0);expect(await page.evaluate(()=>scrollY)).toBe(0);
@@ -80,7 +80,8 @@ test('a late author response cannot replace a reopened card',async({page})=>{
 test('development tools follow the current page on desktop and phone without a duplicate footer',async({page})=>{
  await page.goto('/');
  await expect(page.locator('.development-context')).toHaveCount(0);
- await openPageTools(page); await page.locator('.login-card-heading').getByRole('button',{name:'參與編修'}).click();
+ await page.locator('.login-more > summary').click();
+ await openPageTools(page); await page.locator('.login-more-tools').getByRole('button',{name:'參與編修'}).click();
  let guide=page.getByRole('dialog',{name:/參與編修/});
  await expect(guide.getByRole('link',{name:'給 Agent 的文字版 ↗'})).toHaveAttribute('href','/development/registration.md');
  await guide.getByRole('button',{name:'關閉'}).click();

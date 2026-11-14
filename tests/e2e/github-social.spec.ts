@@ -14,7 +14,9 @@ async function book(page:Page){
   await navigate(page, '技能書架');
   await page.getByRole('button',{name:'未解鎖',exact:true}).click();
   const library=page.locator('.community-library');await library.getByLabel('搜尋技能書',{exact:true}).fill('社群貼文');
-  const card=library.locator('article[data-book-id="social-post"]');await card.scrollIntoViewIfNeeded();return card;
+  const card=library.locator('article[data-book-id="social-post"]');
+  await card.locator('.skill-card-more > summary').click();
+  await card.locator('.github-book-social').scrollIntoViewIfNeeded();return card;
 }
 
 test('project author Follow is explicit, confirmed and offers reauthorization on permission denial',async({page})=>{
@@ -64,9 +66,9 @@ for(const enabled of [false,true]){
     const gate=gates.first();await expect(gate).toBeVisible();
     await expect(gate.getByText(/未加星或無法確認時不會放行/)).toBeVisible();
     await gate.locator('.github-book-social').first().scrollIntoViewIfNeeded();
-    const star=gate.getByRole('button',{name:'Star',exact:true}).first();
+    const star=gate.getByRole('button',{name:'加星',exact:true}).first();
     await expect(star).toBeEnabled();expect(writes).toBe(0);
-    await star.click();await expect(gate.getByRole('button',{name:'取消 Star',exact:true}).first()).toHaveAttribute('aria-pressed','true');
+    await star.click();await expect(gate.getByRole('button',{name:'取消加星',exact:true}).first()).toHaveAttribute('aria-pressed','true');
     expect(writes).toBe(1);
   });
 }
@@ -85,27 +87,25 @@ test('visible book widgets share actual metrics and confirmed Star state across 
   // All guild dialogs exist in the DOM, but closed dialogs must not contact GitHub.
   await navigate(page, '職業公會');await expect(page.getByRole('button',{name:'供應端工作台',exact:true})).toBeVisible();expect(reads.size).toBe(0);
   const card=await book(page),widget=card.locator('.github-book-social');
-  await expect(widget.getByRole('button',{name:'Star',exact:true})).toBeEnabled();
+  await expect(widget.getByRole('button',{name:'加星',exact:true})).toBeEnabled();
   await expect(widget.locator('.github-star-count,.github-fork-count,.github-book-metrics dd')).toHaveText(['127','18','4','6','2026/9/20']);
   await expect(widget.locator('.github-star-icon')).toHaveText('☆');
-  await widget.locator('.github-metrics-details > summary').click();
   await expect(widget.getByRole('link',{name:'原作者 GitHub ↗',exact:true})).toHaveAttribute('href',original);
-  await expect(widget.getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',`${original}/fork`);
-  await widget.locator('.github-metrics-details > summary').click();
+  await expect(widget.getByRole('link',{name:'複製專案 ↗',exact:true})).toHaveAttribute('href',`${original}/fork`);
   expect(accounts).toBe(1);expect(reads.get('social-post')).toBe(1);expect(reads.size).toBeLessThan(22);
   const opener=card.getByRole('button',{name:'預覽技能書',exact:true});await opener.click();
   const modal=page.getByRole('dialog',{name:'Hao 社群貼文技能書',exact:true});
-  await expect(modal.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(starReads).toBe(1);expect(reads.get('social-post')).toBe(1);
-  await expect(modal.getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',`${original}/fork`);
+  await expect(modal.getByRole('button',{name:'加星',exact:true})).toBeEnabled();expect(starReads).toBe(1);expect(reads.get('social-post')).toBe(1);
+  await expect(modal.getByRole('link',{name:'複製專案 ↗',exact:true})).toHaveAttribute('href',`${original}/fork`);
   await modal.locator('.skill-intro-primary-actions .github-metrics-details > summary').click();
-  await expect(modal.getByRole('link',{name:'追蹤專案（Watch）↗',exact:true})).toHaveAttribute('href',original);
-  await expect(modal.getByRole('link',{name:'Follow 原作者 ↗',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
+  await expect(modal.getByRole('link',{name:'追蹤專案通知 ↗',exact:true})).toHaveAttribute('href',original);
+  await expect(modal.getByRole('link',{name:'追蹤原作者 ↗',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
   await modal.locator('.skill-intro-primary-actions .github-metrics-details > summary').click();
-  await modal.locator('.skill-intro-primary-actions .github-star-count').click();await expect(modal.getByRole('button',{name:'取消 Star',exact:true})).toHaveAttribute('aria-pressed','true');await expect(modal.locator('.skill-intro-primary-actions .github-star-icon')).toHaveText('★');
+  await modal.locator('.skill-intro-primary-actions .github-star-count').click();await expect(modal.getByRole('button',{name:'取消加星',exact:true})).toHaveAttribute('aria-pressed','true');await expect(modal.locator('.skill-intro-primary-actions .github-star-icon')).toHaveText('★');
   // The provider's public count still says 127; a local click must not invent 128.
   await expect(modal.locator('.skill-intro-primary-actions .github-star-count')).toHaveText('127');
   await page.keyboard.press('Escape');await expect(modal).not.toBeVisible();await expect(opener).toBeFocused();
-  const cancelStar=widget.getByRole('button',{name:'取消 Star',exact:true});await expect(cancelStar).toBeEnabled();await cancelStar.focus();await expect(cancelStar).toBeFocused();await page.keyboard.press('Space');await expect(widget.getByRole('button',{name:'Star',exact:true})).toHaveAttribute('aria-pressed','false');await expect(widget.locator('.github-star-icon')).toHaveText('☆');
+  const cancelStar=widget.getByRole('button',{name:'取消加星',exact:true});await expect(cancelStar).toBeEnabled();await cancelStar.focus();await expect(cancelStar).toBeFocused();await page.keyboard.press('Space');await expect(widget.getByRole('button',{name:'加星',exact:true})).toHaveAttribute('aria-pressed','false');await expect(widget.locator('.github-star-icon')).toHaveText('☆');
   expect(writes).toEqual([{starred:true,confirmed:true},{starred:false,confirmed:true}]);
   await page.setViewportSize({width:320,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
@@ -114,12 +114,12 @@ test('a delayed dialog close event does not steal focus from the next keyboard a
   await page.route('**/api/v1/me/github',route=>route.fulfill({json:{configured:true,connected:true,github_user:{id:'synthetic-focus',login:'synthetic-focus'}}}));
   await page.route('**/api/v1/github/books/*/metrics',route=>route.fulfill({json:metrics}));
   await page.route('**/api/v1/me/github/books/*/star',route=>route.fulfill({json:{book_id:'social-post',starred:false,connected:true}}));
-  await login(page);const card=await book(page);await expect(card.getByRole('button',{name:'Star',exact:true})).toBeEnabled();
+  await login(page);const card=await book(page);await expect(card.getByRole('button',{name:'加星',exact:true})).toBeEnabled();
   await card.getByRole('button',{name:'預覽技能書',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();
   // Native close queues an event. A member may already have moved focus by the
   // time it is delivered; that late event must not restore the opener again.
   const retained=await page.evaluate(async()=>{
-    const modal=document.querySelector<HTMLDialogElement>('dialog[open]')!,next=document.querySelector<HTMLButtonElement>('article[data-book-id="social-post"] > .github-book-social .github-star-control')!;
+    const modal=document.querySelector<HTMLDialogElement>('dialog[open]')!,next=document.querySelector<HTMLButtonElement>('article[data-book-id="social-post"] .skill-card-more .github-star-control')!;
     await new Promise<void>(resolve=>{
       modal.addEventListener('close',()=>setTimeout(resolve,0),{once:true});
       modal.querySelector<HTMLButtonElement>('button[aria-label="關閉技能書介紹"]')!.click();
@@ -127,16 +127,17 @@ test('a delayed dialog close event does not steal focus from the next keyboard a
     });
     return document.activeElement===next;
   });
-  expect(retained).toBe(true);await expect(page.getByRole('dialog')).not.toBeVisible();await expect(card.getByRole('button',{name:'Star',exact:true})).toBeFocused();
+  expect(retained).toBe(true);await expect(page.getByRole('dialog')).not.toBeVisible();await expect(card.getByRole('button',{name:'加星',exact:true})).toBeFocused();
 });
 
 test('unconfigured and unavailable GitHub states never fabricate counts or offer a fake connection',async({page})=>{
   await page.route('**/api/v1/me/github',route=>route.fulfill({json:{configured:false,connected:false,github_user:null}}));
   await page.route('**/api/v1/github/books/*/metrics',route=>route.fulfill({json:{...metrics,stargazers_count:null,forks_count:null,open_issues_count:null,subscribers_count:null,pushed_at:null,language:null,checked_at:null,error:'github_unavailable'}}));
   await login(page);const card=await book(page);
-  await expect(card.getByRole('button',{name:'GitHub 連結尚未啟用',exact:true})).toBeDisabled();
-  await expect(card.locator('.github-star-count,.github-fork-count,.github-book-metrics dd')).toHaveText(['—','—','—','—','—']);
-  await expect(card.getByText('GitHub Star 尚未啟用',{exact:true})).toBeVisible();
+  await expect(card.locator('.github-star-control')).toHaveCount(0);
+  await expect(card.getByRole('button',{name:'GitHub 連結尚未啟用',exact:true})).toHaveCount(0);
+  await expect(card.locator('.github-fork-count,.github-book-metrics dd')).toHaveText(['—','—','—','—']);
+  await expect(card.getByText('GitHub Star 尚未啟用',{exact:true})).toHaveCount(0);
   await expect(card.getByText('GitHub 數據暫時無法讀取',{exact:true})).toBeVisible();
   await expect(card.getByRole('button',{name:'重讀數據',exact:true})).toBeEnabled();
 });
@@ -148,9 +149,9 @@ test('GitHub connect navigates to real authorization and returning never stars a
   await page.route('**/api/v1/me/github/books/*/star',route=>{if(route.request().method()==='POST')starWrites++;return route.fulfill({json:{book_id:'social-post',starred:false,connected}});});
   await page.route('**/api/v1/me/github/connect',route=>{connects.push(route.request().postDataJSON());expect(route.request().headers()['x-csrf-token']).toBeTruthy();return route.fulfill({json:{authorization_url:'https://github.com/login/oauth/authorize?client_id=synthetic-test-client&state=synthetic-test-state'}});});
   await page.route('https://github.com/login/oauth/authorize?*',route=>route.fulfill({contentType:'text/html',body:'<p>Synthetic authorization page</p>'}));
-  await login(page);const card=await book(page);await expect(card.getByRole('button',{name:'連結 GitHub 後 Star',exact:true})).toBeEnabled();await card.locator('.github-star-count').click();
+  await login(page);const card=await book(page);await expect(card.getByRole('button',{name:'連結 GitHub 後加星',exact:true})).toBeEnabled();await card.locator('.github-star-count').click();
   await expect(page).toHaveURL(/^https:\/\/github\.com\/login\/oauth\/authorize\?/);expect(connects).toEqual([{return_to:'#explore/resources'}]);expect(starWrites).toBe(0);
-  connected=true;await page.goto('/#skills');const returned=await book(page);await expect(returned.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(starWrites).toBe(0);
+  connected=true;await page.goto('/#skills');const returned=await book(page);await expect(returned.getByRole('button',{name:'加星',exact:true})).toBeEnabled();expect(starWrites).toBe(0);
 });
 
 test('failed GitHub reads and writes preserve platform login and private state does not cross member sessions',async({page})=>{
@@ -164,10 +165,10 @@ test('failed GitHub reads and writes preserve platform login and private state d
   });
   await login(page);const card=await book(page);await expect(card.getByRole('alert')).toContainText('GitHub 連結需要重新確認');await expect(card.getByRole('button',{name:'連結／重新授權 GitHub',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();
   await expect(card.getByText(/上次取得的數據/)).toBeVisible();
-  brokenRead=false;await card.getByRole('button',{name:'重讀 Star 狀態',exact:true}).click();await expect(card.getByRole('button',{name:'Star',exact:true})).toBeEnabled();
-  await card.getByRole('button',{name:'Star',exact:true}).click();await expect(card.getByRole('alert')).toContainText('Star 操作未確認');await expect(card.getByRole('button',{name:'連結／重新授權 GitHub',exact:true})).toHaveCount(0);await expect(card.getByRole('button',{name:'Star',exact:true})).toHaveAttribute('aria-pressed','false');await expect(card.locator('.github-star-count')).toHaveText('127');
-  starred=true;await card.getByRole('button',{name:'重讀 Star 狀態',exact:true}).click();await expect(card.getByRole('button',{name:'取消 Star',exact:true})).toBeEnabled();
-  await signOut(page);member='second';starred=false;await login(page,'client@local.test');const second=await book(page);await expect(second.getByRole('button',{name:'Star',exact:true})).toHaveAttribute('aria-pressed','false');await expect(second.getByRole('button',{name:'取消 Star',exact:true})).toHaveCount(0);
+  brokenRead=false;await card.getByRole('button',{name:'重讀加星狀態',exact:true}).click();await expect(card.getByRole('button',{name:'加星',exact:true})).toBeEnabled();
+  await card.getByRole('button',{name:'加星',exact:true}).click();await expect(card.getByRole('alert')).toContainText('Star 操作未確認');await expect(card.getByRole('button',{name:'連結／重新授權 GitHub',exact:true})).toHaveCount(0);await expect(card.getByRole('button',{name:'加星',exact:true})).toHaveAttribute('aria-pressed','false');await expect(card.locator('.github-star-count')).toHaveText('127');
+  starred=true;await card.getByRole('button',{name:'重讀加星狀態',exact:true}).click();await expect(card.getByRole('button',{name:'取消加星',exact:true})).toBeEnabled();
+  await signOut(page);member='second';starred=false;await login(page,'client@local.test');const second=await book(page);await expect(second.getByRole('button',{name:'加星',exact:true})).toHaveAttribute('aria-pressed','false');await expect(second.getByRole('button',{name:'取消加星',exact:true})).toHaveCount(0);
 });
 
 test('account disconnect clears shared Star state and distinguishes local removal from GitHub grant revocation',async({page})=>{
@@ -176,13 +177,13 @@ test('account disconnect clears shared Star state and distinguishes local remova
   await page.route('**/api/v1/github/books/*/metrics',route=>route.fulfill({json:metrics}));
   await page.route('**/api/v1/me/github/books/*/star',route=>route.fulfill({json:{book_id:'social-post',starred:true,connected}}));
   await page.route('**/api/v1/me/github/disconnect',route=>{expect(route.request().method()).toBe('POST');expect(route.request().headers()['x-csrf-token']).toBeTruthy();connected=false;return route.fulfill({json:{connected:false,provider_revoked:false}});});
-  await login(page);const card=await book(page);await expect(card.getByRole('button',{name:'取消 Star',exact:true})).toBeEnabled();
+  await login(page);const card=await book(page);await expect(card.getByRole('button',{name:'取消加星',exact:true})).toBeEnabled();
   await navigate(page, '我的名片');await openAccountSettings(page,'帳號與安全','連結 GitHub 與其他工具');const panel=page.locator('.github-connection-panel');
   await expect(panel).toContainText('@synthetic-owner');await panel.getByRole('button',{name:'解除 GitHub 連結',exact:true}).click();
   await expect(panel.getByRole('status')).toContainText('已解除工坊連結；可到 GitHub 設定撤銷授權。');
   await expect(panel.getByRole('link',{name:'GitHub 授權設定 ↗',exact:true})).toHaveAttribute('href','https://github.com/settings/apps/authorizations');
   await expect(panel.getByRole('button',{name:'連結 GitHub',exact:true})).toBeEnabled();
-  const disconnected=await book(page);await expect(disconnected.getByRole('button',{name:'連結 GitHub 後 Star',exact:true})).toBeEnabled();await expect(disconnected.getByRole('button',{name:'取消 Star',exact:true})).toHaveCount(0);
+  const disconnected=await book(page);await expect(disconnected.getByRole('button',{name:'連結 GitHub 後加星',exact:true})).toBeEnabled();await expect(disconnected.getByRole('button',{name:'取消加星',exact:true})).toHaveCount(0);
 });
 
 test('a denied Star shows the permission problem without claiming an outage, retrying writes or changing counters',async({page})=>{
@@ -196,11 +197,11 @@ test('a denied Star shows the permission problem without claiming an outage, ret
     return route.fulfill({json:{book_id:'social-post',connected:true,starred:false}});
   });
   await login(page);const card=await book(page);
-  await expect(card.getByRole('button',{name:'Star',exact:true})).toBeEnabled();await card.locator('.github-star-count').click();
+  await expect(card.getByRole('button',{name:'加星',exact:true})).toBeEnabled();await card.locator('.github-star-count').click();
   await expect(card.getByRole('alert')).toHaveText('目前無法透過平台替這個 Repo 按星，請前往原作 GitHub 操作。');
   await expect(card.getByRole('alert')).not.toContainText(/暫時|稍後|github_permission_required/);
-  await expect(card.getByRole('button',{name:'Star',exact:true})).toHaveAttribute('aria-pressed','false');await expect(card.locator('.github-star-count')).toHaveText('127');
-  expect(writes).toBe(1);await expect(card.getByRole('link',{name:'前往 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();
+  await expect(card.getByRole('button',{name:'加星',exact:true})).toHaveAttribute('aria-pressed','false');await expect(card.locator('.github-star-count')).toHaveText('127');
+  expect(writes).toBe(1);await expect(card.getByRole('link',{name:'前往 GitHub 加星 ↗',exact:true})).toHaveAttribute('href',original);await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();
 });
 
 test('a denied Star offers GitHub re-authorization once and does not retry the write',async({page})=>{
@@ -220,10 +221,10 @@ test('a denied Star offers GitHub re-authorization once and does not retry the w
   });
   await login(page);const card=await book(page);
   await expect(card.getByRole('button',{name:'連結／重新授權 GitHub',exact:true})).toHaveCount(0);
-  await expect(card.getByRole('button',{name:'Star',exact:true})).toBeEnabled();
+  await expect(card.getByRole('button',{name:'加星',exact:true})).toBeEnabled();
   await card.locator('.github-star-count').click();
   await expect(card.getByRole('alert')).toHaveText('目前無法透過平台替這個 Repo 按星，請前往原作 GitHub 操作。');
-  await expect(card.getByRole('link',{name:'前往 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
+  await expect(card.getByRole('link',{name:'前往 GitHub 加星 ↗',exact:true})).toHaveAttribute('href',original);
   const reauth=card.getByRole('button',{name:'連結／重新授權 GitHub',exact:true});
   await expect(reauth).toBeVisible();
   await page.setViewportSize({width:390,height:844});
@@ -237,7 +238,7 @@ test('a denied Star offers GitHub re-authorization once and does not retry the w
   expect(writes).toBe(1);
   await page.goto('/#skills');
   const returned=await book(page);
-  await expect(returned.getByRole('button',{name:'Star',exact:true})).toBeEnabled();
+  await expect(returned.getByRole('button',{name:'加星',exact:true})).toBeEnabled();
   await expect(returned.getByRole('button',{name:'連結／重新授權 GitHub',exact:true})).toHaveCount(0);
   expect(writes).toBe(1);
 });
@@ -255,15 +256,15 @@ test('public skill first-viewport actions support Star, Fork, sharing and the au
   await login(page);await page.goto('/development/skills/social-post');
   const social=page.locator('[data-skill-social="social-post"]');
   await expect(social).toBeInViewport();
-  await expect(social.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(writes).toEqual([]);
-  await social.locator('.github-star-count').click();await expect(social.getByRole('button',{name:'取消 Star',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(social.getByRole('button',{name:'加星',exact:true})).toBeEnabled();expect(writes).toEqual([]);
+  await social.locator('.github-star-count').click();await expect(social.getByRole('button',{name:'取消加星',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(page).toHaveURL(/\/development\/skills\/social-post$/);await expect(social.locator('.github-star-count')).toHaveText('127');
-  await social.getByRole('button',{name:'取消 Star',exact:true}).click();await expect(social.getByRole('button',{name:'Star',exact:true})).toHaveAttribute('aria-pressed','false');
+  await social.getByRole('button',{name:'取消加星',exact:true}).click();await expect(social.getByRole('button',{name:'加星',exact:true})).toHaveAttribute('aria-pressed','false');
   expect(writes).toEqual([{starred:true,confirmed:true},{starred:false,confirmed:true}]);
   await page.setViewportSize({width:320,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  const fork=social.getByRole('link',{name:'Fork 專案 ↗',exact:true});
+  const fork=social.getByRole('link',{name:'複製專案 ↗',exact:true});
   const author=page.locator('[data-skill-author]'),share=page.locator('.public-skill-entry [data-share-launch]');
-  for(const control of [social.getByRole('button',{name:'Star',exact:true}),fork,author,share]){
+  for(const control of [social.getByRole('button',{name:'加星',exact:true}),fork,author,share]){
     await expect(control).toBeInViewport();expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
   const forkOpened=page.waitForEvent('popup');await fork.click();const forkPage=await forkOpened;
@@ -287,11 +288,11 @@ test('public skill OAuth returns to the same book and connecting never submits a
   await page.route('**/api/v1/me/github/complete',route=>{expect(route.request().headers()['x-csrf-token']).toBeTruthy();connected=true;return route.fulfill({json:{return_to:'/development/skills/social-post'}});});
   await login(page);await page.goto('/development/skills/social-post');
   await expect(page.locator('[data-skill-social="social-post"]')).toBeInViewport();
-  await page.getByRole('button',{name:'連結 GitHub 後 Star',exact:true}).click();await expect(page).toHaveURL(/^https:\/\/github.com\/login\/oauth\/authorize/);
+  await page.getByRole('button',{name:'連結 GitHub 後加星',exact:true}).click();await expect(page).toHaveURL(/^https:\/\/github.com\/login\/oauth\/authorize/);
   expect(connects).toEqual([{return_to:'/development/skills/social-post'}]);expect(writes).toBe(0);
   await page.goto('/github/callback?code=synthetic&state=synthetic');await expect(page).toHaveURL(/\/development\/skills\/social-post$/);
   await expect(page.locator('[data-skill-social="social-post"]')).toBeInViewport();
-  await expect(page.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(writes).toBe(0);
+  await expect(page.getByRole('button',{name:'加星',exact:true})).toBeEnabled();expect(writes).toBe(0);
 });
 
 for(const target of ['#join/supplier','#join/showcase','#join/tasks','#explore/resources','#me/settings?view=connections','#shares/12345678-1234-4234-8234-123456789abc?via=abcdefghij','#guilds/guild_ai_vibe/tools/work'])test(`onboarding OAuth callback returns to ${target} without Star writes`,async({page})=>{
@@ -313,8 +314,8 @@ test('public Star, Fork, sharing and author source stay available without login 
   const social=page.locator('[data-skill-social="social-post"]');
   await expect(social).toBeInViewport();
   await expect(social.locator('.github-book-social')).toBeVisible();
-  await expect(social.getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
-  await expect(social.getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
+  await expect(social.getByRole('link',{name:'前往 GitHub 加星 ↗',exact:true})).toHaveAttribute('href',original);
+  await expect(social.getByRole('link',{name:'複製專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
   await page.locator('[data-skill-author]').click();const card=page.getByRole('dialog',{name:'自由工坊名片',exact:true});
   await expect(card).toBeVisible();await expect(card.getByRole('link',{name:'查看原作 GitHub ↗',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
   await card.getByRole('button',{name:'關閉作者名片',exact:true}).click();

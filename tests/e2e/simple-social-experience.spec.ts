@@ -28,8 +28,8 @@ test('home and navigation reveal secondary functions on demand and page tools re
   await page.goBack();await expect(page).toHaveURL(/#explore$/);await expect(page.getByRole('heading',{name:'探索',level:1})).toBeVisible();
   await page.goBack();await expect(page).toHaveURL(homeUrl);await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await openExploreFeatureSearch(page);
-  await page.getByLabel('搜尋功能').fill('聊天室');
-  await page.locator('.place-feature-search').getByRole('region',{name:'功能搜尋結果'}).getByRole('button',{name:'我的訊息',exact:true}).click();
+  await page.getByRole('searchbox',{name:'關鍵字',exact:true}).fill('聊天室');
+  await page.getByRole('region',{name:'功能搜尋結果',exact:true}).getByRole('button',{name:'我的訊息',exact:true}).click();
   await expect(page.locator('.floating-message-panel')).toBeVisible();
 });
 

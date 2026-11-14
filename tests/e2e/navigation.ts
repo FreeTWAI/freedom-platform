@@ -229,9 +229,10 @@ export async function openExploreFeatureSearch(page: Page) {
     await explore.click();
     if(resolvePortalRoute(new URL(page.url()).hash).hash.split('?')[0]!=='#explore')return;
   }
+  const unified=page.getByRole('region',{name:'社群內容搜尋條件',exact:true});
   const lookup=page.locator('.place-feature-search');
-  await expect(lookup).toBeVisible();
-  if(!await lookup.evaluate(element=>(element as HTMLDetailsElement).open))await lookup.locator(':scope > summary').click();
+  await expect(unified.or(lookup)).toBeVisible();
+  if(await lookup.isVisible()&&!await lookup.evaluate(element=>(element as HTMLDetailsElement).open))await lookup.locator(':scope > summary').click();
 }
 
 /** Assert an existing task's canonical address and its current place/tool heading. */
