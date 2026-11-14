@@ -10,6 +10,22 @@ export const agentOperations = [
     "example": {}
   },
   {
+    "id": "guilds.list",
+    "method": "GET",
+    "route": "/api/v1/guilds",
+    "scope": "read",
+    "title": "查看公會",
+    "screen": "guilds"
+  },
+  {
+    "id": "tools.list",
+    "method": "GET",
+    "route": "/api/v1/public/guilds/:guild/tools",
+    "scope": "read",
+    "title": "查看公會工具",
+    "screen": "guilds"
+  },
+  {
     "id": "events.list",
     "method": "GET",
     "route": "/api/v1/events",
@@ -172,6 +188,26 @@ export const agentOperations = [
     "screen": "notifications"
   },
   {
+    "id": "notifications.mark_read",
+    "method": "POST",
+    "route": "/api/v1/me/notifications/:id/read",
+    "scope": "read",
+    "title": "標成已讀",
+    "screen": "notifications",
+    "example": {}
+  },
+  {
+    "id": "notifications.mark_all_read",
+    "method": "POST",
+    "route": "/api/v1/me/inbox/read-all",
+    "scope": "read",
+    "title": "通知全部標成已讀",
+    "screen": "notifications",
+    "example": {
+      "scope": "notifications"
+    }
+  },
+  {
     "id": "agent.events",
     "method": "GET",
     "route": "/api/v1/agent/events",
@@ -253,5 +289,194 @@ export const agentOperations = [
     "scope": "read",
     "title": "我的分享成果",
     "screen": "credit"
+  },
+  {
+    "id": "posts.list",
+    "method": "GET",
+    "route": "/api/v1/social-posts",
+    "scope": "read",
+    "title": "查看貼文",
+    "screen": "posts"
+  },
+  {
+    "id": "posts.comments",
+    "method": "GET",
+    "route": "/api/v1/social-posts/:id/comments",
+    "scope": "read",
+    "title": "查看貼文留言",
+    "screen": "posts"
+  },
+  {
+    "id": "posts.note",
+    "method": "POST",
+    "route": "/api/v1/social-posts/notes",
+    "scope": "share",
+    "title": "發短文",
+    "screen": "posts",
+    "publicItem": true,
+    "example": {
+      "text": "今天完成了新作品"
+    }
+  },
+  {
+    "id": "posts.link",
+    "method": "POST",
+    "route": "/api/v1/social-posts",
+    "scope": "share",
+    "title": "分享連結貼文",
+    "screen": "posts",
+    "publicItem": true,
+    "example": {
+      "url": "https://example.com/post",
+      "title": "分享一篇教學",
+      "note": "推薦閱讀"
+    }
+  },
+  {
+    "id": "posts.edit",
+    "method": "POST",
+    "route": "/api/v1/social-posts/:id/edit",
+    "scope": "share",
+    "title": "編輯自己的貼文",
+    "screen": "posts",
+    "ifMatch": true,
+    "example": {
+      "text": "更新後的短文"
+    }
+  },
+  {
+    "id": "posts.delete",
+    "method": "DELETE",
+    "route": "/api/v1/social-posts/:id",
+    "scope": "share",
+    "title": "刪除自己的貼文",
+    "screen": "posts",
+    "example": {}
+  },
+  {
+    "id": "posts.like",
+    "method": "POST",
+    "route": "/api/v1/social-posts/:id/like",
+    "scope": "react",
+    "title": "按讚",
+    "screen": "posts",
+    "example": {
+      "liked": true
+    }
+  },
+  {
+    "id": "posts.comment",
+    "method": "POST",
+    "route": "/api/v1/social-posts/:id/comments",
+    "scope": "react",
+    "title": "留言",
+    "screen": "posts",
+    "publicItem": true,
+    "example": {
+      "text": "寫得很清楚"
+    }
+  },
+  {
+    "id": "services.mine",
+    "method": "GET",
+    "route": "/api/v1/member-services/mine",
+    "scope": "read",
+    "title": "查看我的服務",
+    "screen": "services"
+  },
+  {
+    "id": "services.create",
+    "method": "POST",
+    "route": "/api/v1/member-services",
+    "scope": "share",
+    "title": "上架服務",
+    "screen": "services",
+    "publicItem": true,
+    "example": {
+      "title": "網站架構諮詢",
+      "category": "tech",
+      "summary": "提供網站健檢與開發指導",
+      "service_mode": "online",
+      "contacts": [
+        {
+          "label": "預約連結",
+          "url": "https://example.com/service"
+        }
+      ]
+    }
+  },
+  {
+    "id": "services.edit",
+    "method": "PUT",
+    "route": "/api/v1/member-services/:id",
+    "scope": "share",
+    "title": "編輯自己的服務",
+    "screen": "services",
+    "ifMatch": true,
+    "example": {
+      "title": "更新後網站諮詢",
+      "category": "tech",
+      "summary": "提供最新網站健檢與開發指導",
+      "service_mode": "both",
+      "contacts": [
+        {
+          "label": "預約連結",
+          "url": "https://example.com/service"
+        }
+      ]
+    }
+  },
+  {
+    "id": "services.pause",
+    "method": "POST",
+    "route": "/api/v1/member-services/:id/pause",
+    "scope": "share",
+    "title": "暫停服務",
+    "screen": "services",
+    "ifMatch": true,
+    "example": {}
+  },
+  {
+    "id": "services.resume",
+    "method": "POST",
+    "route": "/api/v1/member-services/:id/resume",
+    "scope": "share",
+    "title": "恢復服務",
+    "screen": "services",
+    "ifMatch": true,
+    "example": {}
+  },
+  {
+    "id": "services.delete",
+    "method": "DELETE",
+    "route": "/api/v1/member-services/:id",
+    "scope": "share",
+    "title": "刪除自己的服務",
+    "screen": "services",
+    "ifMatch": true,
+    "example": {}
+  },
+  {
+    "id": "works.create",
+    "method": "POST",
+    "route": "/api/v1/showcases",
+    "scope": "share",
+    "title": "發布作品",
+    "screen": "works",
+    "publicItem": true,
+    "example": {
+      "title": "開源協作作品",
+      "description": "記錄開發流程與可重現示範",
+      "public_url": "https://example.com/work",
+      "consent_to_share": true
+    }
+  },
+  {
+    "id": "profile.read",
+    "method": "GET",
+    "route": "/api/v1/me/positioning",
+    "scope": "read",
+    "title": "查看我的定位卡",
+    "screen": "profile"
   }
 ] as const;

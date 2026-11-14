@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import type { Pool,PoolClient } from 'pg';
 import { z } from 'zod';
 import { checkVersion,command,digest as commandDigest, type Command } from '../../packages/db/index.js';
+import { memberReceiptOperation } from '../../packages/db/member-command.js';
 import { readWithMemberSession } from '../../packages/db/member-session.js';
 import { socialThumbnailMemberCommand } from '../../packages/scoped-commands/index.js';
 import { AssetStorageError,type ObjectStore } from '../../packages/asset-storage/index.js';
@@ -181,7 +182,7 @@ export async function createNativeSocialPost(pool: Pool, inputCommand: Command, 
 
 /** A native-note receipt never bypasses the current post visibility boundary. */
 export async function authorizeNativeSocialReplay(q: Pick<Pool, 'query'>, input: Command): Promise<boolean> {
-  const prior = (await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3', [input.actor.user_id, input.operation, input.key])).rows[0];
+  const prior = (await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3', [input.actor.user_id, memberReceiptOperation(input), input.key])).rows[0];
   if (!prior) return false;
   await activePost(q, input.actor, prior.response.post_id, true);
   return true;
@@ -265,7 +266,7 @@ export async function createSocialComment(pool: Pool, inputCommand: Command, id:
   requireCondition(!/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text), 422, 'validation_failed', '內容含有無法使用的字元。');
   return command(pool, inputCommand, async q => {
     await activePost(q, inputCommand.actor, id, true);
-    const prior = (await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3', [inputCommand.actor.user_id, inputCommand.operation, inputCommand.key])).rows[0];
+    const prior = (await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3', [inputCommand.actor.user_id, memberReceiptOperation(inputCommand), inputCommand.key])).rows[0];
     if (prior) requireCondition((await q.query("SELECT 1 FROM community_social_comments WHERE comment_id=$1 AND post_id=$2 AND state='active'", [prior.response.comment_id, id])).rowCount, 404, 'not_found', '找不到這則留言。');
   }, async q => {
     await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`social-comments/${inputCommand.actor.user_id}`]);

@@ -61,8 +61,8 @@ async function confirmFirstPublicItem(session:Session,connectionId:string){
  const confirmed=await req(`/api/v1/me/agent-tokens/${connectionId}/confirm`,{session,body:{request_sha256:pending.request_sha256}});
  assert.equal(confirmed.status,200,JSON.stringify(confirmed.data));
 }
-async function runPublicItem(session:Session,opId:string,path:string,body:unknown,expectedStatus:number,seen:Set<string>){
- const issued=await issue(session),key=randomUUID();
+async function runPublicItem(session:Session,opId:string,path:string,body:unknown,expectedStatus:number,seen:Set<string>,scopes=['read','share','rsvp']){
+ const issued=await issue(session,scopes),key=randomUUID();
  const pending=await req(path,{token:issued.access_token,body,key});
  assert.equal(pending.status,202,`${opId} expected 202: ${JSON.stringify(pending.data)}`);
  assert.equal(agentPendingSchema.safeParse(pending.data).success,true,`${opId} pending schema failed`);
@@ -87,7 +87,24 @@ test('every operation with a response schema parses its live REST agent answer o
  const {notifyMember}=await import('../../modules/member-communications/notifications.js');
  const communityId=(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[session.user.user_id])).rows[0].community_id;
  await notifyMember(pool,{community_id:communityId,recipient_ref:session.user.user_id,kind:'friend_request',source_key:randomUUID(),title:'測試通知',body:'通知內容',action:null});
+ await pool.query(`INSERT INTO guild_tools(id,community_id,guild_key,tool_id,state,title,entry_url,origin,bridge_version,profile,scopes,permissions,registered_by)
+  VALUES($1,$2,'guild_games','list-tool','enabled','列表工具','https://tools.example.com/','https://tools.example.com','freedom.guild-launchpad/v2','origin','["context:read"]','[]',$3)`,[randomUUID(),communityId,session.user.user_id]);
+ const notePost=await req('/api/v1/social-posts/notes',{session,body:{text:'測試貼文'}});
+ assert.equal(notePost.status,201,JSON.stringify(notePost.data));
+ const postId=notePost.data.post_id as string;
+ const commentPost=await req(`/api/v1/social-posts/${postId}/comments`,{session,body:{text:'測試留言'}});
+ assert.equal(commentPost.status,201,JSON.stringify(commentPost.data));
+ const serviceDraft={title:'技術顧問服務',category:'tech',summary:'提供架構設計與效能檢視',description:'一對一線上討論。',price_text:'面議',area_text:'線上',service_mode:'online',contacts:[{label:'預約連結',url:'https://example.com/book'}]};
+ const seededService=await req('/api/v1/member-services',{session,body:serviceDraft});
+ assert.equal(seededService.status,201,JSON.stringify(seededService.data));
+ const posCheck=await req('/api/v1/me/positioning',{session});
+ if(!posCheck.data.profile){
+  const savedPos=await req('/api/v1/me/positioning',{session,body:{real_world_occupations:['軟體工程師'],background:'十年系統開發',strengths:['TypeScript'],goals:'打造開源協作工具',weekly_minutes:180,desired_roles:['creator'],selected_tracks:['open_source_developer'],confirmed:true}});
+  assert.equal(savedPos.status,201,JSON.stringify(savedPos.data));
+ }
  const routes:Record<string,string>={
+  'guilds.list':'/api/v1/guilds',
+  'tools.list':'/api/v1/public/guilds/guild_games/tools',
   'events.list':'/api/v1/events',
   'events.read':`/api/v1/events/${eventId}`,
   'credit.records':'/api/v1/me/contribution-records',
@@ -99,13 +116,26 @@ test('every operation with a response schema parses its live REST agent answer o
   'shares.read':`/api/v1/shares/${shareId}`,
   'credit.read':'/api/v1/me/credit',
   'credit.results':'/api/v1/me/share-results',
+  'posts.list':'/api/v1/social-posts',
+  'posts.comments':`/api/v1/social-posts/${postId}/comments`,
+  'services.mine':'/api/v1/member-services/mine',
+  'profile.read':'/api/v1/me/positioning',
  };
  for(const op of agentOperations.filter(op=>op.granted!==false&&op.method==='GET'&&agentResponseSchemas[op.id])){
   const path=routes[op.id];
   assert.ok(path,`missing route mapping for ${op.id}`);
   const r=await req(path,{token});
   verifyContractResponse(op.id,r.status,r.data,200);
+  if(op.id==='posts.list'||op.id==='posts.comments'||op.id==='services.mine')assert.ok(r.data.items.length>=1,`expected seeded item for ${op.id}`);
  }
+ const filteredPosts=await req(`/api/v1/social-posts?kind=note&post_id=${postId}`,{token});
+ verifyContractResponse('posts.list',filteredPosts.status,filteredPosts.data,200);
+ assert.equal(filteredPosts.data.items.length,1);
+ assert.ok(agentOperations.some(op=>op.id==='guilds.list'&&op.granted!==false));
+ assert.ok(agentOperations.some(op=>op.id==='tools.list'&&op.granted!==false));
+ assert.ok(agentOperations.some(op=>op.id==='posts.list'&&op.granted!==false));
+ assert.ok(agentOperations.some(op=>op.id==='posts.comments'&&op.granted!==false));
+ assert.ok(agentOperations.some(op=>op.id==='services.mine'&&op.granted!==false));
 });
 
 test('every write operation with a response schema parses its live REST agent answer on the seeded database',async t=>{
@@ -167,6 +197,44 @@ test('every write operation with a response schema parses its live REST agent an
 
  const sharesRetract=await req(`/api/v1/shares/${createdShareId}/retract`,{token,body:{}});
  verifyContractResponse('shares.retract',sharesRetract.status,sharesRetract.data,200);seen.add('shares.retract');
+
+ const {notifyMember}=await import('../../modules/member-communications/notifications.js');
+ const communityId=(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[session.user.user_id])).rows[0].community_id;
+ const firstNotice=await notifyMember(pool,{community_id:communityId,recipient_ref:session.user.user_id,kind:'friend_request',source_key:randomUUID(),title:'通知一',body:'內容一',action:null});
+ const secondNotice=await notifyMember(pool,{community_id:communityId,recipient_ref:session.user.user_id,kind:'friend_request',source_key:randomUUID(),title:'通知二',body:'內容二',action:null});
+ assert.ok(firstNotice?.notification_id&&secondNotice?.notification_id);
+ const markOne=await req(`/api/v1/me/notifications/${firstNotice.notification_id}/read`,{token,body:{}});
+ verifyContractResponse('notifications.mark_read',markOne.status,markOne.data,200);seen.add('notifications.mark_read');
+ const markAll=await req('/api/v1/me/inbox/read-all',{token,body:{scope:'notifications'}});
+ verifyContractResponse('notifications.mark_all_read',markAll.status,markAll.data,200);seen.add('notifications.mark_all_read');
+ assert.ok(agentOperations.some(op=>op.id==='notifications.mark_read'&&op.granted!==false));
+ assert.ok(agentOperations.some(op=>op.id==='notifications.mark_all_read'&&op.granted!==false));
+
+ const reactToken=(await issue(session,['read','share','rsvp','react'])).access_token;
+ const createdNote=await runPublicItem(session,'posts.note','/api/v1/social-posts/notes',{text:'測試短文 #心得'},201,seen);
+ const noteId=createdNote.post_id as string;
+ const createdLink=await runPublicItem(session,'posts.link','/api/v1/social-posts',{url:'https://example.com/agent-social-link',title:'分享連結',note:'連結說明'},201,seen);
+ const linkId=createdLink.post_id as string;
+ const editedPost=await req(`/api/v1/social-posts/${noteId}/edit`,{token,body:{text:'更新後的短文'},headers:{'If-Match':`"${createdNote.revision}"`}});
+ verifyContractResponse('posts.edit',editedPost.status,editedPost.data,200);seen.add('posts.edit');
+ const likedPost=await req(`/api/v1/social-posts/${linkId}/like`,{token:reactToken,body:{liked:true}});
+ verifyContractResponse('posts.like',likedPost.status,likedPost.data,200);seen.add('posts.like');
+ await runPublicItem(session,'posts.comment',`/api/v1/social-posts/${linkId}/comments`,{text:'測試留言'},201,seen,['read','share','rsvp','react']);
+ const deletedPost=await req(`/api/v1/social-posts/${noteId}`,{token,method:'DELETE',body:{}});
+ verifyContractResponse('posts.delete',deletedPost.status,deletedPost.data,200);seen.add('posts.delete');
+
+ const serviceDraft={title:'網站架構諮詢',category:'tech',summary:'提供網站健檢與開發指導',description:'線上諮詢一小時。',price_text:'面議',area_text:'線上',service_mode:'online',contacts:[{label:'預約表單',url:'https://example.com/service'}]};
+ const createdService=await runPublicItem(session,'services.create','/api/v1/member-services',serviceDraft,201,seen);
+ const serviceId=createdService.service_id as string;
+ const editedService=await req(`/api/v1/member-services/${serviceId}`,{token,method:'PUT',body:{...serviceDraft,title:'更新後網站諮詢',service_mode:'both'},headers:{'If-Match':`"${createdService.aggregate_version}"`}});
+ verifyContractResponse('services.edit',editedService.status,editedService.data,200);seen.add('services.edit');
+ const pausedService=await req(`/api/v1/member-services/${serviceId}/pause`,{token,body:{},headers:{'If-Match':`"${editedService.data.aggregate_version}"`}});
+ verifyContractResponse('services.pause',pausedService.status,pausedService.data,200);seen.add('services.pause');
+ const resumedService=await req(`/api/v1/member-services/${serviceId}/resume`,{token,body:{},headers:{'If-Match':`"${pausedService.data.aggregate_version}"`}});
+ verifyContractResponse('services.resume',resumedService.status,resumedService.data,200);seen.add('services.resume');
+ const deletedService=await req(`/api/v1/member-services/${serviceId}`,{token,method:'DELETE',body:{},headers:{'If-Match':`"${resumedService.data.aggregate_version}"`}});
+ verifyContractResponse('services.delete',deletedService.status,deletedService.data,200);seen.add('services.delete');
+ await runPublicItem(session,'works.create','/api/v1/showcases',{title:'測試分享作品',description:'完整作品介紹與使用方法',public_url:'https://example.com/work',consent_to_share:true},201,seen);
 
  const expectedWrites=agentOperations.filter(op=>op.granted!==false&&op.method!=='GET'&&agentResponseSchemas[op.id]).map(op=>op.id).sort();
  assert.deepEqual([...seen].sort(),expectedWrites);

@@ -1,13 +1,16 @@
 import {useLayoutEffect,useRef,useState} from 'react';
 import type {PortalClient} from '../api';
+import {agentOperations} from './agent-operations';
 import {agentStopRules} from './AgentHandoff';
 import './AgentTokens.css';
-type Scope='read'|'share'|'rsvp';
-const labels:Record<Scope,string>={read:'讀取',share:'分享',rsvp:'報名'};
+type Scope='read'|'share'|'rsvp'|'react';
+type OperationScreen=(typeof agentOperations)[number]['screen'];
+const labels:Record<Scope,string>={read:'讀取',share:'分享',rsvp:'報名',react:'回應'};
+const screenTitles:Record<OperationScreen,string>={guilds:'公會與工具',events:'活動',shares:'分享',credit:'貢獻',notifications:'通知',posts:'貼文',services:'服務',works:'作品',profile:'個人資料'};
 type Token={connection_id:string;client_name:string;scopes:Scope[];expires_at:string;last_used_at:string|null;revoked_at:string|null;suspended_at:string|null;public_items_today:number;public_daily_cap:number;pending_publication:{operation:string;body:unknown;request_sha256:string;approved_at:string|null}|null};
 export function AgentTokens({client}:{client:PortalClient}){return <AgentTokenSession key={client.sessionGeneration} client={client}/>;}
 function AgentTokenSession({client}:{client:PortalClient}){
- const [items,setItems]=useState<Token[]>([]),[name,setName]=useState('我的 Agent'),[scopes,setScopes]=useState<Scope[]>(['read','share','rsvp']);
+ const [items,setItems]=useState<Token[]>([]),[name,setName]=useState('我的 Agent'),[scopes,setScopes]=useState<Scope[]>(['read','share','rsvp','react']);
  const [secret,setSecret]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false);
  const mounted=useRef(false),generation=client.sessionGeneration,sequence=useRef(0),flight=useRef(false);
  const live=()=>mounted.current&&client.sessionGeneration===generation;
@@ -54,5 +57,11 @@ function AgentTokenSession({client}:{client:PortalClient}){
    {!item.revoked_at&&<div className="experience-actions"><button className="btn btn-ghost btn-sm" disabled={busy} onClick={()=>void action(`/me/agent-tokens/${item.connection_id}/renew`,{name:item.client_name,scopes:item.scopes},true)}>續期換新</button><button className="btn btn-ghost btn-sm" disabled={busy} onClick={()=>void action(`/me/agent-tokens/${item.connection_id}/revoke`,{})}>撤銷</button></div>}
    {!item.revoked_at&&!item.suspended_at&&item.pending_publication&&<div className="stack"><h4>首次公開</h4><p>{item.pending_publication.operation}</p><pre>{JSON.stringify(item.pending_publication.body,null,2)}</pre>{item.pending_publication.approved_at?<p>已確認，請 Agent 重試</p>:<button className="btn btn-ghost btn-sm" disabled={busy} onClick={()=>void action(`/me/agent-tokens/${item.connection_id}/confirm`,{request_sha256:item.pending_publication!.request_sha256})}>確認公開此內容</button>}</div>}
   </details>)}
+  <details className="agent-operations"><summary>可授權的操作</summary><div className="stack">
+   {(Object.keys(screenTitles) as OperationScreen[]).map(screen=>{
+    const ops=agentOperations.filter(op=>op.screen===screen);
+    return ops.length?<div key={screen}><h3>{screenTitles[screen]}</h3><ul>{ops.map(op=><li key={op.id}>{op.title}</li>)}</ul></div>:null;
+   })}
+  </div></details>
  </section>;
 }

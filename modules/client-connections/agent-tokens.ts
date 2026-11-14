@@ -6,7 +6,7 @@ import {lockMemberSession,assertCurrentSessionClock,readWithMemberSession} from 
 import {command,type Command} from '../../packages/db/index.js';
 import {tokenHash,type Actor} from '../identity-membership/service.js';
 import {requireCondition} from '../../packages/shared/problem.js';
-const input=z.object({name:z.string().trim().min(1).max(80),scopes:z.array(z.enum(['read','share','rsvp'])).min(1).max(3).refine(s=>new Set(s).size===s.length)}).strict();
+const input=z.object({name:z.string().trim().min(1).max(80),scopes:z.array(z.enum(['read','share','rsvp','react'])).min(1).max(4).refine(s=>new Set(s).size===s.length)}).strict();
 const fields='connection_id,client_name,scopes,created_at,expires_at,last_used_at,revoked_at,suspended_at,failure_count,public_confirmed_at,public_daily_cap,reaction_daily_cap,aggregate_version';
 function browser(actor:Actor){requireCondition(!actor.agent,403,'browser_required','請在瀏覽器管理 Agent 金鑰。');}
 /** One-time secrets never enter command receipts or logs. A lost response can be

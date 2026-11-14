@@ -71,8 +71,9 @@ export async function consumeAgentBudget(q:PoolClient,actor:Actor,operation:stri
  if(a.scope==='react'){
   const usage=await q.query(`INSERT INTO agent_daily_usage(connection_id,day,reactions) SELECT $1,(clock_timestamp() AT TIME ZONE 'UTC')::date,1 WHERE $2::int>0
    ON CONFLICT(connection_id,day) DO UPDATE SET reactions=agent_daily_usage.reactions+1 WHERE agent_daily_usage.reactions<$2 RETURNING reactions`,[a.connection_id,row.reaction_daily_cap]);
-  requireCondition(usage.rowCount===1,429,'agent_daily_cap','Agent 今日互動已達上限。');return;
+  requireCondition(usage.rowCount===1,429,'agent_daily_cap','Agent 今日互動已達上限。');
  }
+ if(!a.public_item)return;
  if(!row.public_confirmed_at){
   const pending=(await q.query('SELECT * FROM agent_pending_publications WHERE connection_id=$1',[a.connection_id])).rows[0];
   requireCondition(pending?.approved_at&&pending.request_sha256===publicationDigest(operation,key,body,expected),409,'pending_member','請會員在瀏覽器確認首次發布。');
@@ -84,7 +85,7 @@ export async function consumeAgentBudget(q:PoolClient,actor:Actor,operation:stri
 }
 export async function recordAgentPublication<T>(q:PoolClient,actor:Actor,operation:string,key:string,result:T):Promise<T> {
  if(!actor.agent?.public_item)return result;
- const r=result as Record<string,unknown>,id=r.event_id??r.project_id??r.share_id??null;
+ const r=result as Record<string,unknown>,id=r.event_id??r.project_id??r.share_id??r.post_id??r.comment_id??r.service_id??r.showcase_id??null;
  await q.query('INSERT INTO agent_publications(connection_id,user_id,operation,idempotency_key,resource_id) VALUES($1,$2,$3,$4,$5)',[actor.agent.connection_id,actor.user_id,operation,key,id]);
  if(operation==='POST /api/v1/events'&&r.event_id)await q.query('UPDATE community_events SET via_agent=true WHERE event_id=$1 AND organizer_ref=$2',[r.event_id,actor.user_id]);
  if(operation==='POST /api/v1/opensource/projects'&&r.project_id)await q.query('UPDATE oss_projects SET via_agent=true WHERE project_id=$1',[r.project_id]);

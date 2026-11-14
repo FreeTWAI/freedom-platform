@@ -7,6 +7,7 @@ import { z } from 'zod';
 import type { Pool } from 'pg';
 import { Problem, requireCondition } from '../../../../packages/shared/problem.js';
 import { digest, type Command } from '../../../../packages/db/index.js';
+import { memberReceiptOperation } from '../../../../packages/db/member-command.js';
 import { readWithMemberSession } from '../../../../packages/db/member-session.js';
 import { authRateLimit } from '../../../../modules/identity-membership/members.js';
 import { authenticate } from '../../../../modules/identity-membership/service.js';
@@ -36,7 +37,7 @@ async function optionalUser(pool: Pool, raw: string | undefined) {
 
 async function storedSocialPost(pool: Pool, input: Command) {
   const hash = digest({ body: input.body, expected: input.expected ?? null });
-  const prior = (await pool.query('SELECT request_sha256,response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3', [input.actor.user_id, input.operation, input.key])).rows[0];
+  const prior = (await pool.query('SELECT request_sha256,response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3', [input.actor.user_id, memberReceiptOperation(input), input.key])).rows[0];
   if (!prior) return null;
   requireCondition(prior.request_sha256 === hash, 409, 'idempotency_conflict', '同一操作識別碼不可搭配不同內容。');
   return prior.response as Record<string, unknown>;
