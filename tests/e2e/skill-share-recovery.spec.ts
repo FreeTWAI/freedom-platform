@@ -1,4 +1,4 @@
-import {navigate} from './navigation.js';
+import {navigate,openSkillCardMore} from './navigation.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 
 const content={introductions:['合成分享介紹一','合成分享介紹二'],illustration_url:'/brand/skill-illustrations/social-post.webp',illustration_alt:'合成技能書插畫'};
@@ -21,7 +21,7 @@ for(const target of ['introduction','session','promotion'] as const)test(`skill 
   await page.route(path,route=>{held.push(route);});
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/promotion/links')writes++;});
   try{
-    await card.getByRole('button',{name:'分享技能',exact:true}).click();await expect.poll(()=>held.length).toBe(1);
+    await openSkillCardMore(card);await card.getByRole('button',{name:'分享技能',exact:true}).click();await expect.poll(()=>held.length).toBe(1);
     const dialog=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});
     await expect(dialog).toBeVisible();
     await page.clock.fastForward(8001);

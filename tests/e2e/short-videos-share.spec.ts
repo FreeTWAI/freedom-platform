@@ -84,7 +84,7 @@ test.describe('sharing around Short, feature ON', () => {
         await expect(shareTrigger).toHaveCSS('background-color','rgba(0, 0, 0, 0.45)');
         await shareTrigger.click();
         const share=page.getByRole('dialog',{name:'分享貼文連結',exact:true});
-        const copy=share.getByRole('button',{name:'分享',exact:true});await expect(copy).toBeEnabled();
+        const copy=share.getByRole('button',{name:'複製連結',exact:true});await expect(copy).toBeEnabled();
         await expect(copy).toBeInViewport();expect(await share.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
         for(const control of [copy,share.getByRole('button',{name:'關閉分享',exact:true})]){
           await control.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');await expect(control).toBeFocused();
@@ -97,15 +97,11 @@ test.describe('sharing around Short, feature ON', () => {
           expect(colors.ratio,`${theme}/${width}`).toBeGreaterThanOrEqual(4.5);expect(colors.background).not.toBe('rgba(0, 0, 0, 0.45)');
           expect(colors.focusVisible).toBe(true);expect(colors.outline).not.toBe('rgb(255, 255, 255)');expect(colors.height).toBeGreaterThanOrEqual(44);
         }
-        await copy.click();
-        const shareModal=page.locator('.skill-share-dialog');
-        await expect(shareModal.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
-        const sharedUrl=new URL((await shareModal.locator('.skill-share-url').innerText()).trim());
+        await expect(share.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+        const sharedUrl=new URL((await share.locator('.skill-share-url').innerText()).trim());
         expect(sharedUrl.origin).toBe(new URL(page.url()).origin);
         const link=await e2eAuthPool.query('SELECT kind,target_key FROM promotion_links WHERE code=$1',[sharedUrl.pathname.split('/').pop()]);
         expect(link.rows).toEqual([{kind:'social_post',target_key:ids[0]}]);
-        await expect(shareModal.getByRole('button',{name:'複製連結',exact:true})).toBeInViewport();
-        await shareModal.getByRole('button',{name:'關閉分享',exact:true}).click();
         await share.getByRole('button',{name:'關閉分享',exact:true}).click();await expect(shareTrigger).toBeFocused();
       }
       await feed.getByRole('button', {name: '貼文選項與檢舉', exact: true}).click();
