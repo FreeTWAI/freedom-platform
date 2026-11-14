@@ -14,6 +14,7 @@ export async function inspectTool(input:unknown,platformOrigin:string,fetcher:Pr
  if(input&&typeof input==='object'&&!Array.isArray(input)&&'bridge_version' in input)requireCondition(input.bridge_version===BRIDGE_VERSION,422,'tool_bridge_version','請使用 freedom.guild-launchpad/v2 橋接版本。');
  const parsed=toolInput.safeExtend({origin_challenge_id:z.uuid().optional()}).safeParse(input);requireCondition(parsed.success,422,'tool_invalid','請核對名稱、版本及允許功能。');
  const {origin_challenge_id,...body}=parsed.data,u=toolUrl(body.entry_url,platformOrigin);
+ requireCondition(body.profile!=='origin'||u.pathname==='/',422,'tool_origin_root_required','獨立來源工具網址須在根目錄；子路徑請改用隔離模式。');
  requireCondition(fetcher,503,'tool_egress_unavailable','此環境尚未安裝安全網址檢查。');
  let response:Response;
  try{response=await fetcher(u.href,{redirect:'manual',signal:AbortSignal.timeout(8000),headers:{Accept:'text/html'}});}catch{throw new Problem(422,'tool_fetch_failed','無法安全讀取網站，請檢查公開網址。');}

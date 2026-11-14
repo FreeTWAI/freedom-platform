@@ -11,7 +11,7 @@ import {inspectTool,safeFrameOrigins} from './validation.js';
 import type {GuildToolFetch} from './transport.js';
 import {isNativeTool,type ToolRecord} from './contract.js';
 const columns='id,guild_key,tool_id,title,entry_url,origin,bridge_version,profile,scopes,permissions,state,revision';
-export async function listTools(pool:Pool,guild:string){return {items:(await pool.query(`SELECT ${columns} FROM guild_tools WHERE guild_key=$1 ORDER BY tool_id LIMIT 16`,[guild])).rows as ToolRecord[]};}
+export async function listTools(pool:Pool,guild:string){return {items:(await pool.query(`SELECT ${columns},(SELECT name FROM positioning_guild_catalog WHERE guild_key=$1) AS guild_name FROM guild_tools WHERE guild_key=$1 ORDER BY tool_id LIMIT 16`,[guild])).rows as (ToolRecord&{guild_name:string})[]};}
 const frameOriginCache=new Map<string,{values:string[];expires:number}>();
 let frameOriginGeneration=0;
 // Committed writes refresh this process immediately; other Worker isolates refresh within 60 seconds.
@@ -37,7 +37,7 @@ export async function registerTool(pool:Pool,input:Command,guild:string,origin:s
  const rawUrl=(input.body as {entry_url?:unknown}|null)?.entry_url;
  if(typeof rawUrl==='string'&&fetcher?.assertUrl){try{fetcher.assertUrl(rawUrl);}catch{throw new Problem(422,'tool_fetch_failed','無法安全讀取網站，請檢查公開網址。');}}
  const body=await inspectTool(input.body,origin,fetcher);requireCondition(!isNativeTool(guild,body.tool_id),409,'native_tool_reserved','此代號屬於平台工具，請換一個代號。');const proof=body.profile==='origin'?await verifyOriginChallenge(pool,input.actor,guild,body.origin,(input.body as {origin_challenge_id?:string}).origin_challenge_id,fetcher):undefined;let rights:Awaited<ReturnType<typeof access>>;
- const result=await command(pool,input,async q=>{rights=await access(q,input.actor,guild);if(proof)await assertOriginProofCurrent(q,proof,input.actor,guild,body.origin);await q.query("SELECT pg_advisory_xact_lock(hashtextextended('guild-tools-registry',0))");},async q=>{
+ const result=await command(pool,input,async q=>{rights=await access(q,input.actor,guild);if(proof)await assertOriginProofCurrent(q,proof,input.actor,guild,body.origin);await q.query("SELECT pg_advisory_xact_lock(hashtextextended('guild-tools-registry',0))");const existing=await q.query('SELECT 1 FROM guild_tools WHERE guild_key=$1 AND tool_id=$2 FOR UPDATE',[guild,body.tool_id]);if(existing.rowCount)requireCondition(rights.leader,403,'guild_leader_required','修改既有工具限目前在任的公會長。');},async q=>{
  const prior=(await q.query('SELECT * FROM guild_tools WHERE guild_key=$1 AND tool_id=$2 FOR UPDATE',[guild,body.tool_id])).rows[0];
  if(prior){requireCondition(prior.community_id===input.actor.community_id,403,'tool_forbidden','此工具屬於另一個社群。');checkVersion(String(prior.revision),input.expected);}
  else requireCondition(Number((await q.query('SELECT count(*) FROM guild_tools WHERE guild_key=$1',[guild])).rows[0].count)<16,409,'tool_limit','每個公會最多 16 個工具。');

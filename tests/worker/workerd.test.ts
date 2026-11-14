@@ -472,7 +472,7 @@ test('workerd registers a hosted tool, proves its origin and exchanges identity 
     const capabilities=await access.json() as any;assert.equal(capabilities.registration_available,true);assert.equal(capabilities.token_exchange_available,true);
     const absent=await call(base+'/access',{headers:{Cookie:cookie}});const noKey=await absent.json() as any;
     assert.equal(noKey.registration_available,true);assert.equal(noKey.token_exchange_available,false);
-    const body={tool_id:'hosted',title:'工具',entry_url:'https://tool.pages.dev/app/',bridge_version:BRIDGE_VERSION,profile:'origin',scopes:['context:read','session:exchange'],permissions:[]};
+    const body={tool_id:'hosted',title:'工具',entry_url:'https://tool.pages.dev/',bridge_version:BRIDGE_VERSION,profile:'origin',scopes:['context:read','session:exchange'],permissions:[]};
     for(const entry_url of ['https://Tool.pages.dev/','https://tool.pages.dev:443/','https://private.example.test/']){
       assert.equal((await post(base,{...body,entry_url})).status,422);assert.equal(requests.length,0);
     }

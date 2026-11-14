@@ -1,9 +1,11 @@
 /** freedom.guild-launchpad/v2 — dependency-free, copyable browser client. */
-export function createGuildTool({parentOrigin,toolId,guildKey}={}) {
+export function createGuildTool({platformOrigins,toolId,guildKey}={}) {
+ const exactOrigin=value=>{try{return typeof value==='string'&&['https:','http:'].includes(new URL(value).protocol)&&new URL(value).origin===value;}catch{return false;}};
+ const allowed=new Set(Array.isArray(platformOrigins)&&platformOrigins.length>0&&platformOrigins.every(exactOrigin)?platformOrigins:[]);
  const version='freedom.guild-launchpad/v2', pending=new Map();let mount=null,origin=null,disposed=false,waiters=[];
  const fail=()=>{for(const p of pending.values()){clearTimeout(p.timer);p.reject(new Error('mount_changed'));}pending.clear();};
  function receive(e){
-  if(disposed||e.source!==parent||e.source===window||parentOrigin&&e.origin!==parentOrigin)return;
+  if(disposed||e.source!==parent||e.source===window||!allowed.has(e.origin))return;
   const m=e.data;if(!m||typeof m!=='object'||m.version!==version)return;
   if(m.type==='init'){
    if(Object.keys(m).sort().join(',')!=='guild_key,nonce,tool_id,type,version'||!/^guild_[a-zA-Z0-9_]+$/.test(m.guild_key)||!/^[a-z][a-z0-9-]{0,47}$/.test(m.tool_id)||!/^[0-9a-f-]{36}$/.test(m.nonce)||toolId&&m.tool_id!==toolId||guildKey&&m.guild_key!==guildKey)return;

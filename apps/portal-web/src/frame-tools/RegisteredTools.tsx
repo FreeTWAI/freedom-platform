@@ -24,7 +24,7 @@ export function RegisteredTools({guildKey,tool,toolId,children,site,onNavigate,c
  </GuildToolPage>{manage&&client&&<div className="stack">
  <div className="actions">
  {!adding&&registrationAvailable&&<button className="btn btn-secondary btn-small" onClick={()=>{setEditing(undefined);setAdding(true);}}>新增工具</button>}
- {selected&&manage&&registrationAvailable&&!adding&&<button className="btn btn-secondary btn-small" onClick={()=>{setEditing(selected);setAdding(true);}}>修改登錄</button>}
+ {selected&&leader&&registrationAvailable&&!adding&&<button className="btn btn-secondary btn-small" onClick={()=>{setEditing(selected);setAdding(true);}}>修改登錄</button>}
  {selected&&leader&&selected.state==='enabled'&&<button className="btn btn-ghost btn-small" onClick={async()=>{try{await client.post(`/guilds/${guildKey}/tools/${selected.tool_id}/disable`,{},{idempotencyKey:crypto.randomUUID(),ifMatch:selected.revision});setItems(items.map(t=>t.id===selected.id?{...t,state:'disabled'}:t));}catch(e){setError(String(e));}}}>停用工具</button>}
  </div>
  {adding&&<Registration tokenAvailable={tokenAvailable} key={editing?.id??'new'} editing={editing} client={client} guildKey={guildKey} leader={leader} onClose={()=>setAdding(false)}/>}
