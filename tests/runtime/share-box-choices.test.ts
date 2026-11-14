@@ -561,9 +561,10 @@ test('UX-F-06: publishing from any home route stays on home and emits freedom-sh
     const { ShareBoxLauncher, openShareComposer, win, dispatched, storage } = loadShareModules(harness);
     win.location.hash = startHash;
     const client = new PortalClient();
+    const postedPaths: string[] = [];
     client.post = (async (path: string) => {
-      if (path === '/social-posts/notes') return { post_id: '00000000-0000-4000-8000-000000000001' };
-      if (path === '/shares') return { share_id: '00000000-0000-4000-8000-000000000002', url: '/#shares/00000000-0000-4000-8000-000000000002' };
+      postedPaths.push(path);
+      if (path === '/social-posts/notes') return { post_id: '00000000-0000-4000-8000-000000000001', share_id: '00000000-0000-4000-8000-000000000002' };
       throw new Error(`unexpected post ${path}`);
     }) as PortalClient['post'];
 
@@ -590,6 +591,7 @@ test('UX-F-06: publishing from any home route stays on home and emits freedom-sh
     publishBtn.props.onClick();
     const result = await composePromise;
     assert.equal(result.status, 'published');
+    assert.deepEqual(postedPaths, ['/social-posts/notes']);
     assert.equal(win.location.hash, startHash);
     assert.equal(dispatched.length, 1);
     assert.equal(dispatched[0].type, 'freedom-share-published');
@@ -606,9 +608,10 @@ test('UX-F-06: publishing from any home route stays on home and emits freedom-sh
   const exploreMods = loadShareModules(exploreHarness);
   exploreMods.win.location.hash = '#explore';
   const exploreClient = new PortalClient();
+  const explorePostedPaths: string[] = [];
   exploreClient.post = (async (path: string) => {
-    if (path === '/social-posts/notes') return { post_id: '00000000-0000-4000-8000-000000000003' };
-    if (path === '/shares') return { share_id: '00000000-0000-4000-8000-000000000004', url: '/#shares/00000000-0000-4000-8000-000000000004' };
+    explorePostedPaths.push(path);
+    if (path === '/social-posts/notes') return { post_id: '00000000-0000-4000-8000-000000000003', share_id: '00000000-0000-4000-8000-000000000004' };
     throw new Error(`unexpected post ${path}`);
   }) as PortalClient['post'];
   const renderExplore = () => exploreHarness.render(() =>
@@ -629,6 +632,7 @@ test('UX-F-06: publishing from any home route stays on home and emits freedom-sh
   const exploreDialog = collectNodes(eTree).find(n => n.type === 'dialog')!;
   collectNodes(exploreDialog).find(n => n.type === 'button' && nodeText(n) === '發布')!.props.onClick();
   await explorePromise;
+  assert.deepEqual(explorePostedPaths, ['/social-posts/notes']);
   assert.equal(exploreMods.win.location.hash, '#shares/00000000-0000-4000-8000-000000000004');
   assert.equal(exploreMods.dispatched.length, 0);
 });

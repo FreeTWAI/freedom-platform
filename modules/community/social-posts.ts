@@ -18,6 +18,7 @@ import { taipeiDayStart } from './promotion.js';
 import type { LinkPreview } from './link-preview.js';
 import { canHideMemberContent as canHideSocialPosts, moderateSocialContent, requireMemberContentAdmin } from './moderation.js';
 import { notifyMember } from '../member-communications/notifications.js';
+import { publishOriginalShare, syncOriginalShareTitle } from '../shares/original-ledger.js';
 export { canHideSocialPosts };
 
 export class SocialPostExists extends Error {
@@ -38,7 +39,7 @@ type PostRow = {
   created_cursor: string;
   edited_at: Date | string | null; edit_revision: number;
   author_user_id: string; display_name: string; aggregate_version: string | null; has_avatar: boolean; test_account: boolean;
-  has_thumbnail: boolean; total_points: number; my_points: number; like_count: number; comment_count: number; liked: boolean;
+  has_thumbnail: boolean; total_points: number; my_points: number; like_count: number; comment_count: number; liked: boolean; share_id?: string | null;
 };
 
 export type SocialPostView = {
@@ -46,6 +47,7 @@ export type SocialPostView = {
   post_id: string; url: string | null; kind: 'link' | 'note'; platform: SocialPlatform; platform_label: string; title: string; note: string | null; created_at: string;
   author: { user_id: string; display_name: string; avatar_url: string | null };
   thumbnail_url: string | null; total_points: number; my_points: number; like_count: number; comment_count: number; liked: boolean; mine: boolean;
+  share_id?: string;
 };
 
 function view(row: PostRow, viewerId: string): SocialPostView {
@@ -61,6 +63,7 @@ function view(row: PostRow, viewerId: string): SocialPostView {
     total_points: Number(row.total_points) || 0, my_points: Number(row.my_points) || 0,
     like_count: Number(row.like_count) || 0, comment_count: Number(row.comment_count) || 0, liked: row.liked === true,
     mine: row.author_user_id === viewerId,
+    ...(row.share_id ? { share_id: row.share_id } : {}),
   };
 }
 
@@ -70,7 +73,8 @@ const LIST = `SELECT to_char(p.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:
   (SELECT count(*)::int FROM community_social_comments c WHERE c.post_id=p.post_id AND c.state='active') AS comment_count,
   a.aggregate_version,a.present AS has_avatar,is_verification_test_account(u.user_id) AS test_account,t.post_id IS NOT NULL AS has_thumbnail,
   (SELECT count(*)::int FROM promotion_clicks c JOIN promotion_links l ON l.link_id=c.link_id WHERE l.kind='social_post' AND l.target_key=p.post_id::text) AS total_points,
-  (SELECT count(*)::int FROM promotion_clicks c JOIN promotion_links l ON l.link_id=c.link_id WHERE l.kind='social_post' AND l.target_key=p.post_id::text AND l.user_id=$2) AS my_points
+  (SELECT count(*)::int FROM promotion_clicks c JOIN promotion_links l ON l.link_id=c.link_id WHERE l.kind='social_post' AND l.target_key=p.post_id::text AND l.user_id=$2) AS my_points,
+  (SELECT s.share_id FROM shares s WHERE s.kind='post' AND s.ref_id=p.post_id AND s.community_id=p.community_id AND s.state='published' LIMIT 1) AS share_id
   FROM community_social_posts p
   JOIN users u ON u.user_id=p.author_user_id
   LEFT JOIN member_avatar_presence a ON a.user_id=u.user_id AND a.community_id=p.community_id
@@ -190,12 +194,22 @@ export async function authorizeNativeSocialReplay(q: Pick<Pool, 'query'>, input:
 function publishNativeNote(pool: Pool, input: Command, draft: NativeSocialDraft, now: Date, image?: Buffer) {
   return command(pool, input, q => authorizeNativeSocialReplay(q, input), async q => {
     const text=draft.text;
+    const title = truncateSocialTitle(text.split('\n')[0]);
     await socialPostBudget(q, input.actor, now);
     const row = (await q.query(`INSERT INTO community_social_posts(community_id,author_user_id,kind,url,platform,title,note,state,created_at,updated_at)
-      VALUES($1,$2,'note',NULL,'other',$3,$4,'active',$5,$5) RETURNING post_id`, [input.actor.community_id, input.actor.user_id, truncateSocialTitle(text.split('\n')[0]), text, now])).rows[0];
+      VALUES($1,$2,'note',NULL,'other',$3,$4,'active',$5,$5) RETURNING post_id`, [input.actor.community_id, input.actor.user_id, title, text, now])).rows[0];
     await writeSocialMetadata(q,input.actor,row.post_id,draft);
     if (image) await q.query("INSERT INTO community_social_post_thumbnails(post_id,image_bytes,source,updated_at) VALUES($1,$2,'upload',$3)", [row.post_id, image, now]);
-    return shownSocial(q, input.actor, row.post_id);
+    const share_id = await publishOriginalShare(q, {
+      kind: 'post',
+      refTable: 'community_social_posts',
+      refId: row.post_id,
+      title,
+      communityId: input.actor.community_id,
+      authorId: input.actor.user_id,
+      guildKey: null
+    });
+    return { ...(await shownSocial(q, input.actor, row.post_id)), share_id };
   });
 }
 
@@ -320,8 +334,17 @@ export async function createSocialPost(pool: Pool, inputCommand: Command, previe
       const row = (await q.query(`INSERT INTO community_social_posts(community_id,author_user_id,url,platform,title,note,state,created_at,updated_at)
         VALUES($1,$2,$3,$4,$5,$6,'active',$7,$7) RETURNING post_id,created_at`, [inputCommand.actor.community_id, inputCommand.actor.user_id, draft.normalized.url, draft.normalized.platform, draft.title, draft.note, now])).rows[0];
       if (preview.image && preview.source) await q.query(`INSERT INTO community_social_post_thumbnails(post_id,image_bytes,source,updated_at) VALUES($1,$2,$3,$4)`, [row.post_id, preview.image, preview.source, now]);
+      const share_id = await publishOriginalShare(q, {
+        kind: 'post',
+        refTable: 'community_social_posts',
+        refId: row.post_id,
+        title: draft.title,
+        communityId: inputCommand.actor.community_id,
+        authorId: inputCommand.actor.user_id,
+        guildKey: null
+      });
       const loaded = (await q.query(`${LIST} WHERE p.community_id=$1 AND p.post_id=$3`, [inputCommand.actor.community_id, inputCommand.actor.user_id, row.post_id])).rows[0] as PostRow;
-      return view(loaded, inputCommand.actor.user_id);
+      return { ...view(loaded, inputCommand.actor.user_id), share_id };
     });
   } catch (error) {
     if (error instanceof SocialPostExists) throw error;
@@ -343,9 +366,19 @@ export async function authorizeSocialCreate(q:Pick<Pool,'query'>,actor:Actor,dra
 }
 export async function publishSocialCreate(q:PoolClient,actor:Actor,id:string,draft:SocialCreationDraft,now:Date){
  await authorizeSocialCreate(q,actor,draft,now);
- if ('text' in draft) await q.query("INSERT INTO community_social_posts(post_id,community_id,author_user_id,kind,url,platform,title,note,state,created_at,updated_at) VALUES($1,$2,$3,'note',NULL,'other',$4,$5,'active',$6,$6)",[id,actor.community_id,actor.user_id,truncateSocialTitle(draft.text.split('\n')[0]),draft.text,now]);
- else await q.query("INSERT INTO community_social_posts(post_id,community_id,author_user_id,url,platform,title,note,state,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,'active',$8,$8)",[id,actor.community_id,actor.user_id,draft.normalized.url,draft.normalized.platform,draft.title,draft.note,now]);
+ const title = 'text' in draft ? truncateSocialTitle(draft.text.split('\n')[0]) : draft.title;
+ if ('text' in draft) await q.query("INSERT INTO community_social_posts(post_id,community_id,author_user_id,kind,url,platform,title,note,state,created_at,updated_at) VALUES($1,$2,$3,'note',NULL,'other',$4,$5,'active',$6,$6)",[id,actor.community_id,actor.user_id,title,draft.text,now]);
+ else await q.query("INSERT INTO community_social_posts(post_id,community_id,author_user_id,url,platform,title,note,state,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,'active',$8,$8)",[id,actor.community_id,actor.user_id,draft.normalized.url,draft.normalized.platform,title,draft.note,now]);
  if ('text' in draft) await writeSocialMetadata(q,actor,id,draft);
+ await publishOriginalShare(q, {
+   kind: 'post',
+   refTable: 'community_social_posts',
+   refId: id,
+   title,
+   communityId: actor.community_id,
+   authorId: actor.user_id,
+   guildKey: null
+ });
 }
 export {shownSocial};
 async function owned(q: Pick<Pool, 'query'>, actor: Actor, id: string, lock = false) {
@@ -447,16 +480,20 @@ export async function editSocialPost(pool: Pool, inputCommand: Command, id: stri
   }, async q => {
     const row = (await q.query('SELECT kind,edit_revision FROM community_social_posts WHERE post_id=$1 FOR UPDATE', [id])).rows[0];
     checkVersion(String(row.edit_revision), inputCommand.expected);
+    let nextTitle: string;
     if (authorized!.kind === 'note') {
       const {text} = NoteEdit.parse(inputCommand.body);
       requireCondition(!CONTROL.test(text), 422, 'validation_failed', '內容含有無法使用的字元。');
-      await q.query('UPDATE community_social_posts SET title=$2,note=$3,edited_at=$4,updated_at=$4,edit_revision=edit_revision+1 WHERE post_id=$1', [id, truncateSocialTitle(text.split('\n')[0]), text, now]);
+      nextTitle = truncateSocialTitle(text.split('\n')[0]);
+      await q.query('UPDATE community_social_posts SET title=$2,note=$3,edited_at=$4,updated_at=$4,edit_revision=edit_revision+1 WHERE post_id=$1', [id, nextTitle, text, now]);
     } else {
       const body = LinkEdit.parse(inputCommand.body);
       requireCondition(!/[\u0000-\u001f\u007f]/.test(body.title), 422, 'validation_failed', '標題含有無法使用的字元。');
       requireCondition(!body.note || !CONTROL.test(body.note), 422, 'validation_failed', '說明含有無法使用的字元。');
-      await q.query('UPDATE community_social_posts SET title=$2,note=$3,edited_at=$4,updated_at=$4,edit_revision=edit_revision+1 WHERE post_id=$1', [id, body.title, body.note || null, now]);
+      nextTitle = body.title;
+      await q.query('UPDATE community_social_posts SET title=$2,note=$3,edited_at=$4,updated_at=$4,edit_revision=edit_revision+1 WHERE post_id=$1', [id, nextTitle, body.note || null, now]);
     }
+    await syncOriginalShareTitle(q, { kind: 'post', refId: id, communityId: inputCommand.actor.community_id, title: nextTitle });
     await q.query(`UPDATE community_social_posts SET tags=$2,mentions=(SELECT COALESCE(jsonb_agg(m),'[]'::jsonb) FROM jsonb_array_elements(mentions) m WHERE strpos(note,'@'||(m->>'display_name'))>0) WHERE post_id=$1`,[id,socialTags((inputCommand.body as {text?:string;note?:string}).text??(inputCommand.body as {note?:string}).note??'')]);
     return shownSocial(q, inputCommand.actor, id);
   });

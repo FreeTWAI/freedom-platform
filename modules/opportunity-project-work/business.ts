@@ -7,6 +7,7 @@ import { requireCondition } from '../../packages/shared/problem.js';
 import { text,opaqueRef,money,currency,isoTime } from '../../packages/shared/validation.js';
 import type { Actor } from '../identity-membership/service.js';
 import { externalLink } from '../opensource-marketing/github.js';
+import { publishOriginalShare, syncOriginalShareTitle } from '../shares/original-ledger.js';
 
 export const showcaseInput=z.object({title:text(120),description:text(2000),artifact_ref:opaqueRef.optional(),public_url:externalLink.nullable().default(null),consent_to_share:z.literal(true)}).strict();
 export const showcaseDraftInput=showcaseInput.omit({consent_to_share:true});
@@ -32,6 +33,17 @@ export async function createShowcase(pool:Pool,input:Command) {
     const artifact=body.artifact_ref??`artifact:${randomUUID()}`;
     const row=(await q.query(`INSERT INTO showcases(showcase_id,community_id,owner_ref,title,description,artifact_ref,public_url)
       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[randomUUID(),input.actor.community_id,input.actor.user_id,body.title,body.description,artifact,body.public_url])).rows[0];
+    if (row.status === 'published' && row.visibility === 'community') {
+      await publishOriginalShare(q, {
+        kind: 'work',
+        refTable: 'showcases',
+        refId: row.showcase_id,
+        title: row.title,
+        communityId: input.actor.community_id,
+        authorId: input.actor.user_id,
+        guildKey: null
+      });
+    }
     await journal(q,input.actor,'showcase',row.showcase_id,1,'share_with_community',{artifact_ref:artifact});
     return {...row,owner_name:input.actor.display_name};
   });
@@ -76,6 +88,7 @@ export async function updateOwnShowcase(pool:Pool,input:Command,id:string) {
     requireCondition(current.status==='draft'||current.status==='withdrawn',409,'showcase_not_editable','請先撤回已發佈的作品，再修改草稿。');
     const row=(await q.query(`UPDATE showcases SET title=$2,description=$3,artifact_ref=$4,public_url=$5,status='draft',visibility='private',
       aggregate_version=aggregate_version+1,updated_at=now() WHERE showcase_id=$1 RETURNING *`,[id,body.title,body.description,body.artifact_ref??current.artifact_ref,body.public_url])).rows[0];
+    await syncOriginalShareTitle(q, { kind: 'work', refId: id, communityId: input.actor.community_id, title: row.title });
     await journal(q,input.actor,'showcase',id,row.aggregate_version,'save_draft');
     return {...row,owner_name:input.actor.display_name};
   });
@@ -87,6 +100,15 @@ export async function publishOwnShowcase(pool:Pool,input:Command,id:string) {
     requireCondition(current.status==='draft'||current.status==='withdrawn',409,'showcase_already_published','這件作品已發佈，請重新整理。');
     const row=(await q.query(`UPDATE showcases SET status='published',visibility='community',consent_recorded_at=now(),
       aggregate_version=aggregate_version+1,updated_at=now() WHERE showcase_id=$1 RETURNING *`,[id])).rows[0];
+    await publishOriginalShare(q, {
+      kind: 'work',
+      refTable: 'showcases',
+      refId: row.showcase_id,
+      title: row.title,
+      communityId: input.actor.community_id,
+      authorId: input.actor.user_id,
+      guildKey: null
+    });
     await journal(q,input.actor,'showcase',id,row.aggregate_version,'share_with_community',{artifact_ref:row.artifact_ref});
     return {...row,owner_name:input.actor.display_name};
   });

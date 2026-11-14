@@ -14,6 +14,7 @@ import { normalizeServiceCover } from '../skill-submissions/payload.js';
 import { avatarUrl } from '../identity-membership/avatars.js';
 import type { Actor } from '../identity-membership/service.js';
 import { canHideMemberContent } from './moderation.js';
+import { publishOriginalShare, syncOriginalShareTitle } from '../shares/original-ledger.js';
 import { serviceDetailHtml, serviceListHtml, serviceMissingHtml, type PublicServiceCard, type PublicServicePage } from './member-service-pages.js';
 
 const MEMBER_PAGE = 24;
@@ -130,8 +131,19 @@ export async function createMemberService(pool: Pool, input: Command, now = new 
     const used = (await q.query(`SELECT count(*)::int AS n FROM member_services WHERE owner_user_id=$1 AND state IN ('active','paused')`, [input.actor.user_id])).rows[0].n as number;
     requireCondition(used < SERVICE_LIMIT, 409, 'member_service_limit', '每位社員最多 5 項服務（含暫停）。');
     const inserted = (await q.query(`INSERT INTO member_services(community_id,owner_user_id,title,category,summary,description,price_text,area_text,service_mode,contacts,state,created_at,updated_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'active',$11,$11) RETURNING service_id`,
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'active',$11,$11) RETURNING service_id,state`,
     [input.actor.community_id, input.actor.user_id, body.title, body.category, body.summary, body.description, body.price_text, body.area_text, body.service_mode, JSON.stringify(body.contacts), now])).rows[0];
+    if (inserted.state === 'active') {
+      await publishOriginalShare(q, {
+        kind: 'service',
+        refTable: 'member_services',
+        refId: inserted.service_id as string,
+        title: body.title,
+        communityId: input.actor.community_id,
+        authorId: input.actor.user_id,
+        guildKey: null
+      });
+    }
     return shown(q, input.actor, inserted.service_id as string);
   });
 }
@@ -144,6 +156,7 @@ export async function editMemberService(pool: Pool, input: Command, id: string, 
     checkVersion(row.aggregate_version, input.expected);
     await q.query(`UPDATE member_services SET title=$2,category=$3,summary=$4,description=$5,price_text=$6,area_text=$7,service_mode=$8,contacts=$9::jsonb,aggregate_version=aggregate_version+1,updated_at=$10 WHERE service_id=$1`,
       [id, body.title, body.category, body.summary, body.description, body.price_text, body.area_text, body.service_mode, JSON.stringify(body.contacts), now]);
+    await syncOriginalShareTitle(q, { kind: 'service', refId: id, communityId: input.actor.community_id, title: body.title });
     return shown(q, input.actor, id);
   });
 }

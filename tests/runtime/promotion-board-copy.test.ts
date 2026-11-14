@@ -173,10 +173,38 @@ test('read retry remains usable during an old copy and never retries clipboard a
 test('boardsOnly mode omits 我的推廣連結 and skips links/mine while keeping period tabs, leaderboards, and 計分規則',async t=>{
  const h=fixture(t,false,{boardsOnly:true});
  assert.deepEqual(h.requests.map(r=>r.path),['/promotion/leaderboards?period=week']);
- await h.settle(h.requests[0],{period:'week',since:null,boards:[{kind:'platform',items:[],me:null}]});
+ await h.settle(h.requests[0],{period:'week',since:null,boards:[{kind:'link',items:[],me:null}]});
  assert.doesNotMatch(h.text(),/我的推廣連結|把用得上的內容分享給需要的人/);
  assert.ok(h.button('本週'));assert.ok(h.button('本月'));assert.ok(h.button('累計'));
- assert.match(h.text(),/查看推廣排行榜/);assert.match(h.text(),/平台推廣排行榜/);assert.match(h.text(),/計分規則/);
+ assert.match(h.text(),/查看推廣排行榜/);assert.match(h.text(),/連結/);assert.match(h.text(),/計分規則/);
  h.click(h.button('本月'));
  assert.deepEqual(h.requests.map(r=>r.path),['/promotion/leaderboards?period=week','/promotion/leaderboards?period=month']);
+});
+test('all seven ledger boards show the new names and rules while mine keeps promotion link labels',async t=>{
+ const h=fixture(t);
+ const boardKinds=['all','repository','link','event','work','post','service'] as const;
+ await h.settle(h.requests[0],{period:'week',since:null,boards:boardKinds.map(kind=>({kind,items:[],me:null}))});
+ await h.settle(h.requests[1],{period:'week',items:[
+  {kind:'platform',target:'workshop',code:'a',path:'/go/a',title:'Workshop',period_points:1,available:true},
+  {kind:'member_card',target:'c',code:'b',path:'/go/b',title:'Card',period_points:1,available:true},
+  {kind:'skill_book',target:'d',code:'c',path:'/go/c',title:'Book',period_points:1,available:true},
+  {kind:'social_post',target:'e',code:'d',path:'/go/d',title:'Post',period_points:1,available:true},
+  {kind:'member_service',target:'f',code:'e',path:'/go/e',title:'Service',period_points:1,available:true},
+  {kind:'event',target:'g',code:'f',path:'/go/f',title:'Event',period_points:1,available:true},
+  {kind:'share',target:'h',code:'g',path:'/go/g',title:'Share',period_points:1,available:true},
+ ]});
+ const headings=h.nodes().filter(n=>n.nodeName==='ARTICLE').map(n=>n.attributes['aria-label']);
+ assert.deepEqual(headings,['全部','開源專案','連結','活動','作品','貼文','服務']);
+ const h2s=h.nodes().filter(n=>n.nodeName==='H2'&&n.parentNode?.nodeName==='ARTICLE').map(n=>n.textContent);
+ assert.deepEqual(h2s,['全部','開源專案','連結','活動','作品','貼文','服務']);
+ const rules=h.nodes().find(n=>n.nodeName==='DETAILS'&&n.attributes.class==='promotion-rules');
+ assert(rules);
+ const ruleParagraphs=descendants(rules).filter(n=>n.nodeName==='P');
+ assert.equal(ruleParagraphs.length,1);
+ const ruleText=ruleParagraphs[0].textContent;
+ assert.ok(ruleText.includes('分享原創或別人的作品、有人透過你的連結點進來（每人每天一次）、有人加星或報名'));
+ assert.ok(ruleText.includes('本人點擊'));
+ assert.ok(ruleText.includes('機器人'));
+ assert.ok(ruleText.includes('測試帳號'));
+ assert.deepEqual(h.nodes().filter(n=>n.attributes.class==='promotion-kind').map(n=>n.textContent),['平台','名片','技能','社群','業務','活動','分享']);
 });

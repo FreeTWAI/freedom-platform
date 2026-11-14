@@ -7,7 +7,7 @@ import {installShareComposer,openShareComposer,type ShareComposeRequest,type Sha
 import './share.css';
 const EventComposer=lazy(()=>import('./EventComposer').then(m=>({default:m.EventComposer})));
 type Preview={kind:string;title:string;url:string;description:string;original_author:string|null};
-type Pending={key:string;body:unknown;postId?:string};
+type Pending={key:string;body:unknown};
 type Props={client:PortalClient;userId:string;onChoose:(target:ShareTarget)=>void;disabled?:boolean;guided?:boolean;storesEnabled?:boolean};
 export function ShareBoxLauncher({client,userId,onChoose,disabled=false,storesEnabled=false}:Props){
   const [request,setRequest]=useState<ShareComposeRequest|null>(null),finish=useRef<((r:ShareComposeResult)=>void)|null>(null),trigger=useRef<HTMLButtonElement>(null);
@@ -55,16 +55,20 @@ export function ShareBox({pending,retainedImage,retainedMode,client,request,valu
     try{
       if(!pending.current)pending.current={key:crypto.randomUUID(),body:mode==='post'?{text:value.trim()}:{url:value.trim(),...(['repository','link','event'].includes(request.kind??'')?{kind:request.kind}:{}),...(manual?{manual_title:manualTitle.trim()}:{}),...(request.text&&request.url?{text:request.text}:{})}};
       const p=pending.current;
-      if(mode==='post'&&!p.postId){
+      let result:{share_id:string;url:string;title?:string;kind?:string};
+      if(mode==='post'){
         let attached:unknown;
         if(image){if(image.size>2*1024*1024||!['image/png','image/jpeg','image/webp'].includes(image.type))throw Error('圖片限 2 MB 的 PNG、JPEG 或 WebP。');const bytes=new Uint8Array(await image.arrayBuffer());let binary='';for(const b of bytes)binary+=String.fromCharCode(b);attached={mime_type:image.type,data_base64:btoa(binary)};}
-        const post=await client.post<{post_id:string}>('/social-posts/notes',{...(p.body as object),...(attached?{image:attached}:{})},{idempotencyKey:p.key});p.postId=post.post_id;
+        const post=await client.post<{post_id:string;share_id?:string;title?:string}>('/social-posts/notes',{...(p.body as object),...(attached?{image:attached}:{})},{idempotencyKey:p.key});
+        if(!post.share_id)throw Error('發布失敗，請重試。');
+        result={share_id:post.share_id,url:`/#shares/${post.share_id}`,title:post.title,kind:'post'};
+      }else{
+        result=await client.post<{share_id:string;url:string;title?:string;kind?:string}>('/shares',{...(p.body as object),...(request.source?{source:request.source}:{})},{idempotencyKey:p.key+'-share'});
       }
-      const result=await client.post<{share_id:string;url:string;title?:string;kind?:string}>('/shares',{...(p.postId?{kind:'post',ref_id:p.postId}:p.body as object),...(request.source?{source:request.source}:{})},{idempotencyKey:p.key+'-share'});
       const resolvedTitle=result.title||(manual?manualTitle.trim():preview?.title);
       const resolvedKind=result.kind||(mode==='post'?'post':(preview?.kind??(linkScope(value).repo||request.kind==='repository'?'repository':'link')));
       if(current()){pending.current=null;finish({status:'published',...result,title:resolvedTitle,kind:resolvedKind});}
-    }catch(e){if(current()){const {repo}=linkScope(value);if(repo&&gitHubRetryable(e)){setError('GitHub 暫時無法確認，請再試一次。');setRetry('publish');}else setError(e instanceof Error?e.message:'發布失敗，請重試。');if(e instanceof ApiError&&e.definitiveResponse&&!pending.current?.postId)pending.current=null;}}
+    }catch(e){if(current()){const {repo}=linkScope(value);if(repo&&gitHubRetryable(e)){setError('GitHub 暫時無法確認，請再試一次。');setRetry('publish');}else setError(e instanceof Error?e.message:'發布失敗，請重試。');if(e instanceof ApiError&&e.definitiveResponse)pending.current=null;}}
     finally{if(current())setBusy(false);}
   }
   return <dialog ref={attachDialog} className="share-box" aria-labelledby={id} onCancel={e=>{e.preventDefault();close();}}>

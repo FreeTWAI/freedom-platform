@@ -212,6 +212,7 @@ export async function saveMemberShare(pool:Pool,input:Command){
     const row=(await q.query(`INSERT INTO member_card_shares(user_id,community_id,share_token,enabled,include_avatar,design,headline,links,show_profile_links,profile_link_prefs) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10::jsonb)
       ON CONFLICT(user_id) DO UPDATE SET share_token=$3,enabled=$4,include_avatar=$5,design=$6,headline=$7,links=$8::jsonb,show_profile_links=$9,profile_link_prefs=$10::jsonb,aggregate_version=member_card_shares.aggregate_version+1,updated_at=now() RETURNING *`,
       [input.actor.user_id,input.actor.community_id,token,body.enabled,body.include_avatar,nextDesign,nextHeadline,JSON.stringify(nextLinks),nextShow,JSON.stringify(nextPrefs)])).rows[0];
+    await q.query(`UPDATE shares SET canonical_url=$3 WHERE community_id=$1 AND kind='link' AND canonical_key=$2 AND canonical_url IS DISTINCT FROM $3`,[input.actor.community_id,`member-card:${input.actor.user_id.toLowerCase()}`,`/member-cards/${token}`]);
     const profile=(await q.query(`SELECT ${profileColumns} FROM users u LEFT JOIN member_accounts account ON account.user_id=u.user_id AND account.community_id=u.community_id WHERE u.user_id=$1 AND u.community_id=$2`,[input.actor.user_id,input.actor.community_id])).rows[0];
     const items=profileItemsFrom(profile,nextPrefs);
     // Audit records the choice, never the capability token, handles, or link targets.

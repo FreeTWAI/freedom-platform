@@ -653,11 +653,13 @@ test('the click shows on the business board for the sharer', async ({ page }) =>
   await navigate(page, '推廣排行榜');
   await page.locator('.legacy-promotion > summary').click();
   await page.locator('.promotion-rankings > summary').click();
-  const business = page.getByRole('article', { name: '業務推廣排行榜', exact: true });
-  await expect(business).toContainText('在社員服務分享區分享社員的服務，每次點擊 +1。');
+  const business = page.getByRole('article', { name: '服務', exact: true });
+  await expect(business).toContainText('發佈或分享社員服務，或有人透過你的連結點進來。');
   await expect(page.getByRole('button', { name: '本週', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(business.locator('li').filter({ hasText: '示範需求者' }).locator('strong')).toHaveText('1');
-  await expect(business).toContainText('我的名次：第 1 名・1 分');
+  // The board sums the credit ledger: 示範需求者 published four services above (+1 each), and the
+  // guest's click on the link they shared adds one. Without the click this would read 4.
+  await expect(business.locator('li').filter({ hasText: '示範需求者' }).locator('strong')).toHaveText('5');
+  await expect(business).toContainText(/我的名次：第 \d+ 名・5 分/);
   for (const theme of ['light', 'versefolk'] as const) {
     await themeOf(page, theme);
     for (const width of [1280, 390]) {

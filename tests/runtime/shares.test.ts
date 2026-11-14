@@ -530,9 +530,9 @@ test('work shares keep non-opted-in works member-only and link opted-in works ou
   consent_to_share: true,
  }, 'showcases'));
 
- // Non-opted-in work can be shared inside the community, but refuses outward /go/ links.
+ // Non-opted-in work already has an original share from publication, can be co-shared inside the community, and refuses outward /go/ links.
  const workShare = await createShare(pool, cmd(sharer, { kind: 'work', ref_id: work.showcase_id }, 'shares'), {});
- assert.equal(workShare.created, true);
+ assert.equal(workShare.created, false);
  const storedShare = (await pool.query('SELECT kind, canonical_url, ref_id FROM shares WHERE share_id=$1', [workShare.share_id])).rows[0];
  assert.equal(storedShare.kind, 'work');
  assert.equal(storedShare.canonical_url, `/#showcase/${work.showcase_id}`);
@@ -596,7 +596,7 @@ test('work previews never disclose an internal share snapshot after editing and 
  assert.ok(html.includes(projection.description));
  assert.match(html, /property="og:title" content="Approved public work/);
  assert.match(html, /property="og:description" content="Approved public summary/);
- assert.equal((await pool.query('SELECT title FROM shares WHERE share_id=$1', [share.share_id])).rows[0].title, 'Confidential customer X');
+ assert.equal((await pool.query('SELECT title FROM shares WHERE share_id=$1', [share.share_id])).rows[0].title, 'Approved public work');
  await setShowcaseSharing(pool, {...cmd(creator, {enabled:false}, 'sharing'), expected:approved.version}, work.showcase_id);
  assert.equal(await promotionGo(pool, link.code, undefined, 'https://example.com'), null);
 });

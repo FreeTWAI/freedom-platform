@@ -262,6 +262,10 @@ const FOUNDATION_NAMES = [
   '209_event_management.sql',
   // Owner opt-in public work reading consent records only; existing works remain member-only without automatic backfill or release authority.
   '210_work_public_sharing.sql',
+  // Backfill published shares and initial endorsements for existing published posts, active services and published works without credit events.
+  '211_original_shares.sql',
+  // Credit qualified clicks on platform and member_card promotion links through shares without altering existing click branches.
+  '212_click_credit_kinds.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

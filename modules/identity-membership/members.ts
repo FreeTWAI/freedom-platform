@@ -108,6 +108,7 @@ export async function saveAccount(pool:Pool,input:Command) {
     const account=(await q.query('SELECT * FROM member_accounts WHERE user_id=$1 AND community_id=$2 FOR UPDATE',[input.actor.user_id,input.actor.community_id])).rows[0];
     checkVersion(account.aggregate_version,input.expected);
     await q.query('UPDATE users SET display_name=$2 WHERE user_id=$1',[input.actor.user_id,body.nickname]);
+    await q.query(`UPDATE shares SET title=$3 WHERE community_id=$1 AND kind='link' AND canonical_key=$2 AND title IS DISTINCT FROM $3`,[input.actor.community_id,`member-card:${input.actor.user_id.toLowerCase()}`,body.nickname]);
     const updated=(await q.query('UPDATE member_accounts SET contacts=$2,identity_label=$3,aggregate_version=aggregate_version+1 WHERE user_id=$1 RETURNING aggregate_version',[input.actor.user_id,JSON.stringify(body.contacts),body.identity_label===undefined?account.identity_label:body.identity_label])).rows[0];
     await journal(q,input.actor,'member_account',input.actor.user_id,updated.aggregate_version,'update_account',{});
     // Do not persist contacts in command receipts: all reads recheck current privacy.
