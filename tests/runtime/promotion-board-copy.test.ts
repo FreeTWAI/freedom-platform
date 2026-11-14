@@ -202,7 +202,9 @@ test('all seven ledger boards show the new names and rules while mine keeps prom
  const ruleParagraphs=descendants(rules).filter(n=>n.nodeName==='P');
  assert.equal(ruleParagraphs.length,1);
  const ruleText=ruleParagraphs[0].textContent;
- assert.ok(ruleText.includes('分享原創或別人的作品、有人透過你的連結點進來（每人每天一次）、有人加星或報名'));
+ assert.ok(ruleText.includes('分享原創或別人的作品、有人加星或報名，各計 1 分'));
+ // Clicks credit through the share ledger: one point per share per day, however many visitors.
+ assert.ok(ruleText.includes('有人透過你的分享點進來，每份分享每天最多 1 分'));
  assert.ok(ruleText.includes('本人點擊'));
  assert.ok(ruleText.includes('機器人'));
  assert.ok(ruleText.includes('測試帳號'));

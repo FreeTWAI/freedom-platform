@@ -199,7 +199,8 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await expect(dialog).toContainText('自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。');
   await expect(dialog.locator('.share-credit-note')).toHaveText('有人點開，會記在你名下。');
   const boardsBefore = await (await page.request.get('/api/v1/promotion/leaderboards?period=week')).json() as { boards: { kind: string; me?: { points: number } | null }[] };
-  const weekBefore = Number(boardsBefore.boards.find(board => board.kind === 'platform')?.me?.points ?? 0);
+  // The platform link credits through the community's link share, so its points land on the 連結 board.
+  const weekBefore = Number(boardsBefore.boards.find(board => board.kind === 'link')?.me?.points ?? 0);
   platformGo = (await dialog.locator('.skill-share-url').innerText()).trim();
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
 
@@ -207,7 +208,7 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await page.goto(platformGo);
   await expect(page).toHaveURL(url => url.pathname === '/' && url.search === '');
   await openBoards(page);
-  await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
+  await expect(board(page, '連結')).toContainText(new RegExp(`我的名次：第 \\d+ 名・${weekBefore + 1} 分`));
   // 我的貢獻 presents results once; reuse the existing personal link through 再分享.
   const existing = page.getByRole('region', { name: '我的貢獻', exact: true }).getByRole('article').filter({ has: page.getByText('自由工坊', { exact: true }) });
   await existing.getByRole('button', { name: '再分享', exact: true }).click();
@@ -220,7 +221,7 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '', e2eAuthPool);
   await page.reload();
   await openBoards(page);
-  await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
+  await expect(board(page, '連結')).toContainText(new RegExp(`我的名次：第 \\d+ 名・${weekBefore + 1} 分`));
 });
 
 // Controlled capabilities: this case never opens LINE/Telegram or sends a message.
@@ -438,16 +439,24 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
   expect((await leader.boundingBox())!.width).toBeLessThanOrEqual(36);
 });
 
-test('all six boards render, and a board with no clicks says so', async ({ page }) => {
+test('all seven boards render, and a board with no points says so', async ({ page }) => {
   await login(page);
+  // Other cases (and other specs in a CI shard) may give any board points, so the service board
+  // is emptied in the real response: the empty state is then fixed whatever ran before.
+  await page.route(url => url.pathname === '/api/v1/promotion/leaderboards', async route => {
+    const response = await route.fetch();
+    const body = await response.json() as { boards: { kind: string; items: unknown[]; me: unknown }[] };
+    body.boards = body.boards.map(item => item.kind === 'service' ? { ...item, items: [], me: null } : item);
+    await route.fulfill({ response, json: body });
+  });
   await openBoards(page);
-  for (const name of ['名片點擊排行榜', '平台推廣排行榜', '技能推廣排行榜', '社群推廣排行榜', '業務推廣排行榜', '活動推廣排行榜']) {
+  for (const name of ['全部', '開源專案', '連結', '活動', '作品', '貼文', '服務']) {
     await expect(board(page, name)).toBeVisible();
   }
-  const cards = board(page, '名片點擊排行榜');
-  await expect(cards).toContainText('在我的名片分享名片連結，每次點擊 +1。');
-  await expect(cards).toContainText('你在這個排行榜還沒有分數。');
-  await expect(board(page, '業務推廣排行榜')).toContainText('這段期間還沒有計入的點擊。');
+  const services = board(page, '服務');
+  await expect(services).toContainText('發佈或分享社員服務，或有人透過你的連結點進來。');
+  await expect(services).toContainText('你在這個排行榜還沒有分數。');
+  await expect(services).toContainText('這段期間還沒有計入的分數。');
   await expect(page.getByText('計分規則', { exact: true })).toBeVisible();
   const note = page.locator('.promotion-period-note');
   await expect(page.getByRole('region', { name: '我的推廣連結', exact: true })).toHaveCount(0);
@@ -463,7 +472,7 @@ test('計分規則 shows a disclosure marker and opens from a click or Enter', a
   await openBoards(page);
   const rules = page.locator('details.promotion-rules');
   const summary = rules.locator('summary');
-  const copy = '同一位訪客每天點同一個連結只算 1 分';
+  const copy = '有人透過你的分享點進來，每份分享每天最多 1 分';
   await expect(summary).toBeVisible();
   expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   const marker = () => summary.evaluate(element => getComputedStyle(element, '::before').content.replaceAll('"', ''));
@@ -886,9 +895,9 @@ test('sharing starts with real content choices and keeps ranking optional', asyn
   expect(creates).toBe(0);
   const summary=page.locator('.promotion-rankings > summary');
   await summary.focus(); await summary.press('Enter');
-  await expect(board(page,'平台推廣排行榜')).toBeVisible();
+  await expect(board(page,'連結')).toBeVisible();
   await summary.press('Enter');
-  await expect(board(page,'平台推廣排行榜')).not.toBeVisible();
+  await expect(board(page,'連結')).not.toBeVisible();
   await navigate(page, '社員服務');
   await expect(page).toHaveURL(/#explore\/services$/);
   await page.goBack();await expect(page).toHaveURL(/#explore$/);

@@ -92,7 +92,7 @@ export function PromotionBoards({client,resultsOnly=false,boardsOnly=false}: {cl
     {loading && <p role="status">正在載入分享紀錄…</p>}
     {!boardsOnly && <section className="card promotion-mine" aria-label="我的推廣連結">
       <h2>我的推廣連結</h2>
-      <p className="promotion-howto">右側數字是{PERIODS.find(item => item.id === range.period)!.label}的點擊分數。</p>
+      <p className="promotion-howto">右側數字是{PERIODS.find(item => item.id === range.period)!.label}的點擊次數，同一位訪客一天只算一次；排行榜分數另依計分規則。</p>
       {loading ? <p className="promotion-empty">正在讀取你的連結…</p> : error ? <p className="promotion-empty">尚未取得連結紀錄，請重新載入。</p> : shown.length === 0 ? <p className="promotion-empty">還沒有建立分享連結。</p> : <ul>
         {shown.map(item => <li key={item.code} className={item.available ? undefined : 'is-unavailable'}><span className="promotion-kind">{LINK_LABELS[item.kind]}</span><span className="promotion-link-title">{item.available ? item.title : '已無法開啟'}</span>{item.available && <button type="button" className="btn btn-ghost" disabled={copyAction.pending !== null} aria-busy={copyAction.pending === item.path} onClick={() => void copy(item.path)}>複製</button>}<strong>{item.period_points}</strong></li>)}
       </ul>}
@@ -105,7 +105,7 @@ export function PromotionBoards({client,resultsOnly=false,boardsOnly=false}: {cl
       {boards.map(board => <article className="card promotion-board" key={board.kind} aria-label={BOARD_COPY[board.kind].title}>
         <h2>{BOARD_COPY[board.kind].title}</h2>
         <p className="promotion-howto">{BOARD_COPY[board.kind].how}</p>
-        {board.items.length === 0 ? <p className="promotion-empty">這段期間還沒有計入的點擊。</p> : <ol>
+        {board.items.length === 0 ? <p className="promotion-empty">這段期間還沒有計入的分數。</p> : <ol>
           {board.items.map(item => <li key={item.user_id}><span className="promotion-person"><span className="promotion-rank"><span className="sr-only">第 </span>{item.rank}<span className="sr-only"> 名</span></span><MemberAvatar nickname={item.display_name} avatarUrl={item.avatar_url} className="promotion-avatar"/> <span>{item.display_name}</span></span><strong>{item.points}</strong></li>)}
         </ol>}
         <p className="promotion-me">{board.me ? `我的名次：第 ${board.me.rank} 名・${board.me.points} 分` : '你在這個排行榜還沒有分數。'}</p>
@@ -114,7 +114,7 @@ export function PromotionBoards({client,resultsOnly=false,boardsOnly=false}: {cl
     </details>
     <details className="promotion-rules">
       <summary>計分規則</summary>
-      <p>分享原創或別人的作品、有人透過你的連結點進來（每人每天一次）、有人加星或報名各計 1 分；本人點擊、機器人與測試帳號不計分，撤回或確認檢舉會扣回；分數只顯示在排行榜，不計入會員經驗、獎勵或驗收。</p>
+      <p>分享原創或別人的作品、有人加星或報名，各計 1 分；有人透過你的分享點進來，每份分享每天最多 1 分。本人點擊、機器人與測試帳號不計分，撤回或確認檢舉會扣回。分數只顯示在排行榜，不計入會員經驗、獎勵或驗收。</p>
     </details>
   </section>;
 }
