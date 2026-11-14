@@ -57,10 +57,11 @@ test('install bundle is pinned, verified, excludes development files and is cach
   assert.equal(calls.length,before,'second read is served from the commit cache');
 });
 
-for(const redirect of ['tree','SKILL.md'] as const)test('install bundle rejects a redirect from '+redirect+' without following it',async()=>{
+for(const redirect of ['tree','SKILL.md'] as const)test('install bundle rejects a non-rename redirect from '+redirect+' without following it',async()=>{
   const {fetcher,calls,redirects}=await fakeGitHub({'SKILL.md':skill},{redirect});
   const load=createSkillInstallBundleLoader(fetcher,undefined,[book('demo')]);
-  await assert.rejects(load('demo'),{status:503,code:'skill_source_unreachable'});
+  const expected=redirect==='tree'?{status:404,code:'skill_source_unavailable'}:{status:503,code:'skill_source_unreachable'};
+  await assert.rejects(load('demo'),expected);
   assert.deepEqual(calls,[
     'https://api.github.com/repos/FreeTWAI/freedom-skill-demo/git/trees/'+commit+'?recursive=1',
     ...(redirect==='SKILL.md'?['https://raw.githubusercontent.com/FreeTWAI/freedom-skill-demo/'+commit+'/SKILL.md']:[]),
@@ -257,25 +258,143 @@ test('install bundle prefers upstream original repo at pinned commit and records
   assert.equal(recorded[0].commit,commit);
   assert.equal(recorded[0].reason,'original_commit_missing');
   assert.equal(recordedSkillInstallFallbacks().some(item=>item.book_id==='orig'),true);
+});
 
-  // 3) resolveOriginalUrl resolves renamed original repository when provided.
-  const renamedCalls:string[]=[];
-  const renamedFetcher=(async(input:string|URL|Request)=>{
-    const url=String(input);renamedCalls.push(url);
-    if(url==='https://api.github.com/repos/RenamedAuthor/new-cool-skill/git/trees/'+commit+'?recursive=1'){
-      return Response.json({sha:commit,truncated:false,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
+test('install bundle follows a single repository-id rename without recording a fallback, and classifies missing vs transient statuses',async()=>{
+  const {createApp}=await import('../../apps/platform-api/src/app.js');
+  const body=skill;
+  const sha=await gitBlobSha1(encoder.encode(body));
+  const upstreamBook=book('orig',{upstream_url:'https://github.com/OriginalAuthor/cool-skill'});
+  const treeOk=()=>Response.json({sha:commit,truncated:false,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
+
+  // (a) Original tree 301 -> /repositories/123/... -> new name; no fallback recorded; DB not consulted.
+  clearRecordedSkillInstallFallbacks();
+  const aCalls:string[]=[];
+  const aRecorded:SkillInstallFallbackRecord[]=[];
+  const aFetcher=(async(input:string|URL|Request,init?:RequestInit)=>{
+    const url=String(input);aCalls.push(url);assert.equal(init?.redirect,'manual');
+    if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`){
+      return new Response(null,{status:301,headers:{Location:`https://api.github.com/repositories/123/git/trees/${commit}?recursive=1`}});
     }
-    if(url==='https://raw.githubusercontent.com/RenamedAuthor/new-cool-skill/'+commit+'/SKILL.md'){
-      return new Response(body);
+    if(url==='https://api.github.com/repositories/123'){
+      return Response.json({id:123,full_name:'RenamedAuthor/new-cool-skill',private:false,visibility:'public'});
     }
+    if(url===`https://api.github.com/repos/RenamedAuthor/new-cool-skill/git/trees/${commit}?recursive=1`)return treeOk();
+    if(url===`https://raw.githubusercontent.com/RenamedAuthor/new-cool-skill/${commit}/SKILL.md`)return new Response(body);
+    return new Response('unexpected',{status:404});
+  }) as typeof fetch;
+  const aRes=await createSkillInstallRoutes(aFetcher,undefined,[upstreamBook],{onFallback:r=>aRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
+  assert.equal(aRes.status,200);
+  const aBundle=await aRes.json();
+  assert.equal(aBundle.repository,'RenamedAuthor/new-cool-skill');
+  assert.equal(aBundle.commit,commit);
+  assert.equal(aRecorded.length,0);
+  assert.equal(recordedSkillInstallFallbacks().length,0);
+  assert.equal(aCalls.some(url=>url.includes('FreeTWAI/freedom-skill-orig')),false);
+
+  // Verify createApp routes install directly from catalog coordinate (never resolves DB identity hook).
+  const security=communityCatalog.skill_books.find(b=>b.id==='security-scanner')!;
+  const pinned=security.source_commit??security.guide!.source_commit;
+  const oldName=new URL(security.upstream_url).pathname.slice(1);
+  const appFetcher=(async(input:string|URL|Request,init?:RequestInit)=>{
+    const url=String(input);assert.equal(init?.redirect,'manual');
+    if(url===`https://api.github.com/repos/${oldName}/git/trees/${pinned}?recursive=1`){
+      return new Response(null,{status:301,headers:{Location:`https://api.github.com/repositories/123/git/trees/${pinned}?recursive=1`}});
+    }
+    if(url==='https://api.github.com/repositories/123'){
+      return Response.json({id:123,full_name:'Original/renamed',private:false,visibility:'public'});
+    }
+    if(url===`https://api.github.com/repos/Original/renamed/git/trees/${pinned}?recursive=1`){
+      return Response.json({sha:pinned,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
+    }
+    if(url===`https://raw.githubusercontent.com/Original/renamed/${pinned}/SKILL.md`)return new Response(body);
+    throw new Error('Unexpected GitHub request '+url);
+  }) as typeof fetch;
+  const noDbPool={query:async()=>{throw new Error('install must not query DB');}} as unknown as import('pg').Pool;
+  const appRes=await createApp(noDbPool,'http://127.0.0.1:46465','local',{githubSocial:{fetcher:appFetcher}}).request(`/api/v1/skills/${security.id}/install-bundle`);
+  assert.equal(appRes.status,200);
+  assert.equal((await appRes.json()).repository,'Original/renamed');
+
+  // (b) 301 to non-repository-id location -> falls back to distinct copy & records fallback.
+  clearRecordedSkillInstallFallbacks();
+  const bRecorded:SkillInstallFallbackRecord[]=[];
+  const bCalls:string[]=[];
+  const bFetcher=(async(input:string|URL|Request)=>{
+    const url=String(input);bCalls.push(url);
+    if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`){
+      return new Response(null,{status:301,headers:{Location:'https://evil.example.invalid/repositories/123/git/trees/'+commit}});
+    }
+    if(url===`https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/${commit}?recursive=1`)return treeOk();
+    if(url===`https://raw.githubusercontent.com/FreeTWAI/freedom-skill-orig/${commit}/SKILL.md`)return new Response(body);
     return new Response('missing',{status:404});
   }) as typeof fetch;
-  const renamedRes=await createSkillInstallRoutes(renamedFetcher,undefined,[upstreamBook],{
-    resolveOriginalUrl:async()=>'https://github.com/RenamedAuthor/new-cool-skill',
-  }).request('/api/v1/skills/orig/install-bundle');
-  assert.equal(renamedRes.status,200);
-  assert.equal((await renamedRes.json()).repository,'RenamedAuthor/new-cool-skill');
-  assert.ok(renamedCalls.every(url=>url.includes('RenamedAuthor/new-cool-skill')));
+  const bRes=await createSkillInstallRoutes(bFetcher,undefined,[upstreamBook],{onFallback:r=>bRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
+  assert.equal(bRes.status,200);
+  assert.equal((await bRes.json()).repository,'FreeTWAI/freedom-skill-orig');
+  assert.equal(bRecorded.length,1);
+  assert.equal(bRecorded[0].reason,'original_commit_missing');
+  assert.equal(bCalls.some(url=>url.includes('evil.example.invalid')||url.includes('/repositories/123')),false);
+
+  // (c) /repositories/123 returns wrong id, private:true, or second redirect -> falls back to copy.
+  for(const scenario of ['wrong_id','private','second_redirect'] as const){
+    clearRecordedSkillInstallFallbacks();
+    const cRecorded:SkillInstallFallbackRecord[]=[];
+    const cFetcher=(async(input:string|URL|Request)=>{
+      const url=String(input);
+      if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`){
+        return new Response(null,{status:302,headers:{Location:`https://api.github.com/repositories/123/git/trees/${commit}?recursive=1`}});
+      }
+      if(url==='https://api.github.com/repositories/123'){
+        return Response.json({id:scenario==='wrong_id'?999:123,full_name:'RenamedAuthor/new-cool-skill',private:scenario==='private',visibility:'public'});
+      }
+      if(url===`https://api.github.com/repos/RenamedAuthor/new-cool-skill/git/trees/${commit}?recursive=1`&&scenario==='second_redirect'){
+        return new Response(null,{status:301,headers:{Location:`https://api.github.com/repositories/456/git/trees/${commit}?recursive=1`}});
+      }
+      if(url===`https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/${commit}?recursive=1`)return treeOk();
+      if(url===`https://raw.githubusercontent.com/FreeTWAI/freedom-skill-orig/${commit}/SKILL.md`)return new Response(body);
+      return new Response('missing',{status:404});
+    }) as typeof fetch;
+    const cRes=await createSkillInstallRoutes(cFetcher,undefined,[upstreamBook],{onFallback:r=>cRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
+    assert.equal(cRes.status,200,scenario);
+    assert.equal((await cRes.json()).repository,'FreeTWAI/freedom-skill-orig',scenario);
+    assert.equal(cRecorded.length,1,scenario);
+  }
+
+  // (d) 404 with no distinct copy -> 404 skill_source_unavailable.
+  const noCopyBook=book('nocopy');
+  const dFetcher=(async()=>new Response('not found',{status:404})) as typeof fetch;
+  const dRes=await createSkillInstallRoutes(dFetcher,undefined,[noCopyBook]).request('/api/v1/skills/nocopy/install-bundle');
+  assert.equal(dRes.status,404);
+  assert.equal((await dRes.json()).error,'skill_source_unavailable');
+
+  // (e) 422 from original -> falls back to distinct copy.
+  clearRecordedSkillInstallFallbacks();
+  const eRecorded:SkillInstallFallbackRecord[]=[];
+  const eFetcher=(async(input:string|URL|Request)=>{
+    const url=String(input);
+    if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`)return new Response('unprocessable',{status:422});
+    if(url===`https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/${commit}?recursive=1`)return treeOk();
+    if(url===`https://raw.githubusercontent.com/FreeTWAI/freedom-skill-orig/${commit}/SKILL.md`)return new Response(body);
+    return new Response('missing',{status:404});
+  }) as typeof fetch;
+  const eRes=await createSkillInstallRoutes(eFetcher,undefined,[upstreamBook],{onFallback:r=>eRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
+  assert.equal(eRes.status,200);
+  assert.equal((await eRes.json()).repository,'FreeTWAI/freedom-skill-orig');
+  assert.equal(eRecorded.length,1);
+
+  // (f) 503 or 403 from original -> 503 skill_source_unreachable, copy never read.
+  for(const status of [503,403]){
+    const fCalls:string[]=[];
+    const fFetcher=(async(input:string|URL|Request)=>{
+      const url=String(input);fCalls.push(url);
+      if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`)return new Response('err',{status});
+      throw new Error('Unexpected fetch '+url);
+    }) as typeof fetch;
+    const fRes=await createSkillInstallRoutes(fFetcher,undefined,[upstreamBook]).request('/api/v1/skills/orig/install-bundle');
+    assert.equal(fRes.status,503,String(status));
+    assert.equal((await fRes.json()).error,'skill_source_unreachable',String(status));
+    assert.equal(fCalls.some(url=>url.includes('FreeTWAI/freedom-skill-orig')),false,String(status));
+  }
 });
 
 test('skillBookIdForFullName resolves both original upstream_url and integration repository_url',()=>{
@@ -285,42 +404,4 @@ test('skillBookIdForFullName resolves both original upstream_url and integration
   const copyFull=security.repository_url.replace('https://github.com/','');
   assert.equal(skillBookIdForFullName(origFull),'security-scanner');
   assert.equal(skillBookIdForFullName(copyFull),'security-scanner');
-});
-
-test('platform install resolves numeric identity before pinned tree downloads and fails closed on mismatch',async()=>{
- const {createApp}=await import('../../apps/platform-api/src/app.js');
- const {PUBLIC_BOOK_CACHE_SQL}=await import('../../modules/shares/repository-cache.js');
- const selected=communityCatalog.skill_books.find(b=>b.id==='security-scanner')!;
- const pinned=selected.source_commit??selected.guide!.source_commit;
- const oldName=new URL(selected.upstream_url).pathname.slice(1);
- const body='---\nname: renamed-tool\n---\nReviewed skill';
- const sha=await gitBlobSha1(encoder.encode(body));
- for(const mismatch of [false,true]){
-  const calls:string[]=[];
-  const fetcher=(async(input:string|URL|Request,init?:RequestInit)=>{
-   const url=String(input);calls.push(url);assert.equal(init?.redirect,'manual');
-   if(url.startsWith('https://api.github.com/repos/'+oldName+'/'))return new Response(null,{status:301,headers:{location:'https://api.github.com/repositories/101'}});
-   if(url==='https://api.github.com/repositories/101')return Response.json({id:mismatch?202:101,full_name:'Original/renamed',private:false,visibility:'public',fork:false,archived:false});
-   if(url===`https://api.github.com/repos/Original/renamed/git/trees/${pinned}?recursive=1`)return Response.json({sha:pinned,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
-   if(url===`https://raw.githubusercontent.com/Original/renamed/${pinned}/SKILL.md`)return new Response(body);
-   throw new Error('Unexpected GitHub request '+url);
-  }) as typeof fetch;
-  if(!mismatch){
-   // Exercise the actual 301 response: the old coordinate cannot serve the pinned tree.
-   const oldResponse=await createSkillInstallRoutes(fetcher,undefined,[selected]).request(`/api/v1/skills/${selected.id}/install-bundle`);
-   assert.equal(oldResponse.status,503);
-   assert.deepEqual(calls,[`https://api.github.com/repos/${oldName}/git/trees/${pinned}?recursive=1`]);
-   calls.length=0;
-  }
-  // An observation can outlive (or precede) cached metadata.
-  const pool={query:async(sql:string)=>({rows:sql===PUBLIC_BOOK_CACHE_SQL?[{observed_book_id:selected.id,observed_requested_full_name:oldName,observed_needs_recheck:false,established_provider_repo_id:'101',provider_repo_id:null,full_name:null}]:[]})} as unknown as import('pg').Pool;
-  const app=createApp(pool,'http://127.0.0.1:46465','local',{githubSocial:{fetcher}});
-  const response=await app.request(`/api/v1/skills/${selected.id}/install-bundle`);
-  if(mismatch){assert.equal(response.status,422);assert.deepEqual(calls,['https://api.github.com/repositories/101']);}
-  else {
-   assert.equal(response.status,200);
-   const bundle=await response.json();assert.equal(bundle.repository,'Original/renamed');assert.equal(bundle.commit,pinned);
-   assert.deepEqual(calls,['https://api.github.com/repositories/101',`https://api.github.com/repos/Original/renamed/git/trees/${pinned}?recursive=1`,`https://raw.githubusercontent.com/Original/renamed/${pinned}/SKILL.md`]);
-  }
- }
 });

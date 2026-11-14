@@ -143,21 +143,29 @@ export async function observeCatalogRepo(q: PoolClient, book: SkillBook, fetcher
     return {observation: existing, canonical, fetched: false as const};
   }
   const resolved = await resolvePublicRepo(coordinate, fetcher, token);
+  const previousSharedId = existing ? null : ((await q.query<{provider_repo_id: string}>(
+    `SELECT DISTINCT cr.provider_repo_id FROM shares s JOIN canonical_repositories cr
+      ON cr.repo_id=s.repo_id AND cr.provider='github'
+      WHERE s.legacy_ref @> jsonb_build_array(jsonb_build_object('kind','book','id',$1::text))
+      ORDER BY 1`,
+    [book.id],
+  )).rows.find(row => row.provider_repo_id !== resolved.id)?.provider_repo_id ?? null);
   const canonical = await upsertCanonical(q, resolved);
   const observation = (await q.query(`INSERT INTO catalog_repo_observations
     (book_id, provider, provider_repo_id, requested_full_name, full_name, current_url, source_repo_id, previous_provider_repo_id, needs_recheck, observed_at)
-    VALUES ($1,'github',$2,$3,$4,$5,$6,NULL,false,now())
+    VALUES ($1,'github',$2,$3,$4,$5,$6,$7,$8,now())
     ON CONFLICT (book_id) DO UPDATE SET provider=EXCLUDED.provider, provider_repo_id=EXCLUDED.provider_repo_id,
       requested_full_name=EXCLUDED.requested_full_name, full_name=EXCLUDED.full_name, current_url=EXCLUDED.current_url,
       source_repo_id=EXCLUDED.source_repo_id,
       previous_provider_repo_id=CASE WHEN catalog_repo_observations.provider_repo_id IS DISTINCT FROM EXCLUDED.provider_repo_id THEN catalog_repo_observations.provider_repo_id ELSE catalog_repo_observations.previous_provider_repo_id END,
       needs_recheck=CASE WHEN catalog_repo_observations.provider_repo_id IS DISTINCT FROM EXCLUDED.provider_repo_id THEN true ELSE catalog_repo_observations.needs_recheck END,
       observed_at=now()
-    RETURNING *`, [book.id, resolved.id, coordinate, resolved.full_name, resolved.url, resolved.source_repo_id])).rows[0];
-  if (existing && existing.provider_repo_id !== resolved.id) {
+    RETURNING *`, [book.id, resolved.id, coordinate, resolved.full_name, resolved.url, resolved.source_repo_id, previousSharedId, Boolean(previousSharedId)])).rows[0];
+  const priorId = existing?.provider_repo_id ?? previousSharedId;
+  if (priorId && priorId !== resolved.id) {
     requireCondition(Boolean(options.actorUserId || options.actorAdminId), 500, 'internal_error', '操作未完成，請重新整理並查看目前狀態。');
     await q.query(`INSERT INTO catalog_repo_identity_events (event_id, book_id, provider, previous_provider_repo_id, provider_repo_id, full_name, actor_user_id, actor_admin_id, action)
-      VALUES ($1,$2,'github',$3,$4,$5,$6,$7,'identity_changed')`, [randomUUID(), book.id, existing.provider_repo_id, resolved.id, resolved.full_name, options.actorUserId ?? null, options.actorAdminId ?? null]);
+      VALUES ($1,$2,'github',$3,$4,$5,$6,$7,'identity_changed')`, [randomUUID(), book.id, priorId, resolved.id, resolved.full_name, options.actorUserId ?? null, options.actorAdminId ?? null]);
   }
   return {observation, canonical, fetched: true as const};
 }
@@ -229,6 +237,7 @@ export async function submitAuthorClaim(pool: Pool, input: Command, bookId: stri
     const github = (await q.query('SELECT github_user_id, github_login FROM github_social_connections WHERE user_id=$1 AND community_id=$2 FOR SHARE', [input.actor.user_id, input.actor.community_id])).rows[0];
     requireCondition(github, 409, 'github_link_required', '請先連結 GitHub 帳號，再認領原作。');
     const observed = await observeCatalogRepo(q, book, fetcher, {force: false, actorUserId: input.actor.user_id}, token);
+    requireCondition(!observed.observation.needs_recheck, 409, 'repository_identity_recheck', '原作身分待管理員確認，暫時無法認領。');
     const repoId = observed.canonical.repo_id as string;
     await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`repo-claim/${repoId}/${input.actor.user_id}/${body.role}`]);
     const active = await q.query(`SELECT 1 FROM repo_credit_claims WHERE repo_id=$1 AND user_id=$2 AND role=$3 AND state IN ('pending','verified','disputed')`, [repoId, input.actor.user_id, body.role]);

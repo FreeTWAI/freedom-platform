@@ -149,7 +149,8 @@ test('book cache rejects reused coordinates, unresolved identity changes and unb
  }
  for(const rows of [[replacement],[{...genuine,observed_needs_recheck:true},replacement],[]]){
   const result=await read(rows);
-  assert.equal(result.url,book.repository_url);
+  assert.equal(result.url,book.upstream_url);
+  assert.equal(result.full_name,null);
   assert.equal(result.readme_html,null);
   assert.equal(result.original_author,null);
   assert.equal(result.latest_release,null);
@@ -158,9 +159,20 @@ test('book cache rejects reused coordinates, unresolved identity changes and unb
 });
 
 test('both book Markdown exports treat upstream HTML, links and fences as data',async()=>{
- const {skillMarkdown,skillAgentMarkdown}=await import('../../modules/development/service.js');
+ const {skillMarkdown,skillAgentMarkdown,pageHtml}=await import('../../modules/development/service.js');
  const {buildBookOriginalCache}=await import('../../modules/shares/repository-cache.js');
- const cache={...buildBookOriginalCache({id:'security-scanner',repository_url:'https://github.com/Original/tool'}),description:'[description](javascript:alert(1)) <img src="https://tracker.example/description">',readme_html:'<p>&lt;img src="https://tracker.example/pixel"&gt; [click](javascript:alert(1))</p>',quick_start:'echo safe\n````\n<img src="https://tracker.example/fence">\n[click](javascript:alert(1))',latest_release:{tag_name:'[release](javascript:alert(1))',name:'<img src="https://tracker.example/release">',html_url:'javascript:alert(1)',published_at:null},ahead_of_pin:true,latest_version_url:'javascript:alert(1)',latest_version_label:'<img src="https://tracker.example/label">'};
+ const guildBook={id:'security-scanner',repository_url:'https://github.com/FreeTWAI/freedom-skill-security-scanner',upstream_url:'https://github.com/UpstreamAuthor/ai-security-scanner'};
+ const uncached=buildBookOriginalCache(guildBook);
+ assert.equal(uncached.url,guildBook.upstream_url);
+ assert.equal(uncached.full_name,null);
+ const ignoredPlaceholder={...uncached,original_author:'Spoofed',stars:999,description:'Spoofed placeholder description'};
+ const uncachedMd=skillMarkdown('security-scanner',null,ignoredPlaceholder)!;
+ const uncachedAgentMd=skillAgentMarkdown('security-scanner',null,undefined,ignoredPlaceholder)!;
+ const uncachedHtml=pageHtml('security-scanner',uncachedMd,'/development/skills/security-scanner.md',undefined,null,undefined,undefined,origin,undefined,false,'',ignoredPlaceholder);
+ assert.doesNotMatch(uncachedMd,/Spoofed|999/);
+ assert.doesNotMatch(uncachedAgentMd,/Spoofed|999/);
+ assert.doesNotMatch(uncachedHtml,/Spoofed|class="sp-original-stat">★/);
+ const cache={...buildBookOriginalCache({id:'security-scanner',repository_url:'https://github.com/Original/tool'}),full_name:'Original/tool',original_author:'Original',description:'[description](javascript:alert(1)) <img src="https://tracker.example/description">',readme_html:'<p>&lt;img src="https://tracker.example/pixel"&gt; [click](javascript:alert(1))</p>',quick_start:'echo safe\n````\n<img src="https://tracker.example/fence">\n[click](javascript:alert(1))',latest_release:{tag_name:'[release](javascript:alert(1))',name:'<img src="https://tracker.example/release">',html_url:'javascript:alert(1)',published_at:null},ahead_of_pin:true,latest_version_url:'javascript:alert(1)',latest_version_label:'<img src="https://tracker.example/label">'};
  for(const markdown of [skillMarkdown('security-scanner',null,cache)!,skillAgentMarkdown('security-scanner',null,undefined,cache)!]){
   assert.ok(markdown.includes('`````sh\n'+cache.quick_start+'\n`````'));
   const outsideCode=markdown.replace(/`````sh\n[\s\S]*?\n`````/g,'');
@@ -193,10 +205,54 @@ test('book HTML and Markdown show stored description without claiming unbound or
  const fallback=createApp({query:async()=>({rows:[]})} as unknown as Pool,origin);
  const html=await (await fallback.request('/development/skills/'+book.id)).text();
  assert.ok(html.includes(book.description));
- assert.doesNotMatch(html, /class="sp-author-name"|class="sp-original-stat">★/);
+ assert.ok(html.includes('data-repository="'+book.upstream_url+'"'));
+ assert.match(html,/class="sp-author-name"[^>]*><span>teddashh<\/span>/);
+ assert.doesNotMatch(html, /class="sp-original-stat">★/);
  for(const suffix of ['.md','/SKILL.md']){
   const text=await (await fallback.request('/development/skills/'+book.id+suffix)).text();
-  assert.ok(text.includes('原作 Repo：'+book.repository_url));
-  assert.doesNotMatch(text,/原作作者／帳號：|原作 Stars：/);
+  assert.ok(text.includes('原作 Repo：'+book.upstream_url));
+  assert.ok(text.includes('原作作者／帳號：teddashh'));
+  assert.doesNotMatch(text,/原作 Stars：/);
+ }
+});
+
+test('book HTML unescapes Markdown prose without double-escaping and .md export strips 4-space indents',async()=>{
+ const cached=createApp({query:(sql:string)=>{
+  if(normalizeSql(sql)===normalizeSql(PUBLIC_BOOK_CACHE_SQL)){
+   return Promise.resolve({rows:[{
+    provider_repo_id:'9002',established_provider_repo_id:'9002',observed_needs_recheck:false,
+    full_name:'teddashh/ai-security-scanner',
+    current_url:'https://github.com/teddashh/ai-security-scanner',
+    description:'Scanner for A & B <x>',
+    topics:['security'],
+    license_spdx:'MIT',
+    readme_html:'<p>Intro</p><pre>    four space line\n\t\ttab line &amp;lt;keep&amp;gt;</pre>',
+    latest_release:{tag_name:'v2.4.0',name:'Release 2.4',html_url:'https://github.com/teddashh/ai-security-scanner/releases/tag/v2.4.0',published_at:'2026-11-10T00:00:00Z'},
+    facts:{owner_login:'teddashh',default_branch:'main',stars:421},
+    fetched_at:'2026-11-12T00:00:00Z',
+    fetch_state:'ready',
+    observed_book_id:'security-scanner',
+    observed_requested_full_name:'teddashh/ai-security-scanner',
+    metric_snapshot:null,
+    metric_checked_at:null
+   }]});
+  }
+  return publiclyReadable(sql)?Promise.resolve({rows:[]}):Promise.reject(Error('private'));
+ }} as unknown as Pool,origin);
+
+ const html=await (await cached.request(origin+'/development/skills/security-scanner')).text();
+ const renderedMarkdown=html.slice(html.indexOf('讀取 Markdown 原文'));
+ assert.equal(html.includes('v2\\.4\\.0'),false,'HTML must not contain escaped dots in v2.4.0');
+ assert.equal(renderedMarkdown.includes('&amp;amp;'),false,'rendered Markdown HTML must not double-escape ampersands');
+ assert.ok(renderedMarkdown.includes('Scanner for A &amp; B &lt;x&gt;'));
+ assert.ok(renderedMarkdown.includes('最新 Release：v2.4.0（<a href="https://github.com/teddashh/ai-security-scanner/releases/tag/v2.4.0">https://github.com/teddashh/ai-security-scanner/releases/tag/v2.4.0</a>）'));
+ assert.ok(renderedMarkdown.includes('&amp;lt;keep&amp;gt;'));
+
+ for(const suffix of ['.md','/SKILL.md']){
+  const md=await (await cached.request(origin+'/development/skills/security-scanner'+suffix)).text();
+  assert.equal(md.split('\n').some(line=>line.startsWith('    ')),false,suffix+' must not contain 4-space indented lines');
+  assert.equal(md.split('\n').some(line=>line.startsWith('\t')),false,suffix+' must not start lines with tabs');
+  assert.ok(md.includes('four space line'));
+  assert.ok(md.includes('&amp;lt;keep&amp;gt;'));
  }
 });

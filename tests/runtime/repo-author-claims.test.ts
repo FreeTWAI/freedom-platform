@@ -564,3 +564,52 @@ test('public status distinguishes a verified maintainer, a pending original auth
   assert.equal(JSON.stringify(disputed).includes('mmm-author'), false);
   assert.equal(JSON.stringify(disputed).includes('示範需求者'), false);
 });
+
+test('first catalog observation checks shared repository id and blocks claims during recheck', async () => {
+  const seedShare = async (bookId: string, providerRepoId: string, fullName: string) => {
+    const repoId = randomUUID();
+    const url = `https://github.com/${fullName}`;
+    await pool.query(
+      `INSERT INTO canonical_repositories(repo_id,provider,provider_repo_id,full_name,current_url,facts) VALUES($1,'github',$2,$3,$4,'{}')`,
+      [repoId, providerRepoId, fullName, url],
+    );
+    await pool.query(
+      `INSERT INTO shares(community_id,kind,canonical_key,canonical_url,repo_id,title,legacy_ref) VALUES($1,'repository',$2,$3,$4,$5,$6::jsonb)`,
+      [DEMO_COMMUNITY, `github:${providerRepoId}`, url, repoId, fullName, JSON.stringify([{kind: 'book', id: bookId}])],
+    );
+  };
+
+  // Disagreement: shared ID is 101, first observation sees 202.
+  const maker = await login(DEMO_USERS[0]);
+  await link(DEMO_USERS[0], '101', 'aaa-author');
+  const videoName = arm('video-autopilot', {id: 202});
+  await seedShare('video-autopilot', '101', videoName);
+
+  const immediate = await submit(maker, 'video-autopilot');
+  assert.equal(immediate.status, 409, JSON.stringify(immediate.data));
+  assert.equal(immediate.data.code, 'repository_identity_recheck');
+  assert.equal((await pool.query('SELECT count(*)::int n FROM repo_credit_claims')).rows[0].n, 0);
+
+  const observed = await admin('/skill-books/video-autopilot/author-claim-observation', {});
+  assert.equal(observed.status, 200, JSON.stringify(observed.data));
+  assert.equal(observed.data.provider_repo_id, '202');
+  assert.equal(observed.data.previous_provider_repo_id, '101');
+  assert.equal(observed.data.needs_recheck, true);
+  const events = (await pool.query(
+    `SELECT action, previous_provider_repo_id, provider_repo_id FROM catalog_repo_identity_events WHERE book_id='video-autopilot' ORDER BY created_at`,
+  )).rows;
+  assert.deepEqual(events, [{action: 'identity_changed', previous_provider_repo_id: '101', provider_repo_id: '202'}]);
+
+  const blocked = await submit(maker, 'video-autopilot');
+  assert.equal(blocked.status, 409, JSON.stringify(blocked.data));
+  assert.equal(blocked.data.code, 'repository_identity_recheck');
+
+  // Agreement: shared ID is 303 and first observation also resolves 303.
+  const securityName = arm('security-scanner', {id: 303});
+  await seedShare('security-scanner', '303', securityName);
+  const ok = await submit(maker, 'security-scanner');
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
+  const okObs = (await pool.query(`SELECT provider_repo_id, previous_provider_repo_id, needs_recheck FROM catalog_repo_observations WHERE book_id='security-scanner'`)).rows[0];
+  assert.deepEqual(okObs, {provider_repo_id: '303', previous_provider_repo_id: null, needs_recheck: false});
+  assert.equal((await pool.query(`SELECT count(*)::int n FROM catalog_repo_identity_events WHERE book_id='security-scanner'`)).rows[0].n, 0);
+});

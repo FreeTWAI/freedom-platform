@@ -15,7 +15,7 @@ import {publicSkillPath} from '../../packages/shared/skill-acquisition.js';
 import {PUBLIC_REVALIDATION_MARKUP} from '../../packages/shared/public-revalidation.js';
 /** Upstream prose is data in Markdown, including decoded HTML and link syntax. */
 export function escapeMarkdownText(value:string):string{
- return value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+ return value.replace(/^[ \t]+/gm,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/[\\`*_{}\[\]()#+!|~.:@]/g,'\\$&').replace(/^(\s*)([-=])/gm,'$1\\$2').replace(/^(\s*\d+)\./gm,'$1\\.');
 }
 export function markdownCodeFence(value:string,language='sh'):string{
@@ -32,7 +32,7 @@ export function markdownHttpsUrl(value:string):string{
 }
 function readmePlainText(html:string|null|undefined,maxChars=1600):string|null{
  if(!html)return null;
- const text=html.replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<\/(p|div|h[1-6]|li|pre|blockquote|tr)>/gi,'\n').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+ const text=html.replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<\/(p|div|h[1-6]|li|pre|blockquote|tr)>/gi,'\n').replace(/<[^>]+>/g,' ').replace(/^[ \t]+/gm,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
  if(!text)return null;
  return text.length>maxChars?text.slice(0,maxChars).trimEnd()+'\n…':text;
 }
@@ -64,6 +64,7 @@ export function pageMarkdown(page:DevelopmentPage){
  ].join('\n\n')+'\n';
 }
 export function skillMarkdown(id:string,editorial?:SkillEditorial|null,originalCache?:BookOriginalCache|null){
+ originalCache=originalCache?.full_name?originalCache:null;
  const book=communityCatalog.skill_books.find(b=>b.id===id);if(!book)return null;
  const guide=book.guide;if(!guide)return null;
  const collaboration=getSkillCollaboration(id,editorial);
@@ -144,8 +145,10 @@ function shareContentFor(id:string){
 }
 // Only our authored headings, paragraphs, lists and code blocks are rendered.
 // HTML is escaped before linkification; no member input, embedded HTML or scripts.
+const unescapeMarkdownLine=(value:string)=>value.replace(/\\([\\`*_{}\[\]()#+!|~.:@=-])/g,'$1').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
 export function markdownBody(markdown:string){
- const linkify=(line:string)=>escape(line).replace(/https:\/\/[^\s<>，；。]+|\/(?:api\/v1\/[\w/-]+|llms\.txt|development[\w/.-]*|art\/skills\/[a-z0-9-]+\.webp)/g,url=>'<a href="'+url+'">'+url+'</a>');
+ const plain=(line:string)=>escape(unescapeMarkdownLine(line));
+ const linkify=(line:string)=>plain(line).replace(/https:\/\/[^\s<>，；。（）]+|\/(?:api\/v1\/[\w/-]+|llms\.txt|development[\w/.-]*|art\/skills\/[a-z0-9-]+\.webp)/g,url=>'<a href="'+url+'">'+url+'</a>');
  let code=0,html='',list=false;
  const closeList=()=>{if(list){html+='</ul>';list=false;}};
  for(const line of markdown.split('\n')){
@@ -153,8 +156,8 @@ export function markdownBody(markdown:string){
   if(delimiter&&(!code||(delimiter[1].length>=code&&!delimiter[2].trim()))){closeList();html+=code?'</code></pre>':'<pre><code>';code=code?0:delimiter[1].length;continue;}
   if(code){html+=escape(line)+'\n';continue;}
   if(line.startsWith('# '))continue;
-  if(line.startsWith('### ')){closeList();html+='<h3>'+escape(line.slice(4))+'</h3>';}
-  else if(line.startsWith('## ')){closeList();html+='<h2>'+escape(line.slice(3))+'</h2>';}
+  if(line.startsWith('### ')){closeList();html+='<h3>'+plain(line.slice(4))+'</h3>';}
+  else if(line.startsWith('## ')){closeList();html+='<h2>'+plain(line.slice(3))+'</h2>';}
   else if(line.startsWith('- ')){if(!list){html+='<ul>';list=true;}html+='<li>'+linkify(line.slice(2))+'</li>';}
   else if(line.trim()){closeList();html+='<p>'+linkify(line)+'</p>';}
  }
@@ -198,6 +201,7 @@ export function publicSkillEngagement({name,role='作者',repositoryUrl,authorEn
   +'<dialog id="skill-author-dialog" class="sp-author-dialog" aria-labelledby="skill-author-title"><div class="sp-author-dialog-head"><h2 id="skill-author-title">自由工坊名片</h2><button type="button" data-author-close aria-label="關閉作者名片">關閉</button></div><div data-author-card></div><p class="sp-author-source"><a href="'+escape(github)+'" target="_blank" rel="noopener noreferrer">查看來源 GitHub ↗</a></p></dialog>';
 }
 export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics?:GitHubMetrics,editorial?:SkillEditorial|null,discovery?:SkillDiscoveryBook,intro?:string,origin=LIVE_SITE_ORIGIN,authorClaim?:PublicAuthorClaim,discoveryEnabled=false,eventBacklinksHtml='',originalCache?:BookOriginalCache|null){
+ originalCache=originalCache?.full_name?originalCache:null;
  const skillId=/^\/development\/skills\/([a-z0-9-]+)\.md$/.exec(markdownUrl)?.[1];
  const book=skillId?communityCatalog.skill_books.find(value=>value.id===skillId):undefined;
  const agentUrl=markdownUrl.replace(/\.md$/,'/SKILL.md');
@@ -305,6 +309,7 @@ function collaborationHtml(data:SkillCollaboration){
 }
 const frontmatter=(name:string,description:string)=>'---\nname: '+name+'\ndescription: '+JSON.stringify(description)+'\n---\n';
 export function skillAgentMarkdown(id:string,editorial?:SkillEditorial|null,origin=LIVE_SITE_ORIGIN,originalCache?:BookOriginalCache|null){
+ originalCache=originalCache?.full_name?originalCache:null;
  const data=getSkillCollaboration(id,editorial);if(!data)return null;
  const book=communityCatalog.skill_books.find(b=>b.id===id);
  const originalUrl=originalCache?.url??data.contribution.url;

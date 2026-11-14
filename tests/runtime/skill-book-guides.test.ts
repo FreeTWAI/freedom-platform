@@ -109,14 +109,18 @@ test('content uses are explicit, multi-valued and independent of business catego
   }
 });
 
-test('book Star widgets use bound metadata and do not infer authors from coordinates',async()=>{
+test('book Star widgets use bound metadata and fall back to upstream live data when full_name is absent',async()=>{
  const {createElement}=await import('react');
  const {renderToStaticMarkup}=await import('react-dom/server');
  const {SkillBookStar}=await import('../../apps/portal-web/src/modules/SkillBookCover.js');
  const book={id:'synthetic-book',repository_url:'https://github.com/Workshop/copy',upstream_url:'https://github.com/Original/old'};
  const unknown=renderToStaticMarkup(createElement(SkillBookStar,{book,compact:true}));
- assert.doesNotMatch(unknown,/Follow|更多 GitHub 數據|github-book-metrics/);
- const bound={...book,original_cache:{url:'https://github.com/Original/new',original_author:'Original',stars:12}};
+ assert.match(unknown,/Follow|更多 GitHub 數據/);
+ assert.match(unknown,/href="https:\/\/github.com\/Original"/);
+ const emptyCache=renderToStaticMarkup(createElement(SkillBookStar,{book:{...book,original_cache:{url:book.upstream_url,full_name:null,original_author:null,stars:99}},compact:true}));
+ assert.match(emptyCache,/href="https:\/\/github.com\/Original\/old"/);
+ assert.doesNotMatch(emptyCache,/>99<\/span>/);
+ const bound={...book,original_cache:{full_name:'Original/new',url:'https://github.com/Original/new',original_author:'Original',stars:12}};
  const html=renderToStaticMarkup(createElement(SkillBookStar,{book:bound,compact:true}));
  assert.match(html,/href="https:\/\/github.com\/Original\/new"/);
  assert.match(html,/>12<\/span>/);
