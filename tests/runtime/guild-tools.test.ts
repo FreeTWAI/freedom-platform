@@ -29,7 +29,19 @@ test('reject hostile URLs, platform aliases, redirects, bad framing and unsafe D
  for(const address of ['127.0.0.1','10.0.0.1','169.254.169.254','::1','::ffff:127.0.0.1'])await assert.rejects(createNodePreviewFetch(async()=>[{address,family:address.includes(':')?6:4}])('https://public.example.test/'));
  await assert.rejects(inspectTool(input,origin,undefined));await assert.rejects(inspectTool({...input,bridge_version:'freedom.guild-launchpad/v1'},origin,async()=>new Response('')), (error:any)=>error.code==='tool_bridge_version');assert.equal(safeFrameOrigins(Array.from({length:80},(_,i)=>`https://tool-${i}.example.test`),origin).length,64);
  assert.deepEqual(safeFrameOrigins(['https://good.example','https://bad.example; script-src *','https://freetwai.com','https://good.example/path'],origin),['https://good.example']);
- await assert.rejects(inspectTool({...input,profile:'origin'},origin,async()=>new Response(''))); // HTML validation still applies before proof verification.
+ await assert.rejects(inspectTool({...input,entry_url:'https://tools.example.test/',profile:'origin'},origin,async()=>new Response(''))); // HTML validation still applies before proof verification.
+});
+test('origin registration rejects project paths while sandboxed paths and a proven origin root work',async()=>{
+ let proof='';app=createApp(pool,origin,'local',{linkPreviewFetch:async url=>url.endsWith('/.well-known/freedom-guild-tool.txt')?new Response(proof,{headers:{'content-type':'text/plain'}}):new Response('<html></html>',{headers:{'content-type':'text/html'}})});
+ const leader=await login(2);await lead(leader,'guild_games');const base='/api/v1/guilds/guild_games/tools';
+ for(const [i,entry_url] of ['https://owner.github.io/project/','https://tool.pages.dev/project/'].entries()){
+  const challenge=await req(base+'/origin-challenges',leader,{entry_url});assert.equal(challenge.status,201);proof=challenge.data.contents;
+  const body={...input,tool_id:'origin-path-'+i,entry_url,profile:'origin',origin_challenge_id:challenge.data.challenge_id};
+  const refusal=await req(base,leader,body);assert.equal(refusal.status,422);assert.match(JSON.stringify(refusal.data),/隔離/);
+  const sandboxed=await req(base,leader,{...input,tool_id:'sandbox-path-'+i,entry_url});assert.equal(sandboxed.status,201);
+ }
+ const entry_url='https://dedicated.pages.dev/';const challenge=await req(base+'/origin-challenges',leader,{entry_url});proof=challenge.data.contents;
+ const accepted=await req(base,leader,{...input,tool_id:'root-origin',entry_url,profile:'origin',origin_challenge_id:challenge.data.challenge_id});assert.equal(accepted.status,201);assert.equal((await req(base+'/root-origin/accept',leader,{},1)).status,200);
 });
 test('current guild authority, acceptance, revisions, opaque subjects, report dedupe and CSP',async()=>{
  const leader=await login(0),other=await login(1),third=await login(2);await lead(leader,'guild_games');await lead(other,'guild_ar');
@@ -63,7 +75,7 @@ test('current guild authority, acceptance, revisions, opaque subjects, report de
 test('origin proof binds registrant/guild/origin; browser and agent exchange use a distinct bounded audience and revocation status',async()=>{
  const {generateKeyPair,exportJWK,SignJWT}=await import('jose');const {verifyToolToken}=await import('../../modules/guild-tools/tokens.js');const pair=await generateKeyPair('ES256'),jwk=await exportJWK(pair.publicKey),kid=randomUUID();let proof='';
  app=createApp(pool,origin,'local',{guildToolSigner:{privateKey:pair.privateKey,publicJwk:jwk,kid},linkPreviewFetch:async url=>url.endsWith('/.well-known/freedom-guild-tool.txt')?new Response(proof,{headers:{'content-type':'text/plain'}}):new Response('<html></html>',{headers:{'content-type':'text/html'}})});
- const leader=await login(0),other=await login(1);await lead(leader,'guild_games');const base='/api/v1/guilds/guild_games/tools',body={...input,tool_id:'origin-tool',profile:'origin',scopes:['context:read','session:exchange']};
+ const leader=await login(0),other=await login(1);await lead(leader,'guild_games');const base='/api/v1/guilds/guild_games/tools',body={...input,tool_id:'origin-tool',entry_url:'https://tools.example.test/',profile:'origin',scopes:['context:read','session:exchange']};
  assert.equal((await req(base,leader,body)).status,422);
  assert.equal((await req(base+'/origin-challenges',other,{entry_url:body.entry_url})).status,403);
  const challenge=await req(base+'/origin-challenges',leader,{entry_url:body.entry_url});assert.equal(challenge.status,201);assert.equal(new URL(challenge.data.url).pathname,'/.well-known/freedom-guild-tool.txt');
@@ -93,12 +105,51 @@ test('admin immediate disable is scoped, current-authorized and audited',async()
  assert.equal((await disableToolAsAdmin(pool,command,tool.data.id)).state,'disabled');assert.equal((await pool.query("SELECT count(*)::int n FROM guild_tool_audit WHERE tool=$1 AND action='admin-disable'",[tool.data.id])).rows[0].n,1);
  await pool.query('UPDATE platform_admins SET active=false WHERE admin_id=$1',[adminId]);await assert.rejects(disableToolAsAdmin(pool,command,tool.data.id));
 });
-test('delegates can add a first revision, cannot accept a changed boundary, and expired grants do not authorize replay',async()=>{
+test('delegates can add a first revision but cannot replace an enabled tool, and revoked grants do not authorize replay',async()=>{
  const leader=await login(0),delegate=await login(2);await lead(leader,'guild_games');await pool.query('INSERT INTO principals(user_ref) VALUES($1),($2) ON CONFLICT(user_ref) DO NOTHING',[leader.user,delegate.user]);await pool.query("INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier) VALUES($1,$2,$3,'guild_games','active','full') ON CONFLICT(community_id,user_id,guild_key) DO UPDATE SET state='active'",[randomUUID(),DEMO_COMMUNITY,delegate.user]);const principals=(await pool.query('SELECT principal_id,user_ref FROM principals WHERE user_ref=ANY($1::uuid[])',[[leader.user,delegate.user]])).rows;const principal=(user:string)=>principals.find(r=>r.user_ref===user).principal_id;
  const delegation=randomUUID();await pool.query("INSERT INTO guild_launchpad_delegations(delegation_id,community_id,guild_key,principal_id,capabilities,granted_by_principal_id,expires_at,version,status) VALUES($1,$2,'guild_games',$3,ARRAY['guild.config.publish'],$4,clock_timestamp()+interval '1 hour',1,'active')",[delegation,DEMO_COMMUNITY,principal(delegate.user),principal(leader.user)]);
  const base='/api/v1/guilds/guild_games/tools',body={...input,tool_id:'delegated'},key=randomUUID();const r=await req(base,delegate,body,undefined,key);assert.equal(r.status,201);assert.equal((await req(base+'/delegated/accept',delegate,{},1)).status,200);
- const revised=await req(base,delegate,{...body,scopes:['context:read']},1);assert.equal(revised.status,201);assert.equal((await req(base+'/delegated/accept',delegate,{},2)).status,403);assert.equal((await req(base+'/delegated/accept',leader,{},2)).status,200);
+ assert.equal((await req(base+'/delegated/disable',delegate,{},1)).status,403);assert.equal((await req(base+'/delegated/context',leader)).status,200);
+ const revised=await req(base,delegate,{...body,scopes:['context:read']},1);assert.equal(revised.status,403);assert.equal((await req(base+'/delegated/context',leader)).status,200);
+ const leaderRevision=await req(base,leader,{...body,scopes:['context:read']},1);assert.equal(leaderRevision.status,201);assert.equal((await req(base+'/delegated/accept',delegate,{},2)).status,403);assert.equal((await req(base+'/delegated/accept',leader,{},2)).status,200);
+ // A replacement attempt must not invalidate an already-issued token or hide the enabled tool.
+ const {generateKeyPair,exportJWK}=await import('jose');const pair=await generateKeyPair('ES256'),jwk=await exportJWK(pair.publicKey);let proof='';
+ app=createApp(pool,origin,'local',{guildToolSigner:{privateKey:pair.privateKey,publicJwk:jwk,kid:randomUUID()},linkPreviewFetch:async url=>url.endsWith('/.well-known/freedom-guild-tool.txt')?new Response(proof,{headers:{'content-type':'text/plain'}}):new Response('<html></html>',{headers:{'content-type':'text/html'}})});
+ const original={...input,tool_id:'delegate-token-target',entry_url:'https://dedicated.example.test/',profile:'origin',scopes:['context:read','session:exchange']};
+ const challenge=await req(base+'/origin-challenges',leader,{entry_url:original.entry_url});assert.equal(challenge.status,201);proof=challenge.data.contents;
+ const target=await req(base,leader,{...original,origin_challenge_id:challenge.data.challenge_id});assert.equal(target.status,201);assert.equal((await req(base+'/delegate-token-target/accept',leader,{},1)).status,200);
+ const token=await req(base+'/delegate-token-target/token',leader,{});assert.equal(token.status,200);
+ const status=()=>req('/api/v1/public/guild-tool-token/status',undefined,{token:token.data.access_token,audience:target.data.id});assert.equal((await status()).data.active,true);
+ const attack=await req(base,delegate,{...input,tool_id:original.tool_id,entry_url:'https://attacker.example.test/'},1);assert.equal(attack.status,403);
+ const loaded=(await req('/api/v1/public/guilds/guild_games/tools')).data.items.find((item:any)=>item.tool_id===original.tool_id);assert.equal(loaded.state,'enabled');assert.equal(loaded.revision,1);assert.equal(loaded.entry_url,original.entry_url);
+ assert.equal((await req(base+'/delegate-token-target/context',leader)).status,200);assert.equal((await status()).data.active,true);
  await pool.query("UPDATE guild_launchpad_delegations SET status='revoked',revoked_at=clock_timestamp(),revoke_reason='Synthetic revoke',version=version+1 WHERE delegation_id=$1",[delegation]);assert.equal((await req(base,delegate,body,undefined,key)).status,403);
+});
+test('admin disable HTTP rejects missing authority, CSRF, foreign admin and agent before mutation',async()=>{
+ const {createAdminAccessVerifier}=await import('../../modules/platform-admin/access.js');
+ const {createLocalJWKSet,exportJWK,generateKeyPair,SignJWT}=await import('jose');const {randomBytes}=await import('node:crypto');
+ const pair=await generateKeyPair('RS256'),jwk=await exportJWK(pair.publicKey),issuer='https://synthetic.cloudflareaccess.com',audience='guild-tool-admin';
+ const verifier=createAdminAccessVerifier({issuer,audience,csrfSecret:randomBytes(32).toString('hex'),keySet:createLocalJWKSet({keys:[{...jwk,kid:'fixture',alg:'RS256'}]})});
+ const guarded=createApp(pool,origin,'local',{adminVerifier:verifier});const foreignCommunity=randomUUID(),adminId=randomUUID(),foreignId=randomUUID(),toolId=randomUUID();
+ await pool.query('INSERT INTO communities(community_id,name) VALUES($1,$2)',[foreignCommunity,'Synthetic foreign community']);
+ const email='tool-admin-http@example.test',foreignEmail='tool-admin-foreign@example.test';
+ await pool.query("INSERT INTO platform_admins(admin_id,community_id,email,display_name,role,active) VALUES($1,$2,$3,'Synthetic admin','super_admin',true),($4,$5,$6,'Foreign admin','super_admin',true)",[adminId,DEMO_COMMUNITY,email,foreignId,foreignCommunity,foreignEmail]);
+ const makeIdentity=async(address:string)=>{const now=Math.floor(Date.now()/1000),jwt=await new SignJWT({type:'app',email:address,sub:randomUUID(),iss:issuer,aud:audience,iat:now,nbf:now,exp:now+600}).setProtectedHeader({alg:'RS256',kid:'fixture'}).sign(pair.privateKey);return {jwt,csrf:(await verifier(new Request(origin,{headers:{'Cf-Access-Jwt-Assertion':jwt}}))).csrfToken};};
+ const own=await makeIdentity(email),foreign=await makeIdentity(foreignEmail),member=await login(1);
+ await pool.query("INSERT INTO guild_tools(id,community_id,guild_key,tool_id,state,title,entry_url,origin,bridge_version,profile,scopes,permissions,registered_by) VALUES($1,$2,'guild_games','admin-http-target','enabled','工具','https://admin-fixture.example/','https://admin-fixture.example',$3,'sandboxed','[\"context:read\"]','[]',$4)",[toolId,DEMO_COMMUNITY,BRIDGE_VERSION,member.user]);
+ await pool.query('UPDATE users SET onboarding_completed_at=now() WHERE user_id=$1',[member.user]);const agent=await req('/api/v1/me/agent-tokens',member,{name:'Synthetic tool test',scopes:['read']});assert.equal(agent.status,201);
+ const request=(headers:Record<string,string>,key=randomUUID())=>guarded.request(origin+`/admin/api/guild-tools/${toolId}/disable`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','Idempotency-Key':key,'If-Match':'\"1\"',...headers},body:JSON.stringify({reason:'Synthetic review'})});
+ const unchanged=async()=>{const row=(await pool.query('SELECT state,revision FROM guild_tools WHERE id=$1',[toolId])).rows[0];assert.equal(row.state,'enabled');assert.equal(row.revision,1);assert.equal(Number((await pool.query('SELECT count(*) FROM guild_tool_audit WHERE tool=$1',[toolId])).rows[0].count),0);};
+ const attempts:[string,Record<string,string>,number][]=[
+  ['no identity',{},401],['member cookie',{Cookie:member.cookie},401],['missing CSRF',{'Cf-Access-Jwt-Assertion':own.jwt},403],
+  ['wrong CSRF',{'Cf-Access-Jwt-Assertion':own.jwt,'X-Admin-CSRF':'invalid'},403],
+  ['foreign admin',{'Cf-Access-Jwt-Assertion':foreign.jwt,'X-Admin-CSRF':foreign.csrf},404],
+  ['agent bearer',{Authorization:'Bearer '+agent.data.access_token},403],
+ ];
+ for(const [name,headers,status] of attempts){assert.equal((await request(headers)).status,status,name);await unchanged();}
+ const key=randomUUID(),valid={'Cf-Access-Jwt-Assertion':own.jwt,'X-Admin-CSRF':own.csrf};assert.equal((await request(valid,key)).status,200);
+ assert.equal((await pool.query('SELECT state FROM guild_tools WHERE id=$1',[toolId])).rows[0].state,'disabled');assert.equal(Number((await pool.query('SELECT count(*) FROM guild_tool_audit WHERE tool=$1',[toolId])).rows[0].count),1);
+ await pool.query('UPDATE platform_admins SET active=false WHERE admin_id=$1',[adminId]);assert.equal((await request(valid,key)).status,403);assert.equal(Number((await pool.query('SELECT count(*) FROM guild_tool_audit WHERE tool=$1',[toolId])).rows[0].count),1);
 });
 test('guild tool limit fails closed without creating a seventeenth record',async()=>{
  const leader=await login(1);await lead(leader,'guild_ar');for(let i=0;i<16;i++)await pool.query("INSERT INTO guild_tools(id,community_id,guild_key,tool_id,state,title,entry_url,origin,bridge_version,profile,scopes,permissions,registered_by) VALUES($1,$2,'guild_ar',$3,'enabled','上限','https://capacity.example.test/','https://capacity.example.test',$4,'sandboxed','[\"context:read\"]','[]',$5)",[randomUUID(),DEMO_COMMUNITY,'cap-'+i,BRIDGE_VERSION,leader.user]);
@@ -158,7 +209,7 @@ test('Worker hosting transport registers, proves origin and accepts only exact e
  for(const entry_url of ['https://Tool.pages.dev/','https://tool.pages.dev:443/','https://%74ool.pages.dev/','https://tool.pages.dev./','https://other.example.test/']){
   const result=await req(base,leader,{...input,tool_id:'worker-tool',entry_url});assert.equal(result.status,422);assert.equal(calls,0);
  }
- const body={...input,tool_id:'worker-tool',entry_url:'https://a1b2.tool.pages.dev/app/',profile:'origin'};
+ const body={...input,tool_id:'worker-tool',entry_url:'https://a1b2.tool.pages.dev/',profile:'origin'};
  const challenge=await req(base+'/origin-challenges',leader,{entry_url:body.entry_url});assert.equal(challenge.status,201);proof=challenge.data.contents;
  const registered=await req(base,leader,{...body,origin_challenge_id:challenge.data.challenge_id});assert.equal(registered.status,201,JSON.stringify(registered));assert.equal(calls,2);
  assert.doesNotMatch((await app.request(origin+'/')).headers.get('content-security-policy')!,/a1b2\.tool\.pages\.dev/);

@@ -4,9 +4,16 @@ export function guildToolGuide(origin:string){return `# 公會工具：20 分鐘
 
 ## 建立與發布
 
-複製 freedom-platform 的 templates/guild-tool 目錄到自己的 Repo。Node 24 執行 npm run check、npm run build。dist 是完整輸出。設定 GitHub Pages Source 為 GitHub Actions，內附 workflow 會檢查並發布 main；亦可放任何公開 HTTPS 主機。部署及雲端帳號由作者自行控制。此流程不要求向平台送 PR。20 分鐘不含首次主機帳號、創作實際工具和等待會長。
+1. 複製 freedom-platform 的 templates/guild-tool 內容到自己的 Repo 根目錄，包含隱藏的 .github/workflows/pages.yml；保留 bridge.js。修改 index.html、main.js、style.css 及 freedom-tool.json，讓名稱、代號與所需功能符合自己的工具。
+2. 使用 Node 24 在 Repo 根目錄執行 npm run check 和 npm run build；不需安裝依賴，dist/ 是完整靜態網站。main.js 的 PLATFORM_ORIGINS 列出允許嵌入工具的正式站與 staging 精確來源；如果使用另一個平台，請先加入它的精確 origin。沒有清單或來源不符時，工具不會連線或傳訊息。
+3. GitHub Pages 將 Source 設為 GitHub Actions，推送 main 後由隨附 workflow 檢查、建置並發布 dist/；或將 dist/ 部署到 Cloudflare Pages。部署及雲端帳號由作者自行控制，不需向平台送 PR。20 分鐘不含首次主機帳號、創作實際工具和等待會長。
+4. 網站發布後，公會長或獲發布委任的成員在公會「工具 → 新增工具」填名稱與網址，必要時在進階設定選代號、功能與模式；按「預覽」，確認工具連線，再按「加入啟動台」。manifest 是作者自述，平台不會替你帶入其設定。只有會長可修改既有登錄及接受修訂。
 
-entry_url 必須直接回 HTML，不含帳密、query、fragment 或非標準 port；禁止私有位址與平台自己的網域。不得重新導向；請填最後的網址。網站不能拒絕 frame 嵌入。ES modules、圖片 canvas、worker 需要處理 opaque-origin 的 CORS；模板可改用一般打包 script。平台 Node 使用 DNS 鎖定的安全 transport；未安裝任意公開網站安全 egress 的 Worker 會拒絕註冊，不會繞過保護。
+範本畫面只顯示公會名稱、登入狀態和簡短操作結果；原始回應供開發者在瀏覽器主控台查看。
+
+本機測試可將 LOCAL_PLATFORM_ORIGIN 設為帶 port 的 http://127.0.0.1 來源，執行 node build.mjs --test-platform-origin "$LOCAL_PLATFORM_ORIGIN"；這個來源只加入產生的 dist，不要發布測試建置，發布前重新執行 npm run build。
+
+平台 Worker 接受 HTTPS 的 \`<name>.github.io\`、\`<name>.pages.dev\` 與 \`<preview>.<name>.pages.dev\`；網域限小寫 DNS 名稱，網址不得明寫 port（包含 443）。自訂網域須使用 Node 的 DNS 鎖定安全 transport。GitHub 專案 Pages 請填 \`https://<name>.github.io/<repo>/\`，結尾的斜線不可省略，否則重新導向會被拒絕。Cloudflare Pages 的 \`dist/_headers\` 讓隔離 frame 可以載入模板的模組。entry_url 必須直接回 HTML，不含帳密、query、fragment 或非標準 port；禁止私有位址與平台自己的網域。不得重新導向；請填最後的網址。網站不能拒絕 frame 嵌入。ES modules、圖片 canvas、worker 在 opaque-origin frame 需要主機允許 CORS。
 
 ## Manifest
 
@@ -22,10 +29,10 @@ entry_url 必須直接回 HTML，不含帳密、query、fragment 或非標準 po
 複製 [client.js](${origin}/guild-tool/v2/client.js)，避免跨站依賴；也可由此版本網址匯入。
 \`\`\`js
 import {createGuildTool} from './bridge.js';
-const tool = createGuildTool({parentOrigin: '${origin}'});
+const tool = createGuildTool({platformOrigins: ['${origin}']});
 await tool.ready();
 const context = await tool.request('context.get', {});
-// public guild/tool/theme/locale/signed_in；會員只有此工具專屬 subject 和此公會 tier。
+// public guild/guild_name/tool/theme/locale/signed_in；會員只有此工具專屬 subject 和此公會 tier。
 await tool.request('device-state.put', {key:'note', value:'我的筆記'});
 const {value} = await tool.request('device-state.get', {key:'note'});
 await tool.request('device-state.put', {key:'note', value:null}); // 刪除自己的鍵
@@ -46,17 +53,23 @@ Host 每次載入送 {version:'freedom.guild-launchpad/v2', type:'init', tool_id
 
 ## 會長加入
 
-公會 → 工具 → 新增工具，填名稱與 HTTPS 地址 → 預覽 → 加入啟動台。預覽只有公開 context；需要 v2 握手才能按加入。委任成員可加入新工具；修訂需會長再確認。新來源、profile 或 scopes 改變會產生 pending revision，需會長再確認。接受後重新載入平台文件以更新 CSP；新版本同網址發布不需平台動作。
+公會 → 工具 → 新增工具，填名稱與 HTTPS 地址 → 預覽 → 加入啟動台。預覽只有公開 context；需要 v2 握手才能按加入。委任成員可登錄並接受新工具的第一版；既有工具的重新登錄及修訂接受都限會長操作。新來源、profile 或 scopes 改變會產生 pending revision，需會長再確認。接受後重新載入平台文件以更新 CSP；新版本同網址發布不需平台動作。
 
 路由 #guilds/<guild_key>/tools/<tool_id>。每公會 16 工具，全站 64 origins；每會員每小時 20 次網址檢查。工具上方顯示來源與功能。會長可停用；三位不同會員檢舉自動停用。停用後新操作被拒絕，已開頁面最遲下一次 5 秒輪詢移除 frame。
 
 ## 獨立來源與工具身分
 
-共享主機請保留 sandboxed。origin 允許自己的 Cookie/儲存空間，必須控制整個 origin。進階設定選「獨立來源」→建立來源驗證→把 contents 放到回傳的根目錄 /.well-known/freedom-guild-tool.txt → 30 分鐘內預覽。API：POST /api/v1/guilds/:guild/tools/origin-challenges，body {entry_url}；登錄多帶 origin_challenge_id。驗證綁定本次登錄者、公會、origin；平台網址禁止使用。每次修改登錄須重新驗證、由會長接受。
+同一來源提供的所有內容都共用此工具的存取權，因此 origin 只接受網址根目錄，子路徑請使用 sandboxed。需要 origin 的工具請使用專屬自訂網域。origin 允許自己的 Cookie/儲存空間，必須控制整個 origin。進階設定選「獨立來源」→建立來源驗證→把 contents 放到回傳的根目錄 /.well-known/freedom-guild-tool.txt → 30 分鐘內預覽。API：POST /api/v1/guilds/:guild/tools/origin-challenges，body {entry_url}；登錄多帶 origin_challenge_id。驗證綁定本次登錄者、公會、origin；平台網址禁止使用。每次修改登錄須重新驗證、由會長接受。
 
 只有已啟用 origin 工具且會長明確允許 session:exchange（進階設定的「工具身分」）可以呼叫 tool.request('session.exchange', {})；context:read 單獨不授予 token。未安裝簽章金鑰時隱藏此選項。主頁用 Cookie + CSRF 呼叫 POST /api/v1/guilds/:guild/tools/:tool/token；Agent 用 read scope 的 fw_agent_ Bearer 及 Idempotency-Key 呼叫同一個 API，空 JSON body。混用 Cookie 與 Bearer 一律拒絕。長效憑證從不傳給工具。
 
-此交換預設未啟用：找不到可直接安裝的現有簽章 key，沒有新增部署 secret。安裝者須明確提供 ToolSigner（modules/guild-tools/tokens.ts 的 CryptoKey port）；未安裝時回 503 tool_tokens_unavailable。測試用即時產生的 ES256 key。已存在的 execution/machine token 不可當工具 token。
+Worker 從 secret FREEDOM_GUILD_TOOL_SIGNING_KEY 安裝工具專用的 P-256 私有 JWK（含 kid）；沒有金鑰或金鑰無效時不啟用交換，API 回 503 tool_tokens_unavailable。平台操作者可在平台 Repo 以 Node 24 產生金鑰，將 WORKER_ENV 設為目標 Wrangler 環境後直接輸入 secret，不將金鑰寫入 repo 或日誌：
+
+\`\`\`sh
+node scripts/generate-guild-tool-signing-key.mjs | npx wrangler secret put FREEDOM_GUILD_TOOL_SIGNING_KEY --env "$WORKER_ENV"
+\`\`\`
+
+Node 安裝者可提供 ToolSigner（modules/guild-tools/tokens.ts 的 CryptoKey port）；已存在的 execution/machine token 不可當工具 token。換鑰使平台不再驗證舊 token，外部離線快取仍可能接受未到期 token；需要即時權限時使用 status。
 
 回應 {access_token, token_type, expires_in:600, audience, issuer}。JWT 用途 freedom-guild-tool+jwt / guild-tool-identity，audience 是此登錄的 UUID，含 tool_id/guild_key/revision、工具專屬 sub、目前 tier、jti/iat/exp；只有 context:read，不授予平台寫入或任意後端操作。只放記憶體，不放網址或持久化儲存。
 

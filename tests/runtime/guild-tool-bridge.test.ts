@@ -48,3 +48,31 @@ test('guest share draft roundtrips bounded image bytes, preserves source and exp
  const [key,raw]=[...entries][0];entries.set(key,JSON.stringify({...JSON.parse(raw),created:Date.now()-86400001}));assert.equal(readToolShare(storage),null);clearToolShare(storage);assert.equal(entries.size,0);
  const controller=new AbortController();controller.abort();await assert.rejects(saveToolShare(storage,tool,{text:'old'},'#guilds/guild_games/tools/test',controller.signal));assert.equal(entries.size,0);
 });
+
+test('both SDK copies require an exact preconfigured platform origin before any request',async()=>{
+ const {readFileSync}=await import('node:fs');const {runInNewContext}=await import('node:vm');
+ for(const file of ['apps/portal-web/public/guild-tool/v2/client.js','templates/guild-tool/bridge.js']){
+  const source=readFileSync(file,'utf8');let receive!:(event:unknown)=>void;const sent:unknown[]=[];
+  const parent={postMessage:(message:unknown,target:string)=>sent.push({message,target})},window={};
+  const create=runInNewContext(source.replace('export function createGuildTool','function createGuildTool')+'\ncreateGuildTool',{
+   parent,window,addEventListener:(_type:string,callback:typeof receive)=>{receive=callback;},removeEventListener:()=>{},setTimeout,clearTimeout,URL,TextEncoder,crypto:{randomUUID}
+  });
+  const init={version:BRIDGE_VERSION,type:'init',guild_key:'guild_games',tool_id:'example',nonce:randomUUID()};
+  for(const options of [undefined,{platformOrigins:[]},{platformOrigins:['*']},{platformOrigins:['https://platform.example/path']},{platformOrigins:['https://platform.example/']},{platformOrigins:['https://platform.example','null']},{parentOrigin:'https://platform.example'}]){
+   const client=create(options);receive({source:parent,origin:'https://platform.example',data:init});await assert.rejects(client.request('context.get',{}),/host_not_ready/);client.dispose();
+  }
+  const client=create({platformOrigins:['https://platform.example','https://staging.example']});
+  receive({source:parent,origin:'https://attacker.example',data:init});await assert.rejects(client.request('context.get',{}),/host_not_ready/);
+  receive({source:parent,origin:'https://platform.example',data:init});await client.ready();
+  const result=client.request('context.get',{});assert.equal(sent.length,1);const message=(sent[0] as any).message;assert.equal((sent[0] as any).target,'https://platform.example');
+  receive({source:parent,origin:'https://platform.example',data:{...init,type:'response',request_id:message.request_id,ok:true,result:'ok'}});assert.equal(await result,'ok');client.dispose();
+ }
+});
+
+test('the public guild tool guide describes supported Worker hosts, signer and the template journey',async()=>{
+ const {guildToolGuide}=await import('../../modules/guild-tools/guide.js');const {readFileSync}=await import('node:fs');
+ const guide=guildToolGuide('https://platform.example'),readme=readFileSync('templates/guild-tool/README.md','utf8');
+ for(const expected of ['github.io','pages.dev','小寫 DNS','不得明寫 port','Node','FREEDOM_GUILD_TOOL_SIGNING_KEY','generate-guild-tool-signing-key.mjs','GitHub Actions','npm run check','npm run build','預覽','加入啟動台'])assert.ok(guide.includes(expected),expected);
+ assert.doesNotMatch(guide,/未安裝任意公開網站安全 egress 的 Worker 會拒絕註冊|沒有新增部署 secret/);
+ assert.match(readme,/guild-tool\.md/);
+});
