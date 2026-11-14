@@ -46,7 +46,8 @@ test('every workspace page and entry flow maps to existing source, tests and an 
   for(const command of page.checks)for(const match of command.matchAll(/tests\/[\w/.-]+/g))assert.ok(existsSync(match[0]),match[0]);
  }
  for(const book of map.skill_books){
-  assert.ok(book.guide,book.id);assert.ok(repos.has(new URL(book.repository_url).pathname.slice(1)));
+  const copyUrl=book.fork_url?book.fork_url.replace(/\/fork$/,''):book.repository_url;
+  assert.ok(book.guide,book.id);assert.equal(book.repository_url,book.upstream_url,book.id);assert.ok(repos.has(new URL(copyUrl).pathname.slice(1)),book.id);
  }
 });
 

@@ -19,6 +19,7 @@ const sample=():SkillPageContent=>structuredClone(getSkillPageContent('taiwanese
 test('every catalog book has valid authored page content and no other ids do',async()=>{
  assert.deepEqual([...skillPageContentIds].sort(),communityCatalog.skill_books.map(book=>book.id).sort());
  for(const book of communityCatalog.skill_books){
+  assert.equal(book.repository_url,book.upstream_url,book.id);
   const raw=JSON.parse(await readFile(`modules/community/skill-pages/${book.id}.json`,'utf8'));
   assert.deepEqual(skillPageContentProblems(raw),[],book.id);assert.deepEqual(getSkillPageContent(book.id),raw,book.id);
  }
@@ -151,4 +152,12 @@ test('UX-V-09: public skill page has one btn-primary, no inline style, no duplic
  const cachedHrefs=[...stripHidden(cached).matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)].map(m=>m[1]!);
  assert.equal(new Set(cachedHrefs).size,cachedHrefs.length,'cached page must have unique visible hrefs');
  assert.ok(cached.includes('加星 42'));
+});
+
+test('social-post page shows the FreeTWAI copy in history while its first repository link is the original',()=>{
+ const html=render('social-post');
+ const repoLinks=[...html.matchAll(/<a\b[^>]*\bhref="(https:\/\/github\.com\/[^/"#?]+\/[^/"#?]+)(?:\/[^"]*)?"/g)].map(m=>m[1]!);
+ assert.equal(repoLinks[0],'https://github.com/Hao0321/claude-skill-social-post');
+ assert.match(html,/工坊整合副本（歷史紀錄）：<a href="https:\/\/github\.com\/FreeTWAI\/claude-skill-social-post">/);
+ assert.match(html,/歷史紀錄（工坊整合副本）<\/dt><dd><a href="https:\/\/github\.com\/FreeTWAI\/claude-skill-social-post"/);
 });

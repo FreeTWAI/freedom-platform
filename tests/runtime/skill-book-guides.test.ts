@@ -27,7 +27,8 @@ test('every catalog and featured skill book carries a complete, specific guide w
     const upstream=new URL(book.upstream_url);
     for(const evidence of guide.source_evidence){const url=new URL(evidence.url);assert.equal(url.protocol,'https:');assert.equal(url.hostname,'github.com');assert.equal(url.username,'');assert.equal(url.pathname,`${upstream.pathname}/blob/${guide.source_commit}/${encodeURI(evidence.path)}`);}
     assert.ok(guide.source_evidence.some(evidence=>evidence.url===guide.reading_url),book.id);
-    assert.equal(new URL(guide.contribution_url).pathname,`${new URL(book.repository_url).pathname}/issues`);
+    const copyUrl=book.fork_url?book.fork_url.replace(/\/fork$/,''):book.repository_url;
+    assert.equal(new URL(guide.contribution_url).pathname,`${new URL(copyUrl).pathname}/issues`);
     if(guide.website_url){const url=new URL(guide.website_url);assert.equal(url.protocol,'https:');assert.equal(url.username,'');}
     if(guide.quickstart){assert.ok(guide.quickstart.commands.trim());assert.match(guide.quickstart.context,/在自己.*執行/);assert.doesNotMatch(guide.quickstart.commands,/curl.*\|\s*(sh|bash)|wrangler deploy|sudo|--remote/);}
     summaries.add(guide.summary);deliverables.add(guide.first_result);
@@ -68,7 +69,8 @@ test('all 55 books expose distinct covers, original-author stars and the same be
   }
   assert.equal(covers.size,55);
   const external=communityCatalog.skill_books.find(book=>book.id==='social-post')!;
-  assert.notEqual(external.star_url,external.repository_url);
+  assert.equal(external.repository_url,external.star_url);
+  assert.notEqual(external.fork_url?.replace(/\/fork$/,''),external.star_url);
   assert.equal(external.star_url,'https://github.com/Hao0321/claude-skill-social-post');
   for(const book of skillBooksForGuild('guild_marketing'))assert.ok(book.cover_url&&book.star_url&&book.guide?.beginner);
 });

@@ -13,8 +13,10 @@ test('all books default contributions to their original source and keep workshop
  const map=developmentMap();assert.equal(map.skill_books.length,55);
  for(const book of communityCatalog.skill_books){
   const data=getSkillCollaboration(book.id);assert.ok(data,book.id);
-  const metadata=map.repositories.find(repo=>repo.repository===new URL(book.repository_url).pathname.slice(1))!;
-  assert.equal(data.repository.url,book.repository_url);assert.equal(data.repository.default_branch,metadata.default_branch);
+  const copyUrl=book.fork_url?book.fork_url.replace(/\/fork$/,''):book.repository_url;
+  const metadata=map.repositories.find(repo=>repo.repository===new URL(copyUrl).pathname.slice(1))!;
+  assert.equal(book.repository_url,book.upstream_url,book.id);
+  assert.equal(data.repository.url,copyUrl);assert.equal(data.repository.default_branch,metadata.default_branch);
   assert.equal(data.repository.fork_url,book.fork_url);assert.equal(data.repository.upstream_url,book.upstream_url);
   assert.equal(data.contribution.url,book.upstream_url);assert.equal(data.contribution.fork_url,book.upstream_url+'/fork');
   assert.equal(data.contribution.default_branch,metadata.contribution_default_branch);assert.equal(metadata.contribution_target,book.upstream_url);

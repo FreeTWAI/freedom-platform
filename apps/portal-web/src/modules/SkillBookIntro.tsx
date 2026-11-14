@@ -41,7 +41,8 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
   const originalAuthor=cache?.original_author??null;
   const guideCredit=guide?.author_name?`${guide.credit_role?'來源標示的'+guide.credit_role:'作者'}：${guide.author_name}`:null;
   const originalStars=typeof cache?.stars==='number'?cache.stars:null;
-  const distinctCopy=repository&&originalUrl&&repository!==originalUrl?repository:null;
+  const copyUrl=httpsLink(book.fork_url)?.replace(/\/fork$/,'')||null;
+  const distinctCopy=copyUrl&&originalUrl&&copyUrl!==originalUrl?copyUrl:null;
   useEffect(()=>{if(open&&!dialog.current?.open)dialog.current?.showModal();else if(!open&&dialog.current?.open)dialog.current.close();},[open]);
   useEffect(()=>{
     if(!open||!bookId)return;

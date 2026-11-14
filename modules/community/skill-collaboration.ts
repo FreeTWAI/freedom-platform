@@ -59,11 +59,12 @@ const videoTasks:CollaborationTask[]=[
 ];
 export function getSkillCollaboration(id:string,editorial?:SkillEditorial|null):SkillCollaboration|null{
  const book=communityCatalog.skill_books.find(value=>value.id===id);if(!book?.guide)return null;
- const repoName=new URL(book.repository_url).pathname.slice(1);
+ const copyUrl=book.fork_url?book.fork_url.replace(/\/fork$/,''):book.repository_url;
+ const repoName=new URL(copyUrl).pathname.slice(1);
  const metadata=repositoryIndex.repositories.find(value=>value.repository===repoName);
  // Never silently guess a branch for an unregistered repository.
  if(!metadata||metadata.contribution_target!==book.upstream_url)return null;
- const branch=metadata.default_branch,base=book.repository_url;
+ const branch=metadata.default_branch,base=copyUrl;
  const original=metadata.contribution_target,originalName=new URL(original).pathname.slice(1),originalBranch=metadata.contribution_default_branch;
  const tasks=id==='video-autopilot'?videoTasks.map(task=>({...task,acceptance:[...task.acceptance],depends_on:[...task.depends_on]})):(proposals[id]??[]).map(([title,scope,acceptance],i)=>({id:`proposal-${i+1}`,title,scope,acceptance:[acceptance],status:'proposed' as const,source_url:null,depends_on:[]}));
  if(editorial){tasks.splice(0,tasks.length,...editorial.tasks.map(task=>({id:task.id,title:task.title,scope:task.description,acceptance:[...task.acceptance],status:'maintainer_published' as const,progress:task.status,source_url:task.issue_url,depends_on:[]})));}
