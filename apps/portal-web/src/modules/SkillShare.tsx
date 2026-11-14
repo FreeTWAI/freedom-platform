@@ -112,7 +112,6 @@ export function SkillShare({bookId,submissionId,title,active=true}:{bookId?:stri
     introductions={introductions}
     label="分享技能"
     disabled={!active}
-    preserveShell
     onOpen={()=>{void loadContent();}}
     onClose={abortPending}
   />;

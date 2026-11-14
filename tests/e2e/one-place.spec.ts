@@ -1,4 +1,6 @@
+import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
+import {quickJoin} from './quick-join.js';
 const owner='20000000-0000-4000-8000-000000000001';
 const other='20000000-0000-4000-8000-000000000002';
 const draft='30000000-0000-4000-8000-000000000001';
@@ -69,4 +71,195 @@ for(const [width,height] of [[390,844],[320,568]])test(`event actions have one o
  await page.getByRole('link',{name:'查看並報名',exact:true}).click();await expect(page.getByRole('button',{name:'我要參加',exact:true})).toBeVisible();await primary(page);
  await expect(page.getByRole('link',{name:'參與設定',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'我要參加',exact:true}).click();await expect(page.getByRole('button',{name:'取消報名',exact:true})).toBeVisible();expect(joins).toBe(1);await primary(page);
  event.organizer_ref=owner;await go(page,'#home');await go(page,`#explore/events/${published}/manage`);await expect(page.getByRole('link',{name:'活動專頁',exact:true})).toHaveAttribute('href',`/events/${published}`);await primary(page);
+});
+
+test('settings show one open section and at most one primary across pairs, dirty guard, loading/error, and deep links',async({page})=>{
+ await login(page,'reviewer@local.test');
+ await go(page,'#me/settings');
+ const section=(label:string)=>page.locator('.account-settings-section').filter({has:page.locator(':scope > summary strong',{hasText:label})});
+ const labels=['個人資料','公開個人頁','分享名片設定（免登入）','誰能看到我','帳號與安全'] as const;
+ await expect(page.locator('.account-settings-section[open]')).toHaveCount(1);
+ await expect(section('個人資料')).toHaveAttribute('open','');
+ await expect(page.locator('main .btn-primary:visible')).toHaveCount(1);
+
+ // Every ordered pair of sections keeps exactly one open section and at most one primary button.
+ for(const from of labels){
+  for(const to of labels){
+   if(from===to)continue;
+   if((await section(from).getAttribute('open'))===null)await section(from).locator(':scope > summary').click();
+   await expect(section(from)).toHaveAttribute('open','');
+   await expect(page.locator('.account-settings-section[open]')).toHaveCount(1);
+   await section(to).locator(':scope > summary').click();
+   await expect(section(to)).toHaveAttribute('open','');
+   await expect(section(from)).not.toHaveAttribute('open','');
+   await expect(page.locator('.account-settings-section[open]')).toHaveCount(1);
+   await primary(page);
+  }
+ }
+
+ // Nested disclosures inside open sections must not introduce a second primary button.
+ await section('個人資料').locator(':scope > summary').click();
+ await section('個人資料').getByText('更換頭像',{exact:true}).click();
+ await expect(section('個人資料').locator('.avatar-editor')).toBeVisible();
+ await primary(page);
+ await section('個人資料').getByText('個人網站與社群連結',{exact:true}).click();
+ await expect(section('個人資料').locator('.social-links-editor')).toBeVisible();
+ await primary(page);
+ await section('個人資料').getByRole('button',{name:'＋ 新增連結',exact:true}).click();
+ await expect(section('個人資料').getByRole('button',{name:'保存連結',exact:true})).toBeVisible();
+ await primary(page);
+ await section('個人資料').getByRole('button',{name:'取消',exact:true}).click();
+ const certSummary=section('個人資料').getByText('我的稱號與社群認證',{exact:true});
+ if(await certSummary.count()){
+  await certSummary.click();
+  await primary(page);
+ }
+ await section('帳號與安全').locator(':scope > summary').click();
+ const notifSummary=section('帳號與安全').getByText('通知設定',{exact:true});
+ if(await notifSummary.count()){
+  await notifSummary.click();
+  await primary(page);
+ }
+ await section('帳號與安全').getByText('連結 GitHub 與其他工具',{exact:true}).click();
+ await primary(page);
+
+ // Dirty guard when switching from 個人資料 -> 誰能看到我: stay keeps open & draft, leave switches.
+ await section('個人資料').locator(':scope > summary').click();
+ const nicknameInput=page.getByLabel('社群顯示名稱',{exact:true});
+ await nicknameInput.fill('尚未儲存的設定草稿');
+ let sawConfirm=false;
+ page.once('dialog',async d=>{sawConfirm=true;expect(d.message()).toContain('未儲存');await d.dismiss();});
+ await section('誰能看到我').locator(':scope > summary').click();
+ expect(sawConfirm).toBe(true);
+ await expect(section('個人資料')).toHaveAttribute('open','');
+ await expect(section('誰能看到我')).not.toHaveAttribute('open','');
+ await expect(nicknameInput).toHaveValue('尚未儲存的設定草稿');
+
+ page.once('dialog',async d=>{await d.accept();});
+ await section('誰能看到我').locator(':scope > summary').click();
+ await expect(section('誰能看到我')).toHaveAttribute('open','');
+ await expect(section('個人資料')).not.toHaveAttribute('open','');
+
+ // Dirty guard from 誰能看到我 -> 公開個人頁: stay keeps 誰能看到我 & draft, leave switches cleanly.
+ const discordInput=section('誰能看到我').getByLabel('Discord 帳號',{exact:true});
+ await discordInput.fill('unsaved-discord');
+ sawConfirm=false;
+ page.once('dialog',async d=>{sawConfirm=true;expect(d.message()).toContain('未儲存');await d.dismiss();});
+ await section('公開個人頁').locator(':scope > summary').click();
+ expect(sawConfirm).toBe(true);
+ await expect(section('誰能看到我')).toHaveAttribute('open','');
+ await expect(section('公開個人頁')).not.toHaveAttribute('open','');
+ await expect(discordInput).toHaveValue('unsaved-discord');
+
+ page.once('dialog',async d=>{await d.accept();});
+ await section('公開個人頁').locator(':scope > summary').click();
+ await expect(section('公開個人頁')).toHaveAttribute('open','');
+ await expect(section('誰能看到我')).not.toHaveAttribute('open','');
+
+ // Dirty guard from 公開個人頁 -> 個人資料: stay keeps 公開個人頁 & draft, leave switches cleanly with no stale guard.
+ const bioInput=page.locator('[data-public-page]').getByLabel('一句話介紹',{exact:true});
+ await expect(bioInput).toBeVisible();
+ await bioInput.fill('尚未儲存的公開自介');
+ sawConfirm=false;
+ page.once('dialog',async d=>{sawConfirm=true;expect(d.message()).toContain('未儲存');await d.dismiss();});
+ await section('個人資料').locator(':scope > summary').click();
+ expect(sawConfirm).toBe(true);
+ await expect(section('公開個人頁')).toHaveAttribute('open','');
+ await expect(section('個人資料')).not.toHaveAttribute('open','');
+ await expect(bioInput).toHaveValue('尚未儲存的公開自介');
+
+ page.once('dialog',async d=>{await d.accept();});
+ await section('個人資料').locator(':scope > summary').click();
+ await expect(section('個人資料')).toHaveAttribute('open','');
+ await expect(section('公開個人頁')).not.toHaveAttribute('open','');
+ // Switching again after confirming leave must not prompt again for the abandoned draft.
+ await section('分享名片設定（免登入）').locator(':scope > summary').click();
+ await expect(section('分享名片設定（免登入）')).toHaveAttribute('open','');
+
+ // Deep links open only their target top-level section.
+ await go(page,'#me/settings?view=page');
+ await expect(section('公開個人頁')).toHaveAttribute('open','');
+ await expect(section('個人資料')).not.toHaveAttribute('open','');
+ await expect(page.locator('.account-settings-section[open]')).toHaveCount(1);
+ await primary(page);
+
+ await go(page,'#me/settings?view=connections');
+ await expect(section('帳號與安全')).toHaveAttribute('open','');
+ await expect(section('個人資料')).not.toHaveAttribute('open','');
+ await expect(page.locator('.account-settings-section[open]')).toHaveCount(1);
+ await primary(page);
+
+ // Loading and failed sections show zero primary buttons.
+ let releasePub!:()=>void;
+ const pubGate=new Promise<void>(resolve=>{releasePub=resolve;});
+ await page.route('**/api/v1/me/profile-publication',async route=>{await pubGate;await route.fulfill({status:500,json:{detail:'err'}});});
+ await go(page,'#home');
+ await go(page,'#me/settings?view=page');
+ await expect(page.getByText('正在讀取設定…',{exact:true})).toBeVisible();
+ await expect(page.locator('main .btn-primary:visible')).toHaveCount(0);
+ releasePub();
+ await expect(page.getByRole('button',{name:'重讀設定',exact:true})).toBeVisible();
+ await expect(page.locator('main .btn-primary:visible')).toHaveCount(0);
+ await page.unroute('**/api/v1/me/profile-publication');
+
+ let releaseShare!:()=>void;
+ const shareGate=new Promise<void>(resolve=>{releaseShare=resolve;});
+ await page.route('**/api/v1/me/member-card-share',async route=>{await shareGate;await route.fulfill({status:500,json:{detail:'err'}});});
+ await go(page,'#home');
+ await go(page,'#me/settings');
+ await section('分享名片設定（免登入）').locator(':scope > summary').click();
+ await expect(page.getByText('正在載入分享設定…',{exact:true})).toBeVisible();
+ await expect(page.locator('main .btn-primary:visible')).toHaveCount(0);
+ releaseShare();
+ await expect(page.getByRole('button',{name:'重讀分享設定',exact:true})).toBeVisible();
+ await expect(page.locator('main .btn-primary:visible')).toHaveCount(0);
+ await page.unroute('**/api/v1/me/member-card-share');
+
+ let releaseAccount!:()=>void;
+ const accountGate=new Promise<void>(resolve=>{releaseAccount=resolve;});
+ await page.route('**/api/v1/me/account',async route=>{await accountGate;await route.fulfill({status:500,json:{detail:'err'}});});
+ await go(page,'#home');
+ await go(page,'#me/settings');
+ await expect(page.getByText('載入會員資料…',{exact:true})).toBeVisible();
+ await expect(page.locator('main .btn-primary:visible')).toHaveCount(0);
+ releaseAccount();
+ await expect(page.getByRole('button',{name:'重新載入我的資料',exact:true})).toBeVisible();
+ await expect(page.locator('main .btn-primary:visible')).toHaveCount(0);
+ await section('誰能看到我').locator(':scope > summary').click();
+ await expect(page.locator('main .btn-primary:visible')).toHaveCount(0);
+ await section('帳號與安全').locator(':scope > summary').click();
+ await expect(page.locator('main .btn-primary:visible')).toHaveCount(0);
+ await page.unroute('**/api/v1/me/account');
+});
+
+test('guild join shows unlocked skill-books link to explore, dismisses on next click, and opens #explore/resources',async({page})=>{
+ await page.goto('/');
+ await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+ await page.getByLabel('社群顯示名稱',{exact:true}).fill('技能書連結');
+ await page.getByLabel('電子郵件',{exact:true}).fill(`oneplace-join-${randomUUID()}@example.test`);
+ await page.getByLabel('密碼',{exact:true}).fill('freedom-oneplace-join-password');
+ await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
+ await quickJoin(page);
+ await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
+
+ await go(page,'#guilds');
+ await expect(page.locator('.guilds-panel')).toBeVisible();
+ const unjoined=page.getByRole('region',{name:'未加入公會',exact:true});
+ await unjoined.locator('.guild-card').first().getByRole('button',{name:/^加入/}).click();
+ const notice=page.locator('.guild-join-notice');
+ const link=notice.getByRole('link',{name:'看已解鎖的技能書',exact:true});
+ await expect(notice).toBeVisible();
+ await expect(link).toBeVisible();
+ await expect(link).toHaveAttribute('href','#explore/resources');
+
+ await page.getByRole('button',{name:'已加入',exact:true}).click();
+ await expect(notice).toBeVisible();
+ await expect(link).toHaveCount(0);
+
+ await page.getByRole('button',{name:'全部公會',exact:true}).click();
+ await unjoined.locator('.guild-card').first().getByRole('button',{name:/^加入/}).click();
+ await expect(link).toBeVisible();
+ await link.click();
+ await expect(page).toHaveURL(/#explore\/resources$/);
+ await expect(page.locator('.skills-panel')).toBeVisible();
 });

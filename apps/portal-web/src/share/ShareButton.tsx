@@ -1,4 +1,4 @@
-import {useEffect, useId, useMemo, useRef, useState} from 'react';
+import {useEffect, useId, useMemo, useRef, useState, type MouseEvent} from 'react';
 import {createPortal} from 'react-dom';
 import type {PortalClient} from '../api';
 import {useLanguage} from '../language';
@@ -21,82 +21,66 @@ export function promotionLink(client: PortalClient, kind: PromotionKind, target:
   return () => client.post<ShareLink>('/promotion/links', {kind, target});
 }
 
-export function ShareButton({
+export function isDialogBackdropClick(event: MouseEvent<HTMLDialogElement>) {
+  if (event.target !== event.currentTarget) return false;
+  const box = event.currentTarget.getBoundingClientRect?.();
+  if (box && (box.width > 0 || box.height > 0) && event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom) return false;
+  return true;
+}
+
+export function returnFocusToTrigger(trigger: HTMLButtonElement | null, preventScroll = false) {
+  if (!trigger || trigger.parentNode === null || ('isConnected' in trigger && !trigger.isConnected) || trigger.disabled) return;
+  // Responsive disclosures can close while the modal is open. Reveal the
+  // original trigger before returning keyboard focus to it.
+  for (let parent = trigger.parentElement; parent; parent = parent.parentElement) {
+    if (typeof HTMLDetailsElement !== 'undefined' && parent instanceof HTMLDetailsElement) parent.open = true;
+  }
+  if (preventScroll) trigger.focus({preventScroll: true});
+  else trigger.focus();
+}
+
+export function useShareControls({
+  open,
+  resetKey,
   title,
   fallbackUrl,
-  makeLink,
   text,
   introductions,
-  label = '分享',
-  buttonClassName = 'btn btn-ghost',
+  linkPath,
+  tracked,
+  busy,
   disabled = false,
-  preserveShell = false,
-  onOpen,
-  onClose,
 }: {
+  open: boolean;
+  resetKey?: unknown;
   title: string;
   fallbackUrl: string;
-  makeLink?: (() => Promise<ShareLink>) | null;
   text?: string;
   introductions?: readonly string[];
-  label?: string;
-  buttonClassName?: string;
+  linkPath: string | null;
+  tracked: boolean;
+  busy: boolean;
   disabled?: boolean;
-  preserveShell?: boolean;
-  onOpen?: () => void;
-  onClose?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [linkPath, setLinkPath] = useState<string | null>(null);
-  const [tracked, setTracked] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [selectedIntro, setSelectedIntro] = useState<number | null>(null);
   const [status, setStatus] = useState('');
   const [manual, setManual] = useState(false);
-  const id = useId();
-  const dialog = useRef<HTMLDialogElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
   const manualField = useRef<HTMLTextAreaElement>(null);
   const generation = useRef(0);
   const {t} = useLanguage();
 
+  useEffect(() => {
+    generation.current++;
+    setShowQr(false);
+    setSelectedIntro(null);
+    setStatus('');
+    setManual(false);
+  }, [open, resetKey]);
+
   useEffect(() => () => {
     generation.current++;
-    onClose?.();
   }, []);
-
-  useEffect(() => {
-    if (disabled && open) {
-      generation.current++;
-      setOpen(false);
-      setLinkPath(null);
-      setTracked(false);
-      setBusy(false);
-      dialog.current?.close();
-      onClose?.();
-    }
-  }, [disabled, open]);
-
-  useEffect(() => {
-    if (open) {
-      generation.current++;
-      setOpen(false);
-      setLinkPath(null);
-      setTracked(false);
-      setBusy(false);
-      setStatus('');
-      setManual(false);
-      setShowQr(false);
-      dialog.current?.close();
-      onClose?.();
-    }
-  }, [fallbackUrl]);
-
-  useEffect(() => {
-    if (open && !dialog.current?.open) dialog.current?.showModal();
-    else if (!open && dialog.current?.open) dialog.current?.close();
-  }, [open]);
 
   useEffect(() => {
     if (manual && open) {
@@ -122,24 +106,314 @@ export function ShareButton({
     : text;
   const copyText = effectiveText ? `${effectiveText}\n${url}` : url;
   const qr = useMemo(() => (url ? shareQr(url, origin) : null), [url, origin]);
-  const action = useLocalAction([title, url, effectiveText, open]);
+  const action = useLocalAction([title, url, effectiveText, open, resetKey]);
   const hasNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  const actionsDisabled = busy || disabled || !url || action.pending !== null;
 
-  function close() {
+  async function copy() {
+    if (!open || busy || disabled || !url) return;
+    const run = generation.current;
+    const result = await action.run('copy', () => {
+      setStatus('');
+      setManual(false);
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+        return Promise.reject(new Error('clipboard_unavailable'));
+      }
+      return navigator.clipboard.writeText(copyText);
+    });
+    if (run !== generation.current) return;
+    if (result.status === 'done') setStatus('已複製。');
+    else if (result.status === 'failed') {
+      setManual(true);
+      setStatus('請手動複製下面的內容。');
+    }
+  }
+
+  async function send() {
+    if (!open || busy || disabled || !url) return;
+    if (!hasNativeShare) {
+      await copy();
+      return;
+    }
+    const run = generation.current;
+    const result = await action.run('share', () => {
+      setStatus('');
+      setManual(false);
+      return navigator.share(effectiveText ? {title, text: effectiveText, url} : {title, url});
+    });
+    if (run !== generation.current) return;
+    if (result.status === 'done') setStatus('已交給手機分享。');
+    else if (result.status === 'failed' && (result.error as {name?: string} | null)?.name !== 'AbortError') {
+      setManual(true);
+      setStatus('請手動複製下面的內容。');
+    }
+  }
+
+  async function shareTo(platform: 'LINE' | 'Telegram') {
+    if (!open || busy || disabled || !url) return;
+    const run = generation.current;
+    const result = await action.run(platform, async () => {
+      setStatus('');
+      setManual(false);
+      const endpoint = platform === 'LINE' ? 'https://social-plugins.line.me/lineit/share' : 'https://t.me/share/url';
+      const destination = `${endpoint}?url=${encodeURIComponent(url)}&text=${encodeURIComponent(effectiveText || title)}`;
+      // Open only inside this click, before awaiting; no SDK or prefetch.
+      window.open(destination, '_blank', 'noopener,noreferrer');
+    });
+    if (run !== generation.current) return;
+    if (result.status === 'done') setStatus(`請在 ${platform} 完成分享；若未開啟，可複製連結。`);
+    else if (result.status === 'failed') {
+      setManual(true);
+      setStatus(`無法開啟 ${platform} 分享，請手動複製下面的內容。`);
+    }
+  }
+
+  function resetUi() {
     generation.current++;
-    setOpen(false);
+    setShowQr(false);
+    setSelectedIntro(null);
     setStatus('');
     setManual(false);
-    setShowQr(false);
-    dialog.current?.close();
-    onClose?.();
-    // Responsive disclosures can close while the modal is open. Reveal the
-    // original trigger before returning keyboard focus to it.
-    for (let parent = trigger.current?.parentElement; parent; parent = parent.parentElement) {
-      if (typeof HTMLDetailsElement !== 'undefined' && parent instanceof HTMLDetailsElement) parent.open = true;
-    }
-    trigger.current?.focus();
   }
+
+  return {
+    effectiveText,
+    url,
+    tracked,
+    busy,
+    disabled,
+    copyText,
+    qr,
+    hasNativeShare,
+    actionsDisabled,
+    pending: action.pending,
+    showQr,
+    setShowQr,
+    selectedIntro,
+    selectIntro(idx: number) {
+      setSelectedIntro(idx);
+      setStatus('');
+      setManual(false);
+    },
+    introductions,
+    status,
+    manual,
+    manualField,
+    copy,
+    send,
+    shareTo,
+    resetUi,
+    t,
+  };
+}
+
+export type ShareControls = ReturnType<typeof useShareControls>;
+
+export function SharePanel({
+  id,
+  controls,
+  actionsClassName = 'skill-share-actions',
+}: {
+  id: string;
+  controls: ShareControls;
+  actionsClassName?: string;
+}) {
+  const {
+    effectiveText,
+    url,
+    tracked,
+    busy,
+    disabled,
+    copyText,
+    qr,
+    hasNativeShare,
+    actionsDisabled,
+    pending,
+    showQr,
+    setShowQr,
+    selectedIntro,
+    selectIntro,
+    introductions,
+    status,
+    manual,
+    manualField,
+    copy,
+    send,
+    shareTo,
+    t,
+  } = controls;
+
+  return <>
+    {effectiveText && <p className="skill-share-text">{effectiveText}</p>}
+    <p className="skill-share-url">{busy ? '正在準備分享連結…' : url}</p>
+    {!busy && <p className="share-credit-note">{tracked ? '有人點開，會記在你名下。' : '這是一般連結，不會記在你名下。'}</p>}
+    <div className={actionsClassName}>
+      {hasNativeShare ? <>
+        <button type="button" className="btn btn-primary" aria-busy={pending === 'share'} disabled={actionsDisabled} onClick={() => void send()}>
+          {pending === 'share' ? t('action.sharing') : '分享'}
+        </button>
+        <button type="button" className="btn btn-ghost" aria-busy={pending === 'copy'} disabled={actionsDisabled} onClick={() => void copy()}>
+          {pending === 'copy' ? t('action.copying') : '複製連結'}
+        </button>
+      </> : (
+        <button type="button" className="btn btn-primary" aria-busy={pending === 'copy'} disabled={actionsDisabled} onClick={() => void copy()}>
+          {pending === 'copy' ? t('action.copying') : '複製連結'}
+        </button>
+      )}
+      {qr && (
+        <button type="button" className="btn btn-ghost" aria-expanded={showQr} disabled={busy || disabled} onClick={() => setShowQr(v => !v)}>
+          QR 碼
+        </button>
+      )}
+    </div>
+    {showQr && qr && (
+      <div className="share-qr-panel">
+        <svg role="img" aria-label="分享連結的 QR Code" xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${qr.size} ${qr.size}`} width={qr.size * 4} height={qr.size * 4} shapeRendering="crispEdges">
+          <rect width={qr.size} height={qr.size} fill="#fff" />
+          <path d={qr.path} fill="#08090b" />
+        </svg>
+      </div>
+    )}
+    {introductions && introductions.length > 0 && (
+      <details className="share-intros">
+        <summary>換一句介紹</summary>
+        <fieldset className="share-intro-list">
+          <legend className="sr-only">選擇要一起分享的介紹</legend>
+          {introductions.map((item, idx) => (
+            <label key={`${idx}-${item.slice(0, 12)}`} className="share-intro-option">
+              <input
+                type="radio"
+                disabled={pending !== null}
+                name={`${id}-intro`}
+                checked={selectedIntro === idx}
+                onChange={() => selectIntro(idx)}
+              />
+              <span>{item}</span>
+            </label>
+          ))}
+        </fieldset>
+      </details>
+    )}
+    <details className="share-more">
+      <summary>更多</summary>
+      <div className="share-more-actions">
+        {(['LINE', 'Telegram'] as const).map(platform => (
+          <button
+            key={platform}
+            type="button"
+            className="btn btn-ghost"
+            aria-busy={pending === platform}
+            disabled={actionsDisabled}
+            title={`另開 ${platform} 分享視窗`}
+            onClick={() => void shareTo(platform)}
+          >
+            {platform} 分享 ↗
+          </button>
+        ))}
+      </div>
+    </details>
+    {status && <p className="skill-share-status" role="status">{status}</p>}
+    {manual && (
+      <div className="field">
+        <label htmlFor={`${id}-manual`}>手動複製分享內容</label>
+        <textarea
+          ref={manualField}
+          id={`${id}-manual`}
+          value={copyText}
+          readOnly
+          rows={3}
+          onFocus={event => event.currentTarget.select()}
+        />
+      </div>
+    )}
+  </>;
+}
+
+export function ShareButton({
+  title,
+  fallbackUrl,
+  makeLink,
+  text,
+  introductions,
+  label = '分享',
+  buttonClassName = 'btn btn-ghost',
+  disabled = false,
+  onOpen,
+  onClose,
+}: {
+  title: string;
+  fallbackUrl: string;
+  makeLink?: (() => Promise<ShareLink>) | null;
+  text?: string;
+  introductions?: readonly string[];
+  label?: string;
+  buttonClassName?: string;
+  disabled?: boolean;
+  onOpen?: () => void;
+  onClose?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [linkPath, setLinkPath] = useState<string | null>(null);
+  const [tracked, setTracked] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const id = useId();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const generation = useRef(0);
+  const mounted = useRef(false);
+  const isOpenRef = useRef(false);
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const controls = useShareControls({
+    open,
+    title,
+    fallbackUrl,
+    text,
+    introductions,
+    linkPath,
+    tracked,
+    busy,
+    disabled,
+  });
+
+  function closeDialog(returnFocus: boolean) {
+    generation.current++;
+    if (!isOpenRef.current) return;
+    isOpenRef.current = false;
+    if (mounted.current) {
+      setOpen(false);
+      setLinkPath(null);
+      setTracked(false);
+      setBusy(false);
+      controls.resetUi();
+    }
+    if (dialog.current?.open) dialog.current.close();
+    onCloseRef.current?.();
+    if (returnFocus && !disabledRef.current) returnFocusToTrigger(trigger.current);
+  }
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      closeDialog(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (disabled && isOpenRef.current) closeDialog(false);
+  }, [disabled]);
+
+  useEffect(() => {
+    if (isOpenRef.current) closeDialog(!disabledRef.current);
+  }, [fallbackUrl, title, text]);
+
+  useEffect(() => {
+    if (open && !dialog.current?.open) dialog.current?.showModal();
+    else if (!open && dialog.current?.open) dialog.current?.close();
+  }, [open]);
 
   async function load(run: number, create: () => Promise<ShareLink>) {
     try {
@@ -164,13 +438,11 @@ export function ShareButton({
   function openDialog() {
     if (disabled) return;
     const run = ++generation.current;
+    isOpenRef.current = true;
     setOpen(true);
     setLinkPath(null);
     setTracked(false);
-    setShowQr(false);
-    setSelectedIntro(null);
-    setStatus('');
-    setManual(false);
+    controls.resetUi();
     onOpen?.();
     if (makeLink) {
       setBusy(true);
@@ -180,174 +452,34 @@ export function ShareButton({
     }
   }
 
-  async function copy() {
-    if (!url) return;
-    const run = generation.current;
-    const result = await action.run('copy', () => {
-      setStatus('');
-      setManual(false);
-      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
-        return Promise.reject(new Error('clipboard_unavailable'));
-      }
-      return navigator.clipboard.writeText(copyText);
-    });
-    if (run !== generation.current) return;
-    if (result.status === 'done') setStatus('已複製。');
-    else if (result.status === 'failed') {
-      setManual(true);
-      setStatus('請手動複製下面的內容。');
-    }
-  }
-
-  async function send() {
-    if (!url) return;
-    if (!hasNativeShare) {
-      await copy();
-      return;
-    }
-    const run = generation.current;
-    const result = await action.run('share', () => {
-      setStatus('');
-      setManual(false);
-      return navigator.share(effectiveText ? {title, text: effectiveText, url} : {title, url});
-    });
-    if (run !== generation.current) return;
-    if (result.status === 'done') setStatus('已交給手機分享。');
-    else if (result.status === 'failed' && (result.error as {name?: string} | null)?.name !== 'AbortError') {
-      setManual(true);
-      setStatus('請手動複製下面的內容。');
-    }
-  }
-
-  async function shareTo(platform: 'LINE' | 'Telegram') {
-    if (!open || busy || !url) return;
-    const run = generation.current;
-    const result = await action.run(platform, async () => {
-      setStatus('');
-      setManual(false);
-      const endpoint = platform === 'LINE' ? 'https://social-plugins.line.me/lineit/share' : 'https://t.me/share/url';
-      const destination = `${endpoint}?url=${encodeURIComponent(url)}&text=${encodeURIComponent(effectiveText || title)}`;
-      // Open only inside this click, before awaiting; no SDK or prefetch.
-      window.open(destination, '_blank', 'noopener,noreferrer');
-    });
-    if (run !== generation.current) return;
-    if (result.status === 'done') setStatus(`請在 ${platform} 完成分享；若未開啟，可複製連結。`);
-    else if (result.status === 'failed') {
-      setManual(true);
-      setStatus(`無法開啟 ${platform} 分享，請手動複製下面的內容。`);
-    }
-  }
-
   return <div className="skill-share promotion-share">
     <button ref={trigger} type="button" className={buttonClassName} aria-haspopup="dialog" disabled={disabled || undefined} onClick={disabled ? undefined : openDialog}>{label}</button>
-    {(open || preserveShell) && createPortal(
+    {open && createPortal(
       <dialog
         ref={dialog}
         className="skill-share-dialog promotion-share-dialog"
         aria-labelledby={`${id}-title`}
+        onClick={event => {
+          if (!isDialogBackdropClick(event)) return;
+          event.stopPropagation();
+          closeDialog(true);
+        }}
         onCancel={event => {
           event.stopPropagation();
           event.preventDefault();
-          close();
+          closeDialog(true);
         }}
         onClose={event => {
           event.stopPropagation();
-          generation.current++;
-          setOpen(false);
-          onClose?.();
+          closeDialog(true);
         }}
       >
         <div className="skill-share-preview">
           <header className="skill-share-head">
             <h2 id={`${id}-title`}>分享「{title}」</h2>
-            <button type="button" className="btn btn-ghost" onClick={close} aria-label="關閉分享">關閉</button>
+            <button type="button" className="btn btn-ghost" onClick={() => closeDialog(true)} aria-label="關閉分享">關閉</button>
           </header>
-          {effectiveText && <p className="skill-share-text">{effectiveText}</p>}
-          <p className="skill-share-url">{busy ? '正在準備分享連結…' : url}</p>
-          {!busy && <p className="share-credit-note">{tracked ? '有人點開，會記在你名下。' : '這是一般連結，不會記在你名下。'}</p>}
-          <div className="skill-share-actions">
-            {hasNativeShare ? <>
-              <button type="button" className="btn btn-primary" aria-busy={action.pending === 'share'} disabled={busy || !url || action.pending !== null} onClick={() => void send()}>
-                {action.pending === 'share' ? t('action.sharing') : '分享'}
-              </button>
-              <button type="button" className="btn btn-ghost" aria-busy={action.pending === 'copy'} disabled={busy || !url || action.pending !== null} onClick={() => void copy()}>
-                {action.pending === 'copy' ? t('action.copying') : '複製連結'}
-              </button>
-            </> : (
-              <button type="button" className="btn btn-primary" aria-busy={action.pending === 'copy'} disabled={busy || !url || action.pending !== null} onClick={() => void copy()}>
-                {action.pending === 'copy' ? t('action.copying') : '複製連結'}
-              </button>
-            )}
-            {qr && (
-              <button type="button" className="btn btn-ghost" aria-expanded={showQr} disabled={busy} onClick={() => setShowQr(v => !v)}>
-                QR 碼
-              </button>
-            )}
-          </div>
-          {showQr && qr && (
-            <div className="share-qr-panel">
-              <svg role="img" aria-label="分享連結的 QR Code" xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${qr.size} ${qr.size}`} width={qr.size * 4} height={qr.size * 4} shapeRendering="crispEdges">
-                <rect width={qr.size} height={qr.size} fill="#fff" />
-                <path d={qr.path} fill="#08090b" />
-              </svg>
-            </div>
-          )}
-          {introductions && introductions.length > 0 && (
-            <details className="share-intros">
-              <summary>換一句介紹</summary>
-              <fieldset className="share-intro-list">
-                <legend className="sr-only">選擇要一起分享的介紹</legend>
-                {introductions.map((item, idx) => (
-                  <label key={`${idx}-${item.slice(0, 12)}`} className="share-intro-option">
-                    <input
-                      type="radio"
-                      disabled={action.pending !== null}
-                      name={`${id}-intro`}
-                      checked={selectedIntro === idx}
-                      onChange={() => {
-                        setSelectedIntro(idx);
-                        setStatus('');
-                        setManual(false);
-                      }}
-                    />
-                    <span>{item}</span>
-                  </label>
-                ))}
-              </fieldset>
-            </details>
-          )}
-          <details className="share-more">
-            <summary>更多</summary>
-            <div className="share-more-actions">
-              {(['LINE', 'Telegram'] as const).map(platform => (
-                <button
-                  key={platform}
-                  type="button"
-                  className="btn btn-ghost"
-                  aria-busy={action.pending === platform}
-                  disabled={busy || !url || action.pending !== null}
-                  title={`另開 ${platform} 分享視窗`}
-                  onClick={() => void shareTo(platform)}
-                >
-                  {platform} 分享 ↗
-                </button>
-              ))}
-            </div>
-          </details>
-          {status && <p className="skill-share-status" role="status">{status}</p>}
-          {manual && (
-            <div className="field">
-              <label htmlFor={`${id}-manual`}>手動複製分享內容</label>
-              <textarea
-                ref={manualField}
-                id={`${id}-manual`}
-                value={copyText}
-                readOnly
-                rows={3}
-                onFocus={event => event.currentTarget.select()}
-              />
-            </div>
-          )}
+          <SharePanel id={id} controls={controls} />
         </div>
       </dialog>,
       document.body,

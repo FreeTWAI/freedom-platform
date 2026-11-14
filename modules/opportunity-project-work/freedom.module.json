@@ -85,7 +85,6 @@
     "tests/runtime/task-board-loading.test.ts",
     "tests/e2e/task-board-loading.spec.ts",
     "apps/portal-web/src/modules/BenefitObservations.tsx",
-    "apps/portal-web/src/modules/WorkSharingEntry.tsx",
     "apps/portal-web/src/modules/WorkPublicSharing.tsx",
     "apps/platform-api/src/routes/works-public.ts",
     "migrations/210_work_public_sharing.sql",

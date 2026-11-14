@@ -416,6 +416,23 @@ async function sharingControl(t: import('node:test').TestContext) {
   const client = new PortalClient();
   client.csrfToken = randomUUID();
   const requests: any[] = [], copies: string[] = [];
+  let writes = 0, renders = 0;
+  const wrappedSetters = new WeakMap<Function, Function>();
+  const wrapSetter = (setter: Function) => {
+    let wrapped = wrappedSetters.get(setter);
+    if (!wrapped) {
+      wrapped = (next: unknown) => { writes++; return setter(next); };
+      wrappedSetters.set(setter, wrapped);
+    }
+    return wrapped;
+  };
+  const trackedReact = {
+    ...React,
+    useState: <T,>(initial?: T | (() => T)) => {
+      const [value, setValue] = React.useState(initial as T);
+      return [value, wrapSetter(setValue)] as [T, typeof setValue];
+    },
+  };
   let props: any = { showcaseId: randomUUID(), workVersion: '1', status: 'published', onReload: async () => {} };
   t.mock.method(globalThis, 'fetch', (path: string, options: any) => {
     if (path.endsWith('/me/client-errors')) return Promise.resolve(new Response(null, { status: 204 }));
@@ -433,7 +450,7 @@ async function sharingControl(t: import('node:test').TestContext) {
       module: mod, exports: mod.exports, crypto: webcrypto, Intl, URL, console, setTimeout, clearTimeout,
       window: windowObj, document, navigator: navigatorState,
       require(name: string) {
-        if (name === 'react') return React;
+        if (name === 'react') return trackedReact;
         if (name === 'react/jsx-runtime' || name === 'react-dom' || name === 'qrcode') return req(name);
         if (name === '../api') return { ApiError };
         if (name === '../portal-session') return { client, describeError: (e: Error) => ({ message: e.message }) };
@@ -455,7 +472,12 @@ async function sharingControl(t: import('node:test').TestContext) {
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
   let unmounted = false;
-  const render = () => { if (!unmounted) flushReact(() => root.render(React.createElement(WorkPublicSharing, props))); };
+  const render = () => {
+    if (!unmounted) flushReact(() => root.render(
+      React.createElement(React.Profiler, { id: 'work-public', onRender: () => { renders++; } },
+        React.createElement(WorkPublicSharing, props)),
+    ));
+  };
   const unmount = () => {
     if (!unmounted) {
       unmounted = true;
@@ -492,7 +514,7 @@ async function sharingControl(t: import('node:test').TestContext) {
   };
   const share = () => clickButton('分享');
   const act = (fn: () => void | Promise<void>) => React.act(fn);
-  return { props, client, requests, copies, clipboard, view, toggle, response, sharing, start, render, share, clickButton, flush, unmount, propsOf, act };
+  return { props, client, requests, copies, clipboard, view, toggle, response, sharing, start, render, share, clickButton, flush, unmount, propsOf, act, writes: () => writes, renders: () => renders };
 }
 
 test('stale displayed work cannot opt in after a conflict until its complete content has reloaded', async t => {
@@ -507,7 +529,7 @@ test('stale displayed work cannot opt in after a conflict until its complete con
   assert.equal(h.toggle().props.disabled, true);
   assert.ok(h.view().some(n => n.textContent === '作品已更新，請重新檢視後再開放'));
   assert.equal(reloads, 1);
-  if (!h.toggle().props.disabled) h.toggle().props.onChange({ target: { checked: true } });
+  await h.act(async () => { h.toggle().props.onChange({ target: { checked: true } }); });
   assert.equal(h.requests.length, 3, 'even a queued event cannot submit unseen content');
   h.props.workVersion = '4';
   h.render();
@@ -525,6 +547,7 @@ test('sharing state newer than the displayed work disables consent immediately',
   const h = await sharingControl(t);
   await h.start(false, '4');
   assert.equal(h.toggle().props.disabled, true);
+  await h.act(async () => { h.toggle().props.onChange({ target: { checked: true } }); });
   assert.equal(h.requests.length, 1);
 });
 
@@ -542,11 +565,15 @@ for (const stage of ['share', 'link', 'clipboard', 'failure', 'unmount'] as cons
     }
     if (stage === 'unmount') h.unmount();
     else { h.client.csrfToken = null; h.client.csrfToken = randomUUID(); h.render(); }
+    const writes = h.writes();
+    const renders = h.renders();
     if (stage === 'clipboard') { finishCopy(); await h.flush(); }
     else if (stage === 'link') await h.response(2, { path: '/go/abcdefghij' });
     else await h.response(1, stage === 'failure' ? { code: 'failed' } : { share_id: randomUUID() }, stage === 'failure' ? 503 : 200);
     assert.equal(h.requests.filter(r => !r.path.endsWith('/client-errors')).length, stage === 'link' || stage === 'clipboard' ? 3 : 2, 'no next request under another session');
     assert.equal(h.copies.length, stage === 'clipboard' ? 1 : 0, 'no clipboard write after session ends');
+    assert.equal(h.writes(), writes, 'no late success, error, or busy state updates');
+    assert.equal(h.renders(), renders, 'no late React renders after session ends or unmount');
     if (stage === 'unmount') assert.equal(h.view().find(n => n.nodeName === 'DIALOG' && n.open), undefined);
   });
 }
@@ -558,7 +585,9 @@ test('a failed conflict refresh keeps consent disabled until the work is reloade
   await h.response(1, { code: 'version_conflict' }, 412);
   await h.response(2, { code: 'unavailable' }, 503);
   assert.equal(h.toggle().props.disabled, true);
-  assert.equal(h.requests.filter(r => !r.path.endsWith('/client-errors')).length, 3);
+  const count = h.requests.filter(r => !r.path.endsWith('/client-errors')).length;
+  await h.act(async () => { h.toggle().props.onChange({ target: { checked: true } }); });
+  assert.equal(h.requests.filter(r => !r.path.endsWith('/client-errors')).length, count);
 });
 
 test('same-session sharing creates one link and copies its returned attribution URL', async t => {
@@ -574,4 +603,22 @@ test('same-session sharing creates one link and copies its returned attribution 
   await h.flush();
   assert.deepEqual(h.copies, [`${origin}/go/abcdefghij`]);
   assert.ok(h.view().some(n => n.nodeName === 'A' && n.getAttribute('href') === `/works/${h.props.showcaseId}`));
+});
+
+test('CONF-9: work share button is disabled while toggle request is busy', async t => {
+  const h = await sharingControl(t);
+  await h.start(true);
+  const shareButton = () => h.view().find(n => n.nodeName === 'BUTTON' && n.textContent === '分享');
+  assert.ok(shareButton());
+  assert.equal(Boolean(h.propsOf(shareButton()!).disabled), false);
+
+  await h.act(async () => { h.toggle().props.onChange({ target: { checked: false } }); });
+  assert.equal(h.toggle().props.disabled, true);
+  assert.equal(Boolean(h.propsOf(shareButton()!).disabled), true);
+  h.propsOf(shareButton()!).onClick?.({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(h.requests.filter(r => !r.path.endsWith('/client-errors')).length, 2);
+
+  await h.response(1, { code: 'server_error', detail: 'fail' }, 500);
+  await h.response(2, h.sharing('1', true));
+  assert.equal(Boolean(h.propsOf(shareButton()!).disabled), false);
 });

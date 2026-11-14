@@ -10,7 +10,7 @@ function when(value: string | null) {
   return new Date(value).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
 }
 
-export function AccountSecurity({ client, onAccountChanged, hasPassword=true }: { client: PortalClient; onAccountChanged: () => Promise<void>; hasPassword?:boolean }) {
+export function AccountSecurity({ client, onAccountChanged, hasPassword=true, secondary=false }: { client: PortalClient; onAccountChanged: () => Promise<void>; hasPassword?:boolean; secondary?:boolean }) {
   const [current, setCurrent] = useState(''), [next, setNext] = useState(''), [confirm, setConfirm] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false), [passwordError, setPasswordError] = useState(''), [passwordNotice, setPasswordNotice] = useState('');
   const [sessions, setSessions] = useState<SessionList | null>(null), [sessionError, setSessionError] = useState(''), [sessionNotice, setSessionNotice] = useState(''), [sessionBusy, setSessionBusy] = useState(false);
@@ -75,7 +75,7 @@ export function AccountSecurity({ client, onAccountChanged, hasPassword=true }: 
       <label className="field">新密碼<input type="password" autoComplete="new-password" required minLength={12} maxLength={128} aria-describedby="new-password-hint" value={next} onChange={event => setNext(event.target.value)} disabled={passwordBusy}/></label>
       <p id="new-password-hint" className="field-hint">12 到 128 個字元；更新後其他裝置會被登出，這個裝置維持登入。</p>
       <label className="field">再次輸入新密碼<input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={confirm} onChange={event => setConfirm(event.target.value)} disabled={passwordBusy}/></label>
-      <div className="actions"><button className="btn btn-primary" disabled={passwordBusy} aria-busy={passwordBusy}>{passwordBusy ? '更新中…' : '更新密碼'}</button></div>
+      <div className="actions"><button className={secondary ? 'btn btn-secondary' : 'btn btn-primary'} disabled={passwordBusy} aria-busy={passwordBusy}>{passwordBusy ? '更新中…' : '更新密碼'}</button></div>
     </form>}
     <div className="stack" aria-labelledby="sessions-heading">
       <h4 id="sessions-heading">登入中的裝置</h4>

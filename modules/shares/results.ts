@@ -5,6 +5,7 @@ import { mineTitles, type PromotionKind } from '../community/promotion.js';
 import { promotionPublicSocialJoins,promotionPublicSocialVisible } from '../community/public-social-posts.js';
 import { publishedWorkFrom,publishedWorkPayload } from '../skill-submissions/public.js';
 import { existingReadableSql,hiddenEventReadableSql } from './adapters/existing.js';
+import { PUBLIC_WORK_VISIBLE } from '../opportunity-project-work/public-sharing.js';
 import type { ShareKind } from './types.js';
 
 export type ShareResultKind = ShareKind | PromotionKind;
@@ -38,6 +39,12 @@ type SqlResultRow = {
   target_available: boolean | null;
 };
 
+// CONF-4: a work share's results follow the same public-sharing rule as `/go/<code>`;
+// the derived row keeps the outer share alias out of the inner `s` (showcases) scope.
+const publicWorkReadableSql=(share:string)=>`(SELECT EXISTS(SELECT 1 FROM work_public_publications publication
+  JOIN showcases s USING (showcase_id) JOIN users u ON u.user_id=s.owner_ref
+  WHERE publication.showcase_id=work_ref.ref_id AND publication.community_id=work_ref.community_id AND ${PUBLIC_WORK_VISIBLE})
+  FROM (SELECT ${share}.ref_id, ${share}.community_id) work_ref)`;
 // Zod's UUID acceptance also includes the all-zero and all-ones UUIDs.
 const UUID = `(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)`;
 const SHARE_RESULTS_SQL = `WITH links AS (
@@ -75,7 +82,8 @@ const SHARE_RESULTS_SQL = `WITH links AS (
  FROM (SELECT community_id::text AS id FROM communities ORDER BY community_id LIMIT 2) communities
 )
 SELECT page.*,s.kind AS share_kind,s.title AS share_title,
- CASE WHEN s.state='published' THEN ${existingReadableSql('s','$2')} ELSE ${hiddenEventReadableSql('s','$2')} END AS share_readable,
+ CASE WHEN s.state='published' AND s.kind='work' THEN ${publicWorkReadableSql('s')}
+   WHEN s.state='published' THEN ${existingReadableSql('s','$2')} ELSE ${hiddenEventReadableSql('s','$2')} END AS share_readable,
  CASE page.link_kind
   WHEN 'event' THEN event.title
   WHEN 'social_post' THEN CASE WHEN post.kind='link' THEN post.title ELSE coalesce(nullif(post.title,''),'自由工坊貼文') END

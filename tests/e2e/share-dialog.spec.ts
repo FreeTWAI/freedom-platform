@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { test as base, expect, type BrowserContext, type Page } from './fixtures.js';
+import { test as base, expect, type BrowserContext, type Locator, type Page } from './fixtures.js';
 import { navigate, expandHomeSections } from './navigation.js';
 import { DEMO_COMMUNITY, DEMO_PASSWORD, DEMO_USERS } from '../../packages/testing/seed.js';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
@@ -48,10 +48,10 @@ async function signIn(page: Page, email: string) {
   await expect(page.locator('.shell')).toBeVisible({ timeout: 20_000 });
 }
 
-async function assertShareDialogWithQr(page: Page, expectedTitle?: string) {
-  const dialog = expectedTitle
+async function assertShareDialogWithQr(page: Page, expectedTitle?: string, target?: Locator) {
+  const dialog = target ?? (expectedTitle
     ? page.getByRole('dialog', { name: `分享「${expectedTitle}」`, exact: true })
-    : page.locator('.skill-share-dialog');
+    : page.locator('.skill-share-dialog'));
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   await expect(dialog.locator('.share-credit-note')).toHaveText('有人點開，會記在你名下。');
@@ -198,27 +198,33 @@ test('share dialog works across all 6 targets, skill intros, note public toggle 
     const postCard = page.locator('.social-card').filter({ has: page.locator('.social-note').filter({ hasText: noteText }) });
     await expect(postCard).toBeVisible();
     const postId = (await postCard.getAttribute('id'))!.slice('social-post-'.length);
-    await postCard.getByRole('button', { name: '分享貼文連結', exact: true }).click();
+    const postShareBtn = postCard.getByRole('button', { name: '分享貼文連結', exact: true });
+    await postShareBtn.click();
     const postShareDialog = page.getByRole('dialog', { name: '分享貼文連結', exact: true });
-    await postShareDialog.getByRole('button', { name: '分享', exact: true }).click();
-    const memberOnlyShare = page.locator('.skill-share-dialog');
-    await expect(memberOnlyShare.locator('.skill-share-url')).toHaveText(new RegExp(`/\\?social-post=${postId}#social$`));
-    await expect(memberOnlyShare.locator('.share-credit-note')).toHaveText('這是一般連結，不會記在你名下。');
-    await memberOnlyShare.getByRole('button', { name: '關閉分享', exact: true }).click();
+    await expect(page.locator('dialog[open]')).toHaveCount(1);
+    await expect(postShareDialog.locator('.skill-share-url')).toHaveText(new RegExp(`/\\?social-post=${postId}#social$`));
+    await expect(postShareDialog.locator('.share-credit-note')).toHaveText('這是一般連結，不會記在你名下。');
 
     await postShareDialog.locator('.social-sharing-consent > summary').click();
     await postShareDialog.getByRole('button', { name: '開放免登入閱讀', exact: true }).click();
     await expect(postShareDialog.getByRole('status')).toHaveText('已開放免登入閱讀，可以分享連結了。');
-    await postShareDialog.getByRole('button', { name: '分享', exact: true }).click();
-    const publicNoteShare = await assertShareDialogWithQr(page);
-    await publicNoteShare.dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
+    const publicNoteShare = await assertShareDialogWithQr(page, undefined, postShareDialog);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('dialog[open]')).toHaveCount(0);
+    await expect(page.locator('.social-share-dialog')).toHaveCount(0);
+    await expect(postShareBtn).toBeFocused();
+    await postShareBtn.click();
+    await expect(postShareDialog.locator('.skill-share-url')).toHaveText(publicNoteShare.url);
     await postShareDialog.getByRole('button', { name: '關閉分享', exact: true }).click();
+    await expect(page.locator('dialog[open]')).toHaveCount(0);
+    await expect(page.locator('.social-share-dialog')).toHaveCount(0);
+    await expect(postShareBtn).toBeFocused();
 
     const postGuestCtx = await browser.newContext({ baseURL: e2eOrigin(), userAgent: GUEST_UA, viewport: PHONE });
     try {
       const postGuest = await postGuestCtx.newPage();
       await postGuest.goto(publicNoteShare.url);
-      await expect(postGuest).toHaveURL(new RegExp(`/posts/${postId}\\?via=`));
+      await expect(postGuest).toHaveURL(new RegExp(`/posts/${postId}$`));
     } finally {
       await postGuestCtx.close();
     }
@@ -242,6 +248,7 @@ test('capability fallbacks, anonymous share, my-credit results and public event-
   const shareCode = `s${id.replace(/-/g, '').slice(0, 9)}`;
   const shareLinkId = randomUUID();
   const eventId = randomUUID();
+  const eventShareId = randomUUID();
   const eventTitle = `貢獻活動 ${id.slice(0, 6)}`;
   const eventCode = `e${id.replace(/-/g, '').slice(0, 9)}`;
   const eventRefCode = randomUUID().replace(/-/g, '');
@@ -268,6 +275,10 @@ test('capability fallbacks, anonymous share, my-credit results and public event-
       [shareLinkId, `v:${'a'.repeat(64)}`, 'b'.repeat(64), DEMO_COMMUNITY, id, `v:${'c'.repeat(64)}`, 'd'.repeat(64)],
     );
     await e2eAuthPool.query(
+      `INSERT INTO share_endorsements(share_id,user_id) VALUES($1,$2)`,
+      [shareId, id],
+    );
+    await e2eAuthPool.query(
       `INSERT INTO share_credit_events(share_id,community_id,user_id,role,basis,units,source_ref,actor_user_id)
        VALUES($1,$2,$3,'sharer','star_confirmed',1,$4,$5)`,
       [shareId, DEMO_COMMUNITY, id, `star:${id}`, DEMO_USERS[0].user_id],
@@ -278,6 +289,11 @@ test('capability fallbacks, anonymous share, my-credit results and public event-
       [eventId, DEMO_COMMUNITY, id, eventTitle],
     );
     await e2eAuthPool.query(
+      `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,first_sharer_user_id,state)
+       VALUES($1,$2,'event',$3,$4,'community_events',$5,$6,$7,'published')`,
+      [eventShareId, DEMO_COMMUNITY, `event:${eventId}`, `/events/${eventId}`, eventId, eventTitle, id],
+    );
+    await e2eAuthPool.query(
       `INSERT INTO community_event_share_codes(event_id,user_id,code) VALUES($1,$2,$3)`,
       [eventId, id, eventRefCode],
     );
@@ -286,8 +302,8 @@ test('capability fallbacks, anonymous share, my-credit results and public event-
       [eventLinkId, DEMO_COMMUNITY, id, eventId, eventCode],
     );
     await e2eAuthPool.query(
-      `INSERT INTO community_event_guest_rsvps(event_id,email,name,referred_by_user_id,email_sent_at)
-       VALUES($1,$2,'測試報名者',$3,now())`,
+      `INSERT INTO community_event_guest_rsvps(event_id,email,name,referred_by_user_id,email_sent_at,confirmed_at)
+       VALUES($1,$2,'測試報名者',$3,now(),now())`,
       [eventId, `guest-${id.slice(0, 8)}@example.test`, id],
     );
     // 1. Anonymous visitor can view SSR public share page /s/:shareId
@@ -369,8 +385,16 @@ test('capability fallbacks, anonymous share, my-credit results and public event-
     await expect(eventRow).toContainText('還沒有人點開');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-    // 「再分享」 opens ShareButton dialog cleanly
-    await repoRow.getByRole('button', { name: '再分享', exact: true }).click();
+    // 「再分享」 opens ShareButton dialog cleanly and keeps inline size on narrow viewports
+    const creditReshare = repoRow.getByRole('button', { name: '再分享', exact: true });
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      expect((await creditReshare.boundingBox())!.width).toBeLessThan(width * 0.5);
+      expect((await repoRow.locator('.skill-share').boundingBox())!.width).toBeLessThan(width * 0.5);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    }
+    await page.setViewportSize(PHONE);
+    await creditReshare.click();
     const reshare = await assertShareDialogWithQr(page, repoFull);
     await reshare.dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
 
@@ -379,6 +403,17 @@ test('capability fallbacks, anonymous share, my-credit results and public event-
     await expect(legacy).toBeVisible();
     await expect(legacy.locator('> summary')).toHaveText('舊的推廣紀錄');
     await expect(legacy).not.toHaveAttribute('open');
+
+    // TesterMap keeps inline share trigger compact at 390px and 320px
+    await page.goto('/#tester-map');
+    const testerShare = page.locator('.tester-map').getByRole('button', { name: '分享', exact: true });
+    await expect(testerShare).toBeVisible();
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      expect((await testerShare.boundingBox())!.width).toBeLessThan(width * 0.5);
+      expect((await page.locator('.tester-map .actions .skill-share').boundingBox())!.width).toBeLessThan(width * 0.5);
+    }
+    await page.setViewportSize(PHONE);
 
     // Public /events/:id (event-page.js): 我也要分享 -> 複製連結 & 分享
     await Promise.all([
@@ -409,9 +444,9 @@ test('capability fallbacks, anonymous share, my-credit results and public event-
     await e2eAuthPool.query(`DELETE FROM community_event_guest_rsvps WHERE event_id=$1`, [eventId]);
     await e2eAuthPool.query(`DELETE FROM community_event_share_codes WHERE event_id=$1`, [eventId]);
     await e2eAuthPool.query(`DELETE FROM community_events WHERE event_id=$1`, [eventId]);
-    await e2eAuthPool.query(`DELETE FROM share_endorsements WHERE share_id=$1`, [shareId]);
+    await e2eAuthPool.query(`DELETE FROM share_endorsements WHERE share_id IN ($1,$2)`, [shareId, eventShareId]);
     await e2eAuthPool.query(`DELETE FROM promotion_clicks WHERE link_id IN ($1,$2)`, [shareLinkId, eventLinkId]);
     await e2eAuthPool.query(`DELETE FROM promotion_links WHERE link_id IN ($1,$2)`, [shareLinkId, eventLinkId]);
-    await e2eAuthPool.query(`UPDATE shares SET state='retracted' WHERE share_id=$1`, [shareId]);
+    await e2eAuthPool.query(`UPDATE shares SET state='retracted' WHERE share_id IN ($1,$2)`, [shareId, eventShareId]);
   }
 });

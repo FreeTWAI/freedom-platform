@@ -200,7 +200,6 @@
 .social-share-dialog .social-share-audience{margin:0}
 .social-share-dialog .social-share-actions{flex-wrap:wrap}
 .social-share-dialog .social-share-actions .btn{min-width:0;max-width:100%;white-space:normal}
-.social-share-link input{width:100%;min-width:0}
 
 /* Keep the original post entry in document flow on phones so it does not
    cover the post being read or the inline comment composer. */

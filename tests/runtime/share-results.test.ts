@@ -225,7 +225,22 @@ test('S3: myShareResults merges shares, credits, and standalone links with visib
   assert.equal(rowD.link, null);
   assert.equal(rowD.open_path, `#shares/${shareD}`);
   assert.equal(rowD.available, true);
-  assert.equal(resA.data.items[0].key, `share:${shareD}`);
+  assert.deepEqual(
+    resA.data.items.map((x: { key: string }) => x.key),
+    [
+      `share:${shareD}`,
+      `member_service:${serviceId}`,
+      `social_post:${note.data.post_id}`,
+      `share:${eventShareId}`,
+      `share:${shareA}`,
+    ],
+  );
+  for (let i = 1; i < resA.data.items.length; i++) {
+    assert.ok(
+      Date.parse(resA.data.items[i - 1].last_at) >= Date.parse(resA.data.items[i].last_at),
+      `expected descending last_at at index ${i}`,
+    );
+  }
 
   // Bob sees none of Alice's results
   const resBob = await req('/me/share-results', bob);
@@ -288,6 +303,10 @@ test('S3: myShareResults pages at 50 rows with next_offset', async () => {
     const second = await myShareResults(q, alice.actor, { offset: 50 }, DEMO_COMMUNITY);
     assert.equal(second.items.length, 2);
     assert.equal(second.next_offset, null);
+    assert.deepEqual(
+      [...first.items, ...second.items].map(x => x.key),
+      Array.from({ length: 52 }, (_, i) => `skill_book:book:typo-studio-${51 - i}`),
+    );
   });
 });
 
@@ -324,4 +343,187 @@ test('mixed standalone results preserve current event, skill, card and static av
  await pool.query('UPDATE oss_projects SET sharing_withdrawn_at=now() WHERE project_id=$1',[project]);
  await pool.query("UPDATE community_events SET state='cancelled' WHERE event_id=$1",[event]);
  await check();
+});
+
+test('S3: myShareResults orders all four result kinds newest-first by greatest(created_at, last_click, last_credit)', async () => {
+  const alice = await createNonTestUser('alice-order@example.com', 'Alice Order');
+  const bob = await createNonTestUser('bob-order@example.com', 'Bob Order');
+
+  const repoId = randomUUID();
+  const repoShareId = randomUUID();
+  const eventId = randomUUID();
+  const eventShareId = randomUUID();
+  const serviceId = randomUUID();
+  const note = await req('/social-posts/notes', alice, { text: '排序測試筆記\n內容' });
+  assert.equal(note.status, 201);
+  const noteState = await req(`/social-posts/${note.data.post_id}/public-sharing`, alice);
+  await req(`/social-posts/${note.data.post_id}/public-sharing`, alice, {
+    enabled: true, post_revision: noteState.data.post_revision, media_version: noteState.data.media_version,
+  }, 'POST', { 'If-Match': `"${noteState.data.version}"` });
+
+  await pool.query(
+    `INSERT INTO canonical_repositories(repo_id,provider,provider_repo_id,full_name,current_url)
+     VALUES($1,'github','997799','org/repo-order','https://github.com/org/repo-order')`,
+    [repoId],
+  );
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,repo_id,title,first_sharer_user_id,state)
+     VALUES($1,$2,'repository','github:org/repo-order','https://github.com/org/repo-order',$3,'排序專案',$4,'published')`,
+    [repoShareId, DEMO_COMMUNITY, repoId, alice.actor.user_id],
+  );
+  await pool.query(
+    `INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
+     VALUES($1,$2,$3,'排序活動','說明',now()+interval '2 days',now()+interval '3 days','online','線上','published','open','other')`,
+    [eventId, DEMO_COMMUNITY, alice.actor.user_id],
+  );
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,first_sharer_user_id,state)
+     VALUES($1,$2,'event',$3,$4,'community_events',$5,'排序活動',$6,'published')`,
+    [eventShareId, DEMO_COMMUNITY, `event:${eventId}`, `/events/${eventId}`, eventId, alice.actor.user_id],
+  );
+  await pool.query(
+    `INSERT INTO member_services(service_id,community_id,owner_user_id,title,category,summary,service_mode,contacts,state)
+     VALUES($1,$2,$3,'排序服務','language','服務簡介','online','[{"label":"網站","url":"https://example.com/order-svc"}]'::jsonb,'active')`,
+    [serviceId, DEMO_COMMUNITY, alice.actor.user_id],
+  );
+
+  const repoLink = await req(`/shares/${repoShareId}/links`, alice, {});
+  const eventLink = await req('/promotion/links', alice, { kind: 'event', target: eventId });
+  const noteLink = await req('/promotion/links', alice, { kind: 'social_post', target: note.data.post_id });
+  const serviceLink = await req('/promotion/links', alice, { kind: 'member_service', target: serviceId });
+  assert.equal(repoLink.status, 200);
+  assert.equal(eventLink.status, 200);
+  assert.equal(noteLink.status, 200);
+  assert.equal(serviceLink.status, 200);
+
+  // Set deterministic link creation times: service (t4) > note (t3) > event (t2) > repo (t1),
+  // then advance repo via last_click (t6) and event via last_credit (t5).
+  await pool.query(
+    `UPDATE promotion_links SET created_at = CASE code
+       WHEN $1 THEN '2026-10-01T00:01:00Z'::timestamptz
+       WHEN $2 THEN '2026-10-01T00:02:00Z'::timestamptz
+       WHEN $3 THEN '2026-10-01T00:03:00Z'::timestamptz
+       WHEN $4 THEN '2026-10-01T00:04:00Z'::timestamptz
+     END WHERE code IN ($1,$2,$3,$4)`,
+    [repoLink.data.code, eventLink.data.code, noteLink.data.code, serviceLink.data.code],
+  );
+  const linkRows = (
+    await pool.query('SELECT link_id FROM promotion_links WHERE code=$1', [repoLink.data.code])
+  ).rows as Array<{ link_id: string }>;
+  const repoLinkId = linkRows[0].link_id;
+  await pool.query(
+    `INSERT INTO promotion_clicks(link_id,click_day,visitor_key,network_key,community_id,user_id,kind,created_at)
+     VALUES($1,'2026-10-01',$2,$3,$4,$5,'share','2026-10-01T00:06:00Z')`,
+    [repoLinkId, `v:${'1'.repeat(64)}`, '2'.repeat(64), DEMO_COMMUNITY, alice.actor.user_id],
+  );
+  await pool.query(
+    `INSERT INTO share_credit_events(share_id,community_id,user_id,role,basis,units,source_ref,actor_user_id,created_at)
+     VALUES($1,$2,$3,'spreader','registration',1,$4,$5,'2026-10-01T00:05:00Z'),
+           ($6,$2,$3,'sharer','star_confirmed',1,$7,$5,'2026-10-01T00:02:30Z')`,
+    [eventShareId, DEMO_COMMUNITY, alice.actor.user_id, `reg:order:${eventId}`, bob.actor.user_id, repoShareId, `star:order:${repoShareId}`],
+  );
+
+  const ordered = await req('/me/share-results', alice);
+  assert.equal(ordered.status, 200, ordered.text);
+  assert.deepEqual(
+    ordered.data.items.map((x: { key: string }) => x.key),
+    [
+      `share:${repoShareId}`,
+      `share:${eventShareId}`,
+      `member_service:${serviceId}`,
+      `social_post:${note.data.post_id}`,
+    ],
+  );
+});
+
+test('CONF-4: myShareResults withholds work share results when public sharing is off or stale', async () => {
+  const author = await createNonTestUser('author-conf4@example.com', 'Author Conf4');
+  const attacker = await createNonTestUser('attacker-conf4@example.com', 'Attacker Conf4');
+  const workId = randomUUID();
+  await pool.query(
+    `INSERT INTO showcases(showcase_id,community_id,owner_ref,title,description,artifact_ref,status,visibility,consent_recorded_at)
+     VALUES($1,$2,$3,'公開作品 CONF-4','公開摘要','artifact:conf4','published','community',now())`,
+    [workId, DEMO_COMMUNITY, author.actor.user_id],
+  );
+
+  const initialState = await req(`/me/showcases/${workId}/sharing`, author);
+  assert.equal(initialState.status, 200, initialState.text);
+  const enableRes = await req(
+    `/me/showcases/${workId}/sharing`,
+    author,
+    { enabled: true, work_version: initialState.data.work_version },
+    'PUT',
+    { 'If-Match': `"${initialState.data.version}"` },
+  );
+  assert.equal(enableRes.status, 200, enableRes.text);
+
+  const workShare = await req('/shares', attacker, { kind: 'work', ref_id: workId });
+  assert.equal(workShare.status, 200, workShare.text);
+  const shareId = workShare.data.share_id as string;
+  const shareLinkRes = await req(`/shares/${shareId}/links`, attacker, {});
+  assert.equal(shareLinkRes.status, 200, shareLinkRes.text);
+  const code = shareLinkRes.data.code as string;
+
+  const clickRes = await req('/promotion/clicks', undefined, { code }, 'POST', {
+    'User-Agent': 'Mozilla/5.0 Chrome/128.0.0.0 Safari/537.36',
+  });
+  assert.equal(clickRes.status, 200, clickRes.text);
+  const goOpen = await app.request(`${origin}/go/${code}`);
+  assert.equal(goOpen.status, 200);
+
+  const beforeDisable = await req('/me/share-results', attacker);
+  assert.equal(beforeDisable.status, 200, beforeDisable.text);
+  const openRow = beforeDisable.data.items.find((x: { key: string }) => x.key === `share:${shareId}`);
+  assert.equal(openRow.available, true);
+  assert.equal(openRow.clicks, 1);
+  assert.equal(openRow.open_path, `/go/${code}`);
+
+  // Author disables public sharing -> both /go/<code> and /me/share-results withhold the work share
+  const disableRes = await req(
+    `/me/showcases/${workId}/sharing`,
+    author,
+    { enabled: false },
+    'PUT',
+    { 'If-Match': `"${enableRes.data.version}"` },
+  );
+  assert.equal(disableRes.status, 200, disableRes.text);
+
+  const goAfterDisable = await app.request(`${origin}/go/${code}`);
+  assert.equal(goAfterDisable.status, 404);
+  const resultsAfterDisable = await req('/me/share-results', attacker);
+  assert.equal(resultsAfterDisable.status, 200, resultsAfterDisable.text);
+  const disabledRow = resultsAfterDisable.data.items.find((x: { key: string }) => x.key === `share:${shareId}`);
+  assert.equal(disabledRow.available, false);
+  assert.equal(disabledRow.title, '已停止分享');
+  assert.equal(disabledRow.link, null);
+  assert.equal(disabledRow.open_path, null);
+  assert.equal(disabledRow.clicks, 0);
+  assert.equal(disabledRow.stars, 0);
+  assert.equal(disabledRow.registrations, 0);
+
+  // Author re-enables public sharing, then edits the showcase so approved_work_version becomes stale
+  const reenableRes = await req(
+    `/me/showcases/${workId}/sharing`,
+    author,
+    { enabled: true, work_version: disableRes.data.work_version },
+    'PUT',
+    { 'If-Match': `"${disableRes.data.version}"` },
+  );
+  assert.equal(reenableRes.status, 200, reenableRes.text);
+  assert.equal((await app.request(`${origin}/go/${code}`)).status, 200);
+
+  await pool.query(
+    `UPDATE showcases SET aggregate_version = aggregate_version + 1 WHERE showcase_id = $1`,
+    [workId],
+  );
+  assert.equal((await app.request(`${origin}/go/${code}`)).status, 404);
+
+  const resultsAfterStale = await req('/me/share-results', attacker);
+  assert.equal(resultsAfterStale.status, 200, resultsAfterStale.text);
+  const staleRow = resultsAfterStale.data.items.find((x: { key: string }) => x.key === `share:${shareId}`);
+  assert.equal(staleRow.available, false);
+  assert.equal(staleRow.title, '已停止分享');
+  assert.equal(staleRow.link, null);
+  assert.equal(staleRow.open_path, null);
+  assert.equal(staleRow.clicks, 0);
 });
