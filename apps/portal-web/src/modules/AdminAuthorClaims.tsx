@@ -48,10 +48,9 @@ export function AdminAuthorClaims({client, busy, onMutate, selectedId}: {selecte
   }
   return <section className="stack">
     <div className="card-head"><h2>作者認領審核</h2><button className="btn btn-ghost" type="button" disabled={busy || loading} onClick={() => void load()}>更新</button></div>
-    <p className="muted">平台管理員審核原作者、共同原創作者與維護者認領。Repo 寫入權、GitHub App、平台投稿、公會職務與目錄署名都不會自動核實。不能審核自己提交、或連結到自己 GitHub 帳號的申請。</p>
-    <div hidden={!!selectedId} className="actions" role="tablist" aria-label="認領佇列">
-      <button type="button" className={queue === 'review' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setQueue('review')}>待審核</button>
-      <button type="button" className={queue === 'verified' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setQueue('verified')}>已核實</button>
+    <div hidden={!!selectedId} className="admin-filter-bar" role="group" aria-label="認領佇列">
+      <button type="button" aria-pressed={queue === 'review'} onClick={() => setQueue('review')}>待審核</button>
+      <button type="button" aria-pressed={queue === 'verified'} onClick={() => setQueue('verified')}>已核實</button>
     </div>
     {error && <p className="banner banner-error" role="alert">{error}</p>}
     {loading && <p role="status">正在載入認領…</p>}
@@ -80,5 +79,6 @@ export function AdminAuthorClaims({client, busy, onMutate, selectedId}: {selecte
     </article>;
     })}</div>
     {!loading && data && !data.items.length && !error && <p className="muted">{queue === 'verified' ? '目前沒有已核實的認領。' : '目前沒有待審核的認領。'}</p>}
+    <details><summary>說明</summary><p className="muted">平台管理員審核原作者、共同原創作者與維護者認領。Repo 寫入權、GitHub App、平台投稿、公會職務與目錄署名都不會自動核實。不能審核自己提交、或連結到自己 GitHub 帳號的申請。</p></details>
   </section>;
 }

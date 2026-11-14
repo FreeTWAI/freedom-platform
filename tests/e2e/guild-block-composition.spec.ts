@@ -108,7 +108,9 @@ for (const sample of [
     await page.getByRole('button', {name: '啟用手動工作', exact: true}).click();
     await page.locator('#my-work-title').fill('尚未保存的組裝測試草稿');
     await openGuildSection(page, '管理啟動台');
-    const workToggle = page.locator('.guild-launchpad-editor .guild-launchpad-block').filter({has: page.locator('p', {hasText: /^我的工作$/})}).getByRole('checkbox');
+    const workBlock = page.locator('.guild-launchpad-editor .guild-launchpad-block').filter({has: page.locator('p', {hasText: /^我的工作$/})});
+    await workBlock.getByRole('button', {name: '編輯', exact: true}).click();
+    const workToggle = workBlock.getByRole('checkbox');
     page.once('dialog', dialog => {expect(dialog.message()).toBe('有尚未儲存的內容，確定要離開嗎？'); void dialog.dismiss();});
     await workToggle.click();
     await expect(workToggle).toBeChecked();
@@ -126,6 +128,7 @@ for (const sample of [
   await expect(page.getByRole('button', {name: `上移${sample.title}`, exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: `移除這個區塊：${sample.title}`, exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: '上移公會工具', exact: true})).toHaveCount(0);
+  await page.locator('.guild-launchpad-preview-menu > summary').click();
   await page.getByRole('button', {name: '預覽公開', exact: true}).click();
   const preview = page.getByRole('dialog', {name: '合成預覽'});
   await expect(preview).toContainText(sample.title);

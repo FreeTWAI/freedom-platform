@@ -191,6 +191,7 @@ test('leader configuration cannot remove a committed pending tenant creation or 
   };
   try {
     await openGuildSection(page, '管理啟動台');
+    await appBlock.getByRole('button',{name:'編輯',exact:true}).click();
     await enabled.uncheck(); await expect(cards(page)).toHaveCount(0);
     await editor.getByRole('button',{name:'儲存草稿',exact:true}).click(); await expect.poll(()=>saved).toBe(true);
     await enabled.check(); await openGuildSection(page, '工具目錄'); await begin(page); await input.fill(name);

@@ -402,6 +402,7 @@ test('a leader publishes recommendations and the member primary action opens the
     await openGuildSection(page, '工具目錄');
     await expect(recommendations(page).locator('.application-card').first()).toContainText(displayName);
     await openGuildSection(page, '管理啟動台');
+    await editor.locator('.guild-launchpad-preview-menu > summary').click();
     await editor.getByRole('button', {name: '預覽會員', exact: true}).click();
     await expect(page.getByRole('dialog')).toContainText('合成資料');
     await page.getByRole('dialog').getByRole('button', {name: '關閉', exact: true}).click();
@@ -445,6 +446,7 @@ test('a leader publishes recommendations and the member primary action opens the
     // Disabled application blocks suppress non-manual primary actions in the unsaved reading view.
     await editor.getByRole('button', {name: '版面與使命', exact: true}).click();
     const applicationsBlock = editor.getByRole('group', {name: '版面區塊'}).locator('.guild-launchpad-block').filter({has: page.locator('p', {hasText: /^應用$/})});
+    await applicationsBlock.getByRole('button', {name: '編輯', exact: true}).click();
     await applicationsBlock.getByLabel('顯示這個區塊').uncheck();
     await expect(primary(page)).toHaveCount(0);
     await expect(editor).toContainText('應用區塊關閉時，會員看不到推薦應用；主要動作只保留我的工作。');

@@ -160,7 +160,7 @@ export function MyWorkUnavailable({visitor, starter}: {visitor: boolean; starter
   if (visitor) return <p>登入並加入公會後，可以在這裡看到自己的工作。</p>;
   return <div className="stack">
     <p>業務空間尚未在此環境啟用</p>
-    <p>這個環境還沒有開啟公會業務空間，所以這裡不能建立或保存工作。</p>
+    <p>尚無法建立或保存工作。</p>
     {starter && <dl className="detail-list">
       <div><dt>標題</dt><dd>{starter.title_label}</dd></div>
       <div><dt>目標</dt><dd>{starter.objective_hint}</dd></div>
@@ -341,12 +341,12 @@ function GuildPublicEntry({guildKey, publicMode, onReadBooks, contactUrl}: {
     }
   }
   return <section className={publicMode ? 'guild-launchpad-entry' : 'guild-launchpad-share'} aria-label="公會公開入口">
-    {publicMode && <p className="muted">公開內容免登入；加入公會與參與交流，請先使用會員登入。</p>}
     <div className="guild-launchpad-actions">
       {onReadBooks && <button type="button" className="btn btn-primary btn-small" onClick={onReadBooks}>查看公會技能書</button>}
       {contactUrl && <a className="btn btn-ghost btn-small guild-launchpad-external" href={contactUrl} rel="noopener noreferrer" target="_blank"><span>聯絡這個公會</span><span className="guild-launchpad-destination">{new URL(contactUrl).hostname} · 另開分頁</span></a>}
       <button type="button" className="btn btn-ghost btn-small" disabled={action.pending !== null} aria-busy={action.pending === 'copy'} onClick={() => void copy()}>{action.pending === 'copy' ? '複製中…' : '複製公會連結'}</button>
     </div>
+    {publicMode && <p className="muted">公開免登入；交流請先登入。</p>}
     <p className="guild-launchpad-share-status" role="status">{status}</p>
     {manualCopy && <label className="field">公會公開連結<input ref={field} readOnly value={url} onFocus={event => event.currentTarget.select()}/></label>}
   </section>;
@@ -367,6 +367,7 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
   entryAction?: GuildEntryAction;
 }) {
   const [editorPanel, setEditorPanel] = useState<EditorPanel>('layout');
+  const [openBlockId, setOpenBlockId] = useState<string | null>(null);
   const editorRoot = useRef<HTMLFormElement>(null);
   const pendingEditorFocus = useRef<EditorPanel | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
@@ -411,7 +412,9 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
   const publishDialog = useRef<HTMLDialogElement>(null);
   const revertDialog = useRef<HTMLDialogElement>(null);
   const revokeDialog = useRef<HTMLDialogElement>(null);
-  const opener = useRef<HTMLButtonElement | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const previewMenu = useRef<HTMLDetailsElement>(null);
+  const previewSummary = useRef<HTMLElement>(null);
   const keys = useRef(new Map<string, string>());
   const generation = useRef(0);
   const leaveGuard = useRef<(() => boolean) | null>(null);
@@ -463,7 +466,7 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
     if (announce && view.status === 'published' && view.source === 'guild_editor') setStatus(`已發布版本 ${view.revision}`);
     return true;
   }
-  function openDialog(dialog: HTMLDialogElement | null, button: HTMLButtonElement) {
+  function openDialog(dialog: HTMLDialogElement | null, button: HTMLElement | null) {
     opener.current = button; dialog?.showModal();
   }
   function closeDialog(dialog: HTMLDialogElement | null) { dialog?.close(); opener.current?.focus(); }
@@ -596,7 +599,7 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
       setLeader(config); setPointer(view.pointer_version);
     } catch (error) { fail(error); } finally { setBusy(false); }
   }
-  async function runPreview(previewMode: 'public' | 'member' | 'my_work', button: HTMLButtonElement) {
+  async function runPreview(previewMode: 'public' | 'member' | 'my_work', button: HTMLElement | null) {
     if (!draft || busy) return;
     setBusy(true); setBanner(''); setErrors([]);
     try {
@@ -747,15 +750,13 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
         if (activeSection === section) skillBooksHeading.current?.focus();
         else {focusSkillBooks.current = true; selectSection(section);}
       } : undefined}/>}
-    {!loading && repository && readingConfig && activeSection !== 'start' && <div className="actions">
-      <button type="button" className="btn btn-ghost btn-small" onClick={() => selectSection('start')}>開啟公會啟動台</button>
-    </div>}
     {!loading && guild && readingConfig && mode === 'member' && activeSection !== 'start' && <section className="guild-launchpad-welcome" aria-label="公會工作區導覽">
-      <div className="guild-launchpad-purpose"><p className="guild-launchpad-kicker">公會工作區</p><p>{readingConfig.mission_override ?? guild.purpose}</p><p className="muted">{visitor?'先閱讀公會資源；加入後可到公會聊天室交流。':memberTier==='intern'?'先閱讀技能書、到聊天室交流。發布或編輯需由會長調整為正式成員。':'閱讀資源，或從下方工作區接續你的工作。私人工作仍依原業務空間權限存取。'}</p></div>
+      <div className="guild-launchpad-purpose"><p className="guild-launchpad-kicker">公會工作區</p><p>{readingConfig.mission_override ?? guild.purpose}</p></div>
       <div className="guild-launchpad-resource-preview">
         {entryBookBlock && <button type="button" disabled={!skillBooks.length&&!entryInformationBlock} onClick={() => {const destination=skillBooks.length?entryBookBlock:entryInformationBlock;if(destination)openResource(blockSection(destination),destination.kind);}}><span>入門技能書 <span aria-hidden="true">→</span></span><strong>{skillBooks[0]?.title ?? '尚無可顯示的技能書'}</strong><small>{skillBooks.length?'閱讀介紹與原始專案':entryInformationBlock?'先閱讀公會資訊，了解這個公會。':'這個工作區目前沒有可顯示的入門資源。'}</small></button>}
         {!visitor && entryAnnouncementBlock && <button type="button" onClick={() => openResource(blockSection(entryAnnouncementBlock), 'announcements')}><span>公會公告 <span aria-hidden="true">→</span></span><strong>{announcements[0]?.title ?? '目前沒有公告'}</strong><small>{announcements.length?'查看已發布的公會消息':'查看公告區；目前尚未發布公告。'}</small></button>}
       </div>
+      <details className="guild-launchpad-help"><summary>說明</summary><p className="muted">{visitor?'先閱讀公會資源；加入後可到公會聊天室交流。':memberTier==='intern'?'先閱讀技能書、到聊天室交流。發布或編輯需由會長調整為正式成員。':'閱讀資源，或從下方工作區接續你的工作。私人工作仍依原業務空間權限存取。'}</p></details>
     </section>}
     {GUILD_TOOLS.some(tool=>tool.guild_key===guildKey)&&<div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={()=>{if(canNavigate())window.location.hash=guildRoute(guildKey,'tools');}}>工具</button></div>}
     <div className="guild-launchpad-layout">
@@ -774,7 +775,6 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
     {readingConfig && guild && <Reading guild={guild} config={readingConfig} announcements={visitor ? [] : announcements} skillBooks={skillBooks} applications={applications} visitor={visitor} memberTier={visitor ? undefined : memberTier} mode={mode} client={client} guildKey={guildKey} userId={userId} registerLeave={registerLeave} registerPendingLeave={registerLaunchLeave} canLeave={canLeave} canNavigate={canNavigate} onLogin={onLogin} blockLoaders={blockLoaders} supplierConsoleEnabled={supplierConsoleEnabled} activeSection={activeSection} selectSection={selectSection} skillBooksHeading={skillBooksHeading}/>}
     {showEditor && draft && <form ref={editorRoot} hidden={activeSection !== 'management'} className="card guild-launchpad-editor" onSubmit={event => event.preventDefault()}>
       <h2>調整版面</h2>
-      <p className="field-hint">先調整、儲存與預覽，再發布給會員。切換設定不會清除未儲存內容。</p>
       <nav className="guild-editor-nav" aria-label="公會管理設定">
         {(['layout', 'tools', ...(access.publish ? ['versions'] : []), ...(access.delegate && leader?.delegations ? ['delegations'] : [])] as EditorPanel[]).map(panel => <button key={panel} type="button" className="btn btn-ghost btn-small" aria-pressed={activeEditorPanel === panel} onClick={() => setEditorPanel(panel)}>{EDITOR_LABEL[panel]}</button>)}
       </nav>
@@ -783,15 +783,13 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
       <section className="guild-editor-panel" data-editor-panel="layout" hidden={activeEditorPanel !== 'layout'} aria-labelledby="guild-editor-layout-title">
       <h3 id="guild-editor-layout-title" tabIndex={-1}>版面與使命</h3>
       <label className="field" htmlFor="launchpad-mission">公會使命補充
-        <input id="launchpad-mission" aria-describedby={describedBy(errors, 'mission_override', 'launchpad-mission-error', 'launchpad-mission-hint')} value={draft.mission_override ?? ''} maxLength={1200} onChange={event => setDraft({...draft, mission_override: event.target.value === '' ? null : event.target.value})}/>
+        <input id="launchpad-mission" aria-describedby={describedBy(errors, 'mission_override', 'launchpad-mission-error')} value={draft.mission_override ?? ''} maxLength={1200} onChange={event => {const value = event.target.value.replace(/[\r\n]+/g, ' '); setDraft({...draft, mission_override: value === '' ? null : value});}}/>
       </label>
-      <p className="field-hint" id="launchpad-mission-hint">這段文字不能換行</p>
       <FieldNote id="launchpad-mission-error" errors={errors} path="mission_override"/>
       <fieldset className="fieldset">
         <legend>版面區塊</legend>
-        {draft.schema_version === 'guild-launchpad.config/v1' ? <div className="stack">
-          <p className="field-hint">目前使用原有七區塊版面。轉為可組裝版面後，可以加入已核准的公會工具；先保存與預覽，再由有發布權限的人發布。原版本仍可回復。</p>
-          <div className="actions"><button type="button" className="btn btn-ghost btn-small" disabled={busy || !access.edit} onClick={() => {if (canLeave()) setDraft(convertV1(draft));}}>啟用可組裝版面</button></div>
+        {draft.schema_version === 'guild-launchpad.config/v1' ? <div className="actions">
+          <button type="button" className="btn btn-ghost btn-small" disabled={busy || !access.edit} onClick={() => {if (canLeave()) setDraft(convertV1(draft));}}>啟用可組裝版面</button>
         </div> : <div className="stack">
           <label className="field" htmlFor="launchpad-extension">加入公會工具</label>
           <select id="launchpad-extension" value={extensionChoice} disabled={busy || !access.edit} onChange={event => setExtensionChoice(event.target.value)}>
@@ -799,26 +797,37 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
           </select>
           <div className="actions"><button type="button" className="btn btn-ghost btn-small" disabled={busy || !access.edit || !Object.hasOwn(extensionTitles, extensionChoice) || draft.blocks.length >= 24} onClick={() => {
             if (!canLeave() || draft.schema_version !== 'guild-launchpad.config/v2' || !Object.hasOwn(extensionTitles, extensionChoice)) return;
-            setDraft({...draft, blocks: [...draft.blocks, {id: `extension_${crypto.randomUUID()}`, kind: 'extension', extension_id: extensionChoice, title: extensionTitles[extensionChoice], order: draft.blocks.length, enabled: true, settings: {}}]});
+            const id = `extension_${crypto.randomUUID()}`;
+            setDraft({...draft, blocks: [...draft.blocks, {id, kind: 'extension', extension_id: extensionChoice, title: extensionTitles[extensionChoice], order: draft.blocks.length, enabled: true, settings: {}}]});
+            setOpenBlockId(id);
             setExtensionChoice('');
           }}>新增公會區塊</button></div>
-          <p className="field-hint">只使用已審查的區塊，不接受貼入程式。排序、顯示與標題仍需保存、預覽及發布；區塊不會增加會員權限。</p>
         </div>}
         <div className="stack">{draft.blocks.map((block, index) => {
           const name = block.kind === 'extension' ? extensionTitles[block.extension_id] ?? block.title ?? '目前無法使用的公會工具' : BLOCK_LABEL[block.kind];
+          const isOpen = openBlockId === block.id;
           return <div key={block.id} className="guild-launchpad-block" role="group" aria-labelledby={`launchpad-block-name-${index}`}>
-            <p id={`launchpad-block-name-${index}`}>{name}</p>
-            <div className="guild-launchpad-block-actions">
-              <button type="button" className="btn btn-ghost" aria-label={`上移${name}`} aria-describedby={describedBy(errors, `blocks.${index}.order`, `launchpad-block-order-${index}-error`)} disabled={busy || index === 0} onClick={() => moveBlock(index, -1)}>上移</button>
-              <button type="button" className="btn btn-ghost" aria-label={`下移${name}`} aria-describedby={describedBy(errors, `blocks.${index}.order`, `launchpad-block-order-${index}-error`)} disabled={busy || index === draft.blocks.length - 1} onClick={() => moveBlock(index, 1)}>下移</button>
-              {(draft.schema_version === 'guild-launchpad.config/v2' || OPTIONAL.has(block.kind)) && <label className="checkbox-row"><input type="checkbox" checked={block.enabled} aria-describedby={describedBy(errors, `blocks.${index}.enabled`, `launchpad-block-enabled-${index}-error`, `launchpad-block-name-${index}`)} onChange={event => updateBlock(index, {enabled: event.target.checked})}/>顯示這個區塊</label>}
-              {block.kind === 'extension' && <button type="button" className="btn btn-ghost btn-small" aria-label={`移除這個區塊：${name}`} disabled={busy || !access.edit} onClick={() => {
-                if (canLeave() && draft.schema_version === 'guild-launchpad.config/v2') setDraft({...draft, blocks: draft.blocks.filter(item => item.id !== block.id).map((item, order) => ({...item, order}))});
-              }}>移除這個區塊</button>}
+            <div className="guild-launchpad-block-summary">
+              <p id={`launchpad-block-name-${index}`}>{name}</p>
+              <span className="badge">{block.enabled ? '已顯示' : '已隱藏'}</span>
+              <button type="button" className="btn btn-ghost btn-small" aria-expanded={isOpen} onClick={() => setOpenBlockId(isOpen ? null : block.id)}>{isOpen ? '收合' : '編輯'}</button>
             </div>
+            {isOpen && <div className="guild-launchpad-block-details stack">
+              <div className="guild-launchpad-block-actions">
+                <button type="button" className="btn btn-ghost" aria-label={`上移${name}`} aria-describedby={describedBy(errors, `blocks.${index}.order`, `launchpad-block-order-${index}-error`)} disabled={busy || index === 0} onClick={() => moveBlock(index, -1)}>上移</button>
+                <button type="button" className="btn btn-ghost" aria-label={`下移${name}`} aria-describedby={describedBy(errors, `blocks.${index}.order`, `launchpad-block-order-${index}-error`)} disabled={busy || index === draft.blocks.length - 1} onClick={() => moveBlock(index, 1)}>下移</button>
+                {(draft.schema_version === 'guild-launchpad.config/v2' || OPTIONAL.has(block.kind)) && <label className="checkbox-row"><input type="checkbox" checked={block.enabled} aria-describedby={describedBy(errors, `blocks.${index}.enabled`, `launchpad-block-enabled-${index}-error`, `launchpad-block-name-${index}`)} onChange={event => updateBlock(index, {enabled: event.target.checked})}/>顯示這個區塊</label>}
+                {block.kind === 'extension' && <button type="button" className="btn btn-ghost btn-small" aria-label={`移除這個區塊：${name}`} disabled={busy || !access.edit} onClick={() => {
+                  if (canLeave() && draft.schema_version === 'guild-launchpad.config/v2') {
+                    setDraft({...draft, blocks: draft.blocks.filter(item => item.id !== block.id).map((item, order) => ({...item, order}))});
+                    setOpenBlockId(null);
+                  }
+                }}>移除這個區塊</button>}
+              </div>
+              <label className="field" htmlFor={`launchpad-block-title-${index}`}>區塊標題<input id={`launchpad-block-title-${index}`} aria-describedby={describedBy(errors, `blocks.${index}.title`, `launchpad-block-title-${index}-error`)} value={block.title ?? ''} maxLength={120} onChange={event => updateBlock(index, {title: event.target.value === '' ? null : event.target.value})}/></label>
+            </div>}
             <FieldNote id={`launchpad-block-order-${index}-error`} errors={errors} path={`blocks.${index}.order`}/>
             <FieldNote id={`launchpad-block-enabled-${index}-error`} errors={errors} path={`blocks.${index}.enabled`}/>
-            <label className="field" htmlFor={`launchpad-block-title-${index}`}>區塊標題<input id={`launchpad-block-title-${index}`} aria-describedby={describedBy(errors, `blocks.${index}.title`, `launchpad-block-title-${index}-error`)} value={block.title ?? ''} maxLength={120} onChange={event => updateBlock(index, {title: event.target.value === '' ? null : event.target.value})}/></label>
             <FieldNote id={`launchpad-block-title-${index}-error`} errors={errors} path={`blocks.${index}.title`}/>
           </div>;
         })}</div>
@@ -873,11 +882,14 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
       <p className="field-hint">{dirty ? '有尚未儲存的修改。' : saved?.status === 'draft' ? '目前為已儲存草稿，尚未發布。' : saved?.status === 'published' ? '目前顯示已發布版本。' : '請先儲存草稿。'}</p>
       {!canPublish && access.publish && <p className="field-hint">{saved?.status === 'draft' && dirty ? '尚未儲存的修改不會進入這個版本。' : '請先儲存草稿'}</p>}
       <div className="guild-launchpad-actions">
-        {access.preview && <>
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={event => void runPreview('public', event.currentTarget)}>預覽公開</button>
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={event => void runPreview('member', event.currentTarget)}>預覽會員</button>
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={event => void runPreview('my_work', event.currentTarget)}>預覽我的工作</button>
-        </>}
+        {access.preview && <details ref={previewMenu} className="guild-launchpad-preview-menu">
+          <summary ref={previewSummary} className="btn btn-ghost">預覽</summary>
+          <div className="guild-launchpad-preview-options">
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => {if (previewMenu.current) previewMenu.current.open = false; void runPreview('public', previewSummary.current);}}>預覽公開</button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => {if (previewMenu.current) previewMenu.current.open = false; void runPreview('member', previewSummary.current);}}>預覽會員</button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => {if (previewMenu.current) previewMenu.current.open = false; void runPreview('my_work', previewSummary.current);}}>預覽我的工作</button>
+          </div>
+        </details>}
         {access.edit && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void saveDraft()}>儲存草稿</button>}
         {access.publish && <button type="button" className="btn btn-primary" disabled={busy || !canPublish} onClick={event => { setConfirmPublish(true); openDialog(publishDialog.current, event.currentTarget); }}>發布</button>}
       </div>
@@ -923,7 +935,7 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
       <h2 id="launchpad-revert-title">確認回復</h2>
       <p>回復會建立一個新的已發布版本，沿用版本 {revertTarget} 的內容。</p>
       <label className="field">回復原因<input aria-describedby={describedBy(errors, 'reason', 'launchpad-revert-reason-error', 'launchpad-revert-reason-hint')} value={revertReason} maxLength={1000} onChange={event => setRevertReason(event.target.value)}/></label>
-      <p className="field-hint" id="launchpad-revert-reason-hint">這段文字不能換行，至少 3 個字。</p>
+      <p className="field-hint" id="launchpad-revert-reason-hint">至少 3 個字。</p>
       <FieldNote id="launchpad-revert-reason-error" errors={errors} path="reason"/>
       <div className="guild-launchpad-actions"><button type="button" className="btn btn-primary" disabled={busy || blockedReason(revertReason)} onClick={() => void revert()}>確認回復</button><button type="button" className="btn btn-ghost" onClick={() => closeDialog(revertDialog.current)}>取消</button></div>
     </dialog>

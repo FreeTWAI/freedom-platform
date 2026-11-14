@@ -1,0 +1,15 @@
+.frame-tool-details summary {
+  min-height: 44px;
+  padding: 10px 0;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.frame-tool .btn,
+.frame-tool a.btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

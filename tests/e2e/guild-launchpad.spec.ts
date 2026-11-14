@@ -405,12 +405,15 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     await finishGuildCopy(session.page, 1);
     await expect(session.page.getByText('已複製公會連結', {exact: true})).toBeVisible();
     await expect(session.page.locator('#launchpad-mission')).toHaveValue(first);
+    const announcementsBlock = session.page.locator('.guild-launchpad-editor .guild-launchpad-block').filter({has: session.page.locator('p', {hasText: /^公告$/})});
+    await announcementsBlock.getByRole('button', {name: '編輯', exact: true}).click();
     const moveAnnouncements = session.page.getByRole('button', {name: '上移公告', exact: true});
     for (let step = 0; step < 7; step += 1) {
       if (await session.page.locator('.guild-launchpad-content > section > h2').first().innerText() === '公告') break;
       await moveAnnouncements.click();
     }
     await expect(session.page.locator('.guild-launchpad-content > section > h2').first()).toHaveText('公告');
+    await session.page.locator('.guild-launchpad-preview-menu > summary').click();
     await session.page.getByRole('button', {name: '預覽公開', exact: true}).click();
     const preview = session.page.getByRole('dialog');
     await expect(preview.getByRole('heading', {name: '合成預覽'})).toBeVisible();
@@ -518,6 +521,7 @@ test('a chair delegates editing and preview only, then revokes access from a sta
     expect(draft.body.mission_override).toBe(mission);
     await expect(delegate.page.getByText(/已儲存草稿版本/)).toBeVisible();
     const previewed = delegate.page.waitForResponse(response => response.url().endsWith(`${path}/launchpad-config/preview`) && response.request().method() === 'POST');
+    await delegate.page.locator('.guild-launchpad-preview-menu > summary').click();
     await delegate.page.getByRole('button', {name: '預覽公開', exact: true}).click();
     const previewResponse = await previewed;
     expect(previewResponse.status()).toBe(200);
@@ -559,6 +563,7 @@ test('a chair delegates editing and preview only, then revokes access from a sta
       {label: '預覽公開', endpoint: 'preview'},
     ]) {
       const denied = delegate.page.waitForResponse(response => response.url().endsWith(`${path}/launchpad-config/${action.endpoint}`) && response.request().method() === 'POST');
+      if (action.label === '預覽公開') await delegate.page.locator('.guild-launchpad-preview-menu > summary').click();
       await delegate.page.getByRole('button', {name: action.label, exact: true}).click();
       const response = await denied;
       expect(response.status()).toBe(403);

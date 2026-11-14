@@ -119,3 +119,211 @@ test('the inbox follows every source page and a deep link finds an organizer bey
 test('a missing GitHub endpoint hides setup even when the capability was advertised',async({page})=>{
  await fixture(page);await page.route('**/admin/api/github-app',route=>route.fulfill({status:404,json:{detail:'not found'}}));await page.goto('/admin?view=system');await expect(page.getByLabel('系統項目')).toBeVisible();await expect(page.getByLabel('系統項目').locator('option[value="github"]')).toHaveCount(0);
 });
+test('UX-G-03: people workspaces are directly reachable on mobile with 44px summaries and open inbox items',async({page})=>{
+ await fixture(page);await page.setViewportSize({width:390,height:844});
+ await page.goto('/admin');await expect(page.locator('.admin-place-list button').first()).toBeVisible();
+ expect((await page.getByText('紀錄與設定',{exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await page.goto('/admin?view=people');
+ expect((await page.getByText('管理設定',{exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ for(const label of ['會員管理','管理員名單','公會管理','技能書維護者']){
+  const button=page.getByRole('button',{name:label,exact:true});
+  await expect(button).toBeVisible();expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ }
+ await page.getByRole('button',{name:'會員管理',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
+});
+test('UX-G-04: view=system opens its first section with credentials and account inside admin-content',async({page})=>{
+ await fixture(page);
+ await page.goto('/admin');await expect(page.locator('.admin-account')).toBeHidden();
+ await page.goto('/admin?view=system');
+ const select=page.getByLabel('系統項目',{exact:true});
+ await expect(select).toHaveValue('credentials');
+ await expect(select.locator('option[value=""]')).toHaveCount(0);
+ await expect(page.locator('footer.admin-system-details')).toHaveCount(0);
+ const content=page.locator('.admin-content');
+ await expect(content.locator('#admin-credentials')).toBeVisible();
+ await expect(content.locator('#admin-credentials')).toHaveAttribute('open','');
+ await expect(content.locator('.admin-account')).toBeVisible();
+});
+test('UX-G-09: people shows 5 rows and guilds shows 20 rows with 更多, and guild row actions stay behind 管理',async({page})=>{
+ await fixture(page);
+ const members=Array.from({length:4},(_,index)=>({user_id:randomUUID(),display_name:`合成會員 ${index+1}`,email:`member-${index+1}@example.test`,active:true,is_test_account:false,onboarding_required:false,onboarding_completed_at:null,aggregate_version:1,guilds:[]}));
+ const makeGuilds=(count:number)=>Array.from({length:count},(_,index)=>({guild_key:`guild_${index+1}`,name:`合成公會 ${index+1}`,purpose:`合成宗旨 ${index+1}`,guild_master:null,officer_version:null,guild_experts:[]}));
+ await page.route('**/admin/api/members?*',route=>route.fulfill({json:{items:members,next_offset:null}}));
+ await page.route('**/admin/api/guilds',route=>route.fulfill({json:{items:makeGuilds(3)}}));
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/admin?view=people');
+ await expect(page.locator('.admin-place-list button')).toHaveCount(5);
+ const peopleMore=page.getByRole('button',{name:'更多',exact:true});
+ await expect(peopleMore).toBeVisible();
+ expect((await peopleMore.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await peopleMore.click();
+ await expect(page.locator('.admin-place-list button')).toHaveCount(7);
+ await expect(peopleMore).toHaveCount(0);
+ await page.route('**/admin/api/guilds',route=>route.fulfill({json:{items:makeGuilds(22)}}));
+ await page.goto('/admin?view=guilds');
+ await expect(page.locator('.admin-guild-card')).toHaveCount(20);
+ expect((await page.getByText('公會設定',{exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ const firstCard=page.locator('.admin-guild-card').first();
+ await expect(firstCard.getByRole('button',{name:'編輯名稱與別名',exact:true})).toBeHidden();
+ await expect(firstCard.getByRole('button',{name:'設定公會長',exact:true})).toBeHidden();
+ await expect(firstCard.getByRole('button',{name:'新增公會專家',exact:true})).toBeHidden();
+ const manage=firstCard.locator('summary',{hasText:'管理'});
+ await expect(manage).toBeVisible();
+ expect((await manage.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await manage.click();
+ await expect(firstCard.getByRole('button',{name:'編輯名稱與別名',exact:true})).toBeVisible();
+ await expect(firstCard.getByRole('button',{name:'設定公會長',exact:true})).toBeVisible();
+ await expect(firstCard.getByRole('button',{name:'新增公會專家',exact:true})).toBeVisible();
+ const guildsMore=page.getByRole('button',{name:'更多',exact:true});
+ await expect(guildsMore).toBeVisible();
+ expect((await guildsMore.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await guildsMore.click();
+ await expect(page.locator('.admin-guild-card')).toHaveCount(22);
+ await expect(guildsMore).toHaveCount(0);
+});
+test('UX-G-10: errors view groups repeated entries, translates error codes, caps at 20, and hides raw details in details',async({page})=>{
+ await fixture(page);
+ const uid1='20000000-0000-4000-8000-000000000001',uid2='20000000-0000-4000-8000-000000000002';
+ const items=[
+  {error_id:'e1',user_id:uid1,display_name:'合成甲',action:'GET /events',error_code:'network_error',http_status:0,created_at:'2026-02-01T10:03:00.000Z'},
+  {error_id:'e2',user_id:uid2,display_name:'合成乙',action:'GET /events',error_code:'network_error',http_status:0,created_at:'2026-02-01T10:02:00.000Z'},
+  {error_id:'e3',user_id:uid1,display_name:'合成甲',action:'GET /events',error_code:'network_error',http_status:0,created_at:'2026-02-01T10:01:00.000Z'},
+  {error_id:'e4',user_id:uid1,display_name:'合成甲',action:'GET /profile',error_code:'profile_not_found',http_status:404,created_at:'2026-02-01T09:50:00.000Z'},
+  {error_id:'e5',user_id:uid1,display_name:'合成甲',action:'POST /opensource/projects',error_code:'github_repository_unavailable',http_status:502,created_at:'2026-02-01T09:40:00.000Z'},
+  {error_id:'e6',user_id:uid1,display_name:'合成甲',action:'GET /members',error_code:'not_found',http_status:404,created_at:'2026-02-01T09:30:00.000Z'},
+  ...Array.from({length:18},(_,i)=>({error_id:`ex-${i}`,user_id:uid2,display_name:'合成乙',action:`GET /items/${i}`,error_code:'not_found',http_status:404,created_at:`2026-02-01T08:${String(59-i).padStart(2,'0')}:00.000Z`}))
+ ];
+ await page.route('**/admin/api/client-errors',route=>route.fulfill({json:{items}}));
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/admin?view=errors');
+ await expect(page.getByRole('heading',{name:'系統錯誤日誌',exact:true})).toBeVisible();
+ const cards=page.locator('.admin-content article.card');
+ await expect(cards).toHaveCount(20);
+ await expect(page.locator('.admin-content .btn-primary')).toHaveCount(0);
+ const first=cards.first();
+ await expect(first).toContainText('網路連線異常');
+ await expect(first).toContainText('3 次');
+ await expect(cards.nth(1)).toContainText('找不到個人檔案');
+ await expect(cards.nth(2)).toContainText('GitHub 儲存庫無法存取');
+ await expect(cards.nth(3)).toContainText('找不到資料');
+ for(const raw of ['GET /events','network_error','profile_not_found','github_repository_unavailable','not_found','HTTP 0',uid1]){
+  expect(await page.locator('.admin-content').innerText()).not.toContain(raw);
+ }
+ const detailSummary=first.locator('summary',{hasText:'技術詳情'});
+ await expect(detailSummary).toBeVisible();
+ expect((await detailSummary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await detailSummary.click();
+ await expect(first).toContainText('GET /events');
+ await expect(first).toContainText('network_error');
+ await expect(first).toContainText('HTTP 0');
+ await expect(first).toContainText(uid1);
+ const more=page.getByRole('button',{name:'更多',exact:true});
+ await expect(more).toBeVisible();
+ await more.click();
+ await expect(cards).toHaveCount(22);
+ await expect(more).toHaveCount(0);
+});
+test('UX-G-11: store-admissions removes English tags and hides preamble, receipt note, and provider profile behind 准入與收據說明',async({page})=>{
+ await fixture(page);
+ await page.route('**/admin/api/commerce/store-readiness*',route=>route.fulfill({json:{environment:'sandbox',checked_at:'2026-02-01T00:00:00.000Z',release_sha:'abc1234',platform:{checkout_enabled:true,quarantine:false,provider_profiles:['ecpay.aio.credit.v1']},summary:{stores:0,active_admissions:0,accepting_orders:0},items:[],next_offset:null}}));
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/admin?view=store-admissions&manage=1');
+ await expect(page.getByRole('heading',{name:'商店准入',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'測試環境',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'下載範圍收據',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'下載範圍收據（JSON）',exact:true})).toHaveCount(0);
+ const visible=await page.locator('.admin-content').innerText();
+ for(const hidden of ['sandbox','live','JSON','ecpay.aio.credit.v1','abc1234','准入是開放接單的最後一項條件','收據含租戶與商店名稱']){
+  expect(visible).not.toContain(hidden);
+ }
+ const guide=page.locator('summary',{hasText:'准入與收據說明'});
+ await expect(guide).toBeVisible();
+ expect((await guide.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await guide.click();
+ await expect(page.locator('.admin-content')).toContainText('准入是開放接單的最後一項條件');
+ await expect(page.locator('.admin-content')).toContainText('收據含租戶與商店名稱');
+ await expect(page.locator('.admin-content')).toContainText('ecpay.aio.credit.v1');
+});
+test('UX-G-13: members view uses Chinese placeholder, 44px test-toggle label, and filters only via 顯示測試資料',async({page})=>{
+ await fixture(page);
+ const requests:string[]=[];
+ await page.route('**/admin/api/members?*',route=>{
+  requests.push(new URL(route.request().url()).search);
+  return route.fulfill({json:{items:[{user_id:randomUUID(),display_name:'合成會員',email:'fresh-synthetic@example.com',active:true,is_test_account:false,onboarding_required:false,onboarding_completed_at:null,aggregate_version:1,guilds:[]}],next_offset:null}});
+ });
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/admin?view=members&manage=1');
+ await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
+ await expect(page.getByPlaceholder('暱稱或電子信箱')).toBeVisible();
+ await expect(page.getByText('fresh-synthetic@example.com')).toBeVisible();
+ const toggleLabel=page.locator('.admin-test-toggle');
+ expect((await toggleLabel.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ expect(requests.at(-1)).toContain('include_test=false');
+ await page.getByRole('checkbox',{name:'顯示測試資料'}).check();
+ await expect.poll(()=>requests.at(-1)).toContain('include_test=true');
+});
+test('UX-G-14 / UX-F-11: pending views conditionally mount guild-applications, move preambles behind 說明, style author-claim tabs with aria-pressed, size held link >=44px, and expose h2 工具檢舉',async({page})=>{
+ await fixture(page);
+ await page.route('**/admin/api/shares/held?*',route=>route.fulfill({json:{items:[{share_id:randomUUID(),kind:'event',title:'待處理檢舉測試活動',public_url:'https://example.test/e',open_reports:1,reasons:['合成檢舉原因'],hidden_at:'2026-02-01T00:00:00.000Z'}]}}));
+ await page.route('**/admin/api/author-claims?*',route=>route.fulfill({json:{queue:'review',items:[],identity_changes:[]}}));
+ await page.route('**/admin/api/guild-applications?*',route=>route.fulfill({json:{items:[],next_offset:null}}));
+ await page.route('**/admin/api/events?*',route=>route.fulfill({json:{items:[]}}));
+ await page.route('**/admin/api/guild-tools?*',route=>route.fulfill({json:{items:[],next_offset:null}}));
+ await page.setViewportSize({width:390,height:844});
+
+ await page.goto('/admin?view=held-shares&manage=1');
+ await expect(page.locator('.admin-content h2').first()).toHaveText('檢舉處理');
+ const heldLink=page.getByRole('link',{name:'待處理檢舉測試活動'});
+ await expect(heldLink).toBeVisible();
+ expect((await heldLink.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+
+ await page.goto('/admin?view=guild-applications&manage=1');
+ await expect(page.getByRole('heading',{name:'公會申請',exact:true})).toBeVisible();
+ expect(await page.locator('.admin-content').innerText()).not.toContain('先處理待審申請');
+ await page.locator('.admin-content summary',{hasText:'說明'}).click();
+ await expect(page.locator('.admin-content')).toContainText('先處理待審申請');
+
+ await page.goto('/admin?view=events&manage=1');
+ await expect(page.getByRole('heading',{name:'公開活動審核',exact:true})).toBeVisible();
+ expect(await page.locator('.admin-content').innerText()).not.toContain('所有會員都能提交');
+ await page.locator('.admin-content summary',{hasText:'說明'}).click();
+ await expect(page.locator('.admin-content')).toContainText('所有會員都能提交');
+
+ await page.goto('/admin?view=author-claims&manage=1');
+ await expect(page.getByRole('heading',{name:'作者認領審核',exact:true})).toBeVisible();
+ expect(await page.locator('.admin-content').innerText()).not.toContain('平台管理員審核原作者');
+ await expect(page.locator('.admin-content .btn-primary')).toHaveCount(0);
+ const pendingTab=page.getByRole('button',{name:'待審核',exact:true});
+ const verifiedTab=page.getByRole('button',{name:'已核實',exact:true});
+ await expect(pendingTab).toHaveAttribute('aria-pressed','true');
+ await expect(verifiedTab).toHaveAttribute('aria-pressed','false');
+ await page.locator('.admin-content summary',{hasText:'說明'}).click();
+ await expect(page.locator('.admin-content')).toContainText('平台管理員審核原作者');
+
+ await page.goto('/admin?view=tool-reports&manage=1');
+ await expect(page.getByRole('heading',{name:'工具檢舉',level:2,exact:true})).toBeVisible();
+ await expect(page.locator('.admin-content details summary',{hasText:'工具檢舉'})).toHaveCount(0);
+});
+test('UX-G-15: mobile admin navigation dialog traps Tab/Shift+Tab focus cleanly and keeps 44px close button',async({page})=>{
+ await fixture(page);
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/admin?view=inbox');
+ const trigger=page.getByRole('button',{name:'開啟管理選單',exact:true});
+ await trigger.click();
+ const dialog=page.getByRole('dialog',{name:'切換管理功能',exact:true});
+ await expect(dialog).toBeVisible();
+ const closeBtn=dialog.getByRole('button',{name:'關閉管理選單',exact:true});
+ const lastLink=dialog.getByRole('link',{name:'返回自由工坊',exact:true});
+ await expect(closeBtn).toBeFocused();
+ const closeBox=(await closeBtn.boundingBox())!;
+ expect(closeBox.width).toBeGreaterThanOrEqual(44);
+ expect(closeBox.height).toBeGreaterThanOrEqual(44);
+ await page.keyboard.press('Shift+Tab');
+ await expect(lastLink).toBeFocused();
+ await page.keyboard.press('Tab');
+ await expect(closeBtn).toBeFocused();
+ await page.keyboard.press('Escape');
+ await expect(dialog).toBeHidden();
+ await expect(trigger).toBeFocused();
+});
