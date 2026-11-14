@@ -32,8 +32,20 @@ export async function requestEmailChange(pool:Pool,actor:Actor,raw:unknown,origi
 
 export async function confirmEmailChange(pool:Pool,rawToken:string,send:EventEmailSender){
   requireCondition(/^[A-Za-z0-9_-]{43}$/.test(rawToken),422,'email_change_link_invalid','變更連結無效或已過期，請重新申請。');
+  const hash=tokenHash(rawToken);
+  const precheck=(await pool.query(
+    `SELECT t.old_email,t.new_email,t.credential_hash,u.email AS current_email,u.password_hash
+     FROM login_email_change_tokens t
+     JOIN users u ON u.user_id=t.user_id
+     WHERE t.token_hash=$1 AND t.consumed_at IS NULL AND t.expires_at>clock_timestamp() AND u.active`,
+    [hash],
+  )).rows[0];
+  requireCondition(precheck&&precheck.current_email===precheck.old_email&&tokenHash(precheck.password_hash)===precheck.credential_hash,422,'email_change_link_invalid','變更連結無效或已過期，請重新申請。');
+  requireCondition(!(await pool.query('SELECT 1 FROM users WHERE email=$1',[precheck.new_email])).rowCount,409,'email_in_use','此 Email 已被使用。');
+  // Notice goes out before the switch transaction so mail latency never locks the user row.
+  try{await send(precheck.old_email,'自由工坊：登入 Email 變更提醒',`有人正嘗試將您的登入 Email 變更為 ${precheck.new_email}。此信提醒變更嘗試；實際帳號狀態請回工坊確認。若非本人操作，請立即聯絡平台管理員。`);}
+  catch{throw new Problem(503,'email_change_notification_failed','通知信未寄送，Email 尚未變更，請稍後重試。');}
   try{return await transaction(pool,async q=>{
-    const hash=tokenHash(rawToken);
     const candidate=(await q.query('SELECT user_id FROM login_email_change_tokens WHERE token_hash=$1',[hash])).rows[0];
     requireCondition(candidate,422,'email_change_link_invalid','變更連結無效或已過期，請重新申請。');
     // Lock the user before tokens, matching authenticated member commands and requests.
@@ -47,11 +59,6 @@ export async function confirmEmailChange(pool:Pool,rawToken:string,send:EventEma
     await q.query('DELETE FROM password_reset_tokens WHERE user_id=$1',[user.user_id]);
     const account=(await q.query('UPDATE member_accounts SET aggregate_version=aggregate_version+1 WHERE user_id=$1 RETURNING aggregate_version',[user.user_id])).rows[0];
     await journal(q,{...user,session_hash:proof.requesting_session_hash,csrf_token:''},'member_account',user.user_id,account?.aggregate_version??1,'change_login_email',{});
-    // Delivery precedes the final expiry check and commit. Describe the attempt,
-    // never a completed switch that could still roll back. Failure permits retry.
-    try{await send(proof.old_email,'自由工坊：登入 Email 變更提醒',`有人正嘗試將您的登入 Email 變更為 ${proof.new_email}。此信提醒變更嘗試；實際帳號狀態請回工坊確認。若非本人操作，請立即聯絡平台管理員。`);}
-    catch{throw new Problem(503,'email_change_notification_failed','通知信未寄送，Email 尚未變更，請稍後重試。');}
-    requireCondition((await q.query('SELECT 1 FROM login_email_change_tokens WHERE token_hash=$1 AND expires_at>clock_timestamp()',[hash])).rowCount===1,422,'email_change_link_invalid','變更連結已過期，請重新申請。');
     return {changed:true};
   });}catch(error){
     if(error&&typeof error==='object'&&'code' in error&&error.code==='23505')throw new Problem(409,'email_in_use','此 Email 已被使用。');

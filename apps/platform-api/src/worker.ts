@@ -1,5 +1,6 @@
 import { installWorkerGuildToolSigner, type GuildToolSigningBindings } from './worker-guild-tool-signer.js';
 import { workerGuildToolFetch } from './worker-guild-tool-fetch.js';
+import { withSendLimit } from './mail-send-limit.js';
 import { refreshDueRepositories } from '../../../modules/shares/repository-cache.js';
 import {runContactRetentionWork} from '../../../modules/agent-commerce/operations/contact-retention.js';
 import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefront-gallery.js';
@@ -305,6 +306,14 @@ export function workerAdminVerifier(env: WorkerEnv): AdminAccessVerifier {
   try { return createAdminAccessVerifier({ issuer, audience, csrfSecret }); } catch { return unavailable; }
 }
 
+const limitedEventEmailSender=(binding:NonNullable<WorkerEnv['EMAIL']>)=>withSendLimit(async(to:string,subject:string,text:string)=>{
+  await binding.send({to,from:'no-reply@mail.freetwai.com',subject,text});
+});
+const limitedCommerceEmailSender=(binding:NonNullable<WorkerEnv['EMAIL']>)=>{
+  const raw=createWorkerEmailSender(binding);
+  return {send:withSendLimit(raw.send.bind(raw))};
+};
+
 export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{queryTransport?:PaymentQueryTransport}={}): PlatformRuntime {
   const settings=config.commerceSettings??readCommerceSettings(env),environment=providerEnvironment(config.freedomEnv),admission=createStoreAdmissionPort(environment,settings.providerProfiles);
   const queryTransport=options.queryTransport??createEcpayQueryTransport();
@@ -313,7 +322,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
   const payments=ecpayListed&&journal?{gateway:createEcpayPaymentGateway(environment,config.origin),journal,profiles:settings.providerProfiles}:undefined;
   const cardPorts=payments?createCheckoutPaymentPorts({environment,admission,settings,...payments,keyring:config.commerceCredentialKeyring??null},commerceCheckoutQueryDeps({transport:queryTransport,keyring:config.commerceCredentialKeyring??null,freedomEnv:config.freedomEnv,quarantine:settings.quarantine,emailEnabled:settings.emailEnabled})):undefined;
   const paymentMethods=settings.providerProfiles.length?createPaymentMethodsPort({environment,profiles:settings.providerProfiles,card:cardPorts?.payment}):undefined;
-  const emailSender=settings.emailEnabled&&env.EMAIL?createWorkerEmailSender(env.EMAIL):undefined;
+  const emailSender=settings.emailEnabled&&env.EMAIL?limitedCommerceEmailSender(env.EMAIL):undefined;
   const community = env.FREEDOM_REGISTRATION_COMMUNITY_ID || undefined, tokenKey = env.GITHUB_SOCIAL_TOKEN_KEY || undefined;
   const metricsToken = env.GITHUB_METRICS_TOKEN || undefined;
   const maintainerWebhookSecret = env.GITHUB_MAINTAINER_WEBHOOK_SECRET || undefined;
@@ -341,9 +350,9 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     publicOrigin: config.origin,
     guildReviewer: guildReviewerFromBindings(env),
     passwordEmailSender:env.FREEDOM_PASSWORD_RESET_EMAIL_ENABLED==='true'&&env.EMAIL
-      ?async(to,url)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject:'自由工坊：重設密碼',text:`有人申請重設自由工坊帳號的密碼。\n\n請在 30 分鐘內開啟以下連結：\n${url}\n\n若不是你提出申請，請忽略此信。`});}
+      ?withSendLimit(async(to,url)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject:'自由工坊：重設密碼',text:`有人申請重設自由工坊帳號的密碼。\n\n請在 30 分鐘內開啟以下連結：\n${url}\n\n若不是你提出申請，請忽略此信。`});})
       :undefined,
-    eventEmailSender:env.EMAIL?async(to,subject,text)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject,text});}:undefined,
+    eventEmailSender:env.EMAIL?limitedEventEmailSender(env.EMAIL):undefined,
     health: { runtime: 'cloudflare-workers', release_sha: config.release },
     linkPreviewFetch: workerPreviewFetch,
     guildToolFetch: workerGuildToolFetch,
@@ -603,13 +612,13 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
           if(env.FREEDOM_EVENT_PARTICIPATION_ENABLED==='true'){
             try{
               const config=readWorkerConfig(env);
-              const send=async(to:string,subject:string,text:string)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject,text});};
+              const send=limitedEventEmailSender(env.EMAIL!);
               try{await processEventWaitlist(pool,send,config.origin);}catch{console.error('event_waitlist_failed');}
               try{await processEventReminders(pool,send,{enabled:true,limit:3});}catch{console.error('event_reminders_failed');}
             }catch{console.error('event_participation_not_ready');}
           }
           if(env.FREEDOM_EVENT_PARTICIPATION_ENABLED!=='true'&&env.EMAIL){
-            try{const config=readWorkerConfig(env);await processEventNotices(pool,async(to,subject,text)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject,text});},config.origin);}catch{console.error('event_notices_failed');}
+            try{const config=readWorkerConfig(env);await processEventNotices(pool,limitedEventEmailSender(env.EMAIL),config.origin);}catch{console.error('event_notices_failed');}
           }
           let contactRetention:CommerceContactRetention|undefined;
           try{contactRetention=readCommerceContactRetention(env);}catch{console.error('commerce_contact_retention_invalid');}
@@ -626,7 +635,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               let emailDeps:{email:typeof commerceEmailOutbox;emailEnabled:true;emailSender:ReturnType<typeof createWorkerEmailSender>;journal:ReturnType<typeof createR2EffectJournal>;origin:string}|undefined;
               if(commerce.emailEnabled)try{
                 const config=readWorkerConfig(env);
-                emailDeps={email:commerceEmailOutbox,emailEnabled:true,emailSender:createWorkerEmailSender(env.EMAIL!),journal:createR2EffectJournal(config.freedomEnv,env.COMMERCE_JOURNAL!),origin:config.origin};
+                emailDeps={email:commerceEmailOutbox,emailEnabled:true,emailSender:limitedCommerceEmailSender(env.EMAIL!),journal:createR2EffectJournal(config.freedomEnv,env.COMMERCE_JOURNAL!),origin:config.origin};
               }catch{console.error('commerce_email_not_ready');}
               const keyring=env.COMMERCE_CREDENTIAL_KEYS?CommerceCredentialKeyring.parse(env.COMMERCE_CREDENTIAL_KEYS):null;
               const freedomEnv=resolveFreedomEnv(env.FREEDOM_ENV);

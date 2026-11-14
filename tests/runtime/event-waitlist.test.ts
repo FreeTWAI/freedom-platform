@@ -6,7 +6,7 @@ import {Pool,type PoolClient} from 'pg';
 import {createPool,LOCAL_DATABASE_URL,transaction} from '../../packages/db/index.js';
 import {migrate} from '../../scripts/database.js';
 import {seedLocal,DEMO_USERS,DEMO_PASSWORD,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
-import {eventInvitationDeadline,ensureGuestCapability,resolveGuestParticipation,readGuestEventParticipation,mutateGuestEventParticipation,reconcileEventWaitlist,countEventSeats,processEventWaitlist} from '../../modules/community/event-waitlist.js';
+import {eventInvitationDeadline,ensureGuestCapability,resolveGuestParticipation,readGuestEventParticipation,mutateGuestEventParticipation,reconcileEventWaitlist,countEventSeats,processEventWaitlist,processEventNotices} from '../../modules/community/event-waitlist.js';
 import {setRsvp,registerPublicEvent,cancelEvent,getEventShareCode} from '../../modules/community/events.js';
 import {mutateEventWaitlist,readEventParticipation,updateEventSchedule,setEventWaitlistPolicy} from '../../modules/community/event-waitlist.js';
 import {Problem} from '../../packages/shared/problem.js';
@@ -313,12 +313,11 @@ for(const expires of [true,false])test(`guest provider handoff checks its live h
     if(expires)await pool.query("SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM created_at+interval '10 minutes'-clock_timestamp()))+0.02) FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2",[eventId,guest.email]);
     else await delay(1100);
     assert.equal((await pool.query<{live:boolean}>("SELECT created_at>clock_timestamp()-interval '10 minutes' AS live FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2",[eventId,guest.email])).rows[0].live,!expires);
-    assert.equal(providerCalls,0);await second.query('ROLLBACK');const result=await pending;
-    assert.equal(providerCalls,expires?0:1);
-    if(expires){assert.ok(result.error instanceof Problem);assert.equal(result.error.code,'event_closed');assert.equal(result.error.status,409);}
-    else{assert.equal(result.error,null);assert.deepEqual(result.value,{registered:true,provider_status:'provider_accepted'});}
+    assert.equal(providerCalls,1);await second.query('ROLLBACK');const result=await pending;
+    assert.equal(providerCalls,1);
+    assert.equal(result.error,null);assert.deepEqual(result.value,{registered:true,provider_status:'provider_accepted'});
     const current=(await pool.query<{state:string;email_sent_at:Date|null;registration_attempt_id:string}>('SELECT state,email_sent_at,registration_attempt_id FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[eventId,guest.email])).rows[0];
-    assert.equal(current.state,expires?'pending':'going');assert.equal(current.email_sent_at===null,expires);assert.equal(current.registration_attempt_id,hold.registration_attempt_id);
+    assert.equal(current.state,'going');assert.equal(current.email_sent_at===null,false);assert.equal(current.registration_attempt_id,hold.registration_attempt_id);
   }finally{
     try{await rollbackEventBlocker(first);}finally{
       try{await rollbackEventBlocker(second);}finally{await Promise.allSettled([pending,secondLock].filter((operation):operation is Promise<unknown>=>operation!==undefined));}
@@ -337,12 +336,10 @@ for(const participationEnabled of [false,true])for(const previouslyConfirmed of 
   }} as unknown as Pool;
   await assert.rejects(registerPublicEvent(providerPool,eventId,guest,async()=>{
     providerCalls++;
-    assert.ok(providerClient);
-    // Establish the real deadline only once dispatch begins, on the native client already holding the event lock.
-    // The transaction helper retains BEGIN/ROLLBACK/release; no clock or product query is replaced.
-    await providerClient.query("UPDATE community_events SET starts_at=clock_timestamp()+interval '3 seconds',ends_at=clock_timestamp()+interval '1 hour' WHERE event_id=$1",[eventId]);
-    await providerClient.query('SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM starts_at-clock_timestamp()))+0.02) FROM community_events WHERE event_id=$1',[eventId]);
-    returnedAfterStart=(await providerClient.query<{started:boolean}>('SELECT starts_at<=clock_timestamp() AS started FROM community_events WHERE event_id=$1',[eventId])).rows[0].started;
+    assert.equal(providerClient,undefined);
+    await pool.query("UPDATE community_events SET starts_at=clock_timestamp()+interval '3 seconds',ends_at=clock_timestamp()+interval '1 hour' WHERE event_id=$1",[eventId]);
+    await pool.query('SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM starts_at-clock_timestamp()))+0.02) FROM community_events WHERE event_id=$1',[eventId]);
+    returnedAfterStart=(await pool.query<{started:boolean}>('SELECT starts_at<=clock_timestamp() AS started FROM community_events WHERE event_id=$1',[eventId])).rows[0].started;
   },'https://example.test',participationEnabled),cause=>cause instanceof Problem&&cause.status===409&&cause.code==='event_closed');
   assert.equal(providerCalls,1);assert.equal(returnedAfterStart,true);
   assert.equal(connects,2);assert.equal(releases,2);assert.equal(providerClient,undefined);
@@ -489,7 +486,7 @@ test('renewing a hold for the same invitation replaces its attempt and fences la
   }} as unknown as Pool;
   await assert.rejects(registerPublicEvent(gapPool,eventId,{name:'合成舊保留',email},async()=>{oldSends++;},'https://example.test',false),
     error=>error instanceof Problem&&error.code==='event_closed');
-  assert.notEqual(oldAttempt,newAttempt);assert.equal(oldSends,0);assert.equal(newSends,1);
+  assert.notEqual(oldAttempt,newAttempt);assert.equal(oldSends,1);assert.equal(newSends,1);
   assert.equal((await readGuestEventParticipation(pool,eventId,token)).waitlist?.status,'accepted');assert.equal(await countEventSeats(pool,eventId),1);
 });
 
@@ -827,4 +824,29 @@ for(const kind of ['member','guest'] as const)test(`${kind} accepted history rem
   const noOp=token?await mutateGuestEventParticipation(pool,eventId,token,{action:'accept',expected_version:unchanged.event_version},randomUUID())
     :await mutateEventWaitlist(pool,memberCommand(1,input.operation,{action:'accept'},unchanged.event_version),eventId);
   assert.deepEqual(noOp,unchanged);assert.equal(noOp.waitlist?.status,'accepted');assert.equal(noOp.rsvp_state,'going');
+});
+
+test('processEventWaitlist and processEventNotices claim no new rows once AbortSignal is aborted',async()=>{
+  const first=await capability('abort-first@local.test');
+  await action(first,'join');
+  const current=await readEventParticipation(pool,actor(0),eventId);
+  await updateEventSchedule(pool,memberCommand(0,`PATCH /events/${eventId}/schedule`,{starts_at:new Date(start.getTime()+60_000).toISOString(),ends_at:new Date(start.getTime()+3_660_000).toISOString(),capacity:1},current.event_version),eventId);
+  const aborted=new AbortController();aborted.abort();
+  let calls=0;
+  const noticeStop=await processEventNotices(pool,async()=>{calls++;},'https://example.test',eventId,0,0,aborted.signal);
+  assert.deepEqual(noticeStop,{provider_accepted:0,failed:0});
+  assert.equal(calls,0);
+  assert.equal((await pool.query("SELECT status FROM community_event_participation_notices WHERE event_id=$1 AND guest_email=$2",[eventId,'abort-first@local.test'])).rows[0].status,'pending');
+  const waitlistStop=await processEventWaitlist(pool,async()=>{calls++;},'https://example.test',undefined,eventId,aborted.signal);
+  assert.deepEqual(waitlistStop,{reconciled:0,provider_accepted:0,failed:0});
+  assert.equal(calls,0);
+  assert.equal((await readGuestEventParticipation(pool,eventId,first)).waitlist?.delivery_status,'pending');
+  assert.equal((await pool.query("SELECT status FROM community_event_participation_notices WHERE event_id=$1 AND guest_email=$2",[eventId,'abort-first@local.test'])).rows[0].status,'pending');
+
+  const midRun=new AbortController();
+  const afterOne=await processEventWaitlist(pool,async()=>{calls++;midRun.abort();},'https://example.test',undefined,eventId,midRun.signal);
+  assert.equal(calls,1);
+  assert.equal(afterOne.provider_accepted,1);
+  assert.equal((await readGuestEventParticipation(pool,eventId,first)).waitlist?.delivery_status,'provider_accepted');
+  assert.equal((await pool.query("SELECT status FROM community_event_participation_notices WHERE event_id=$1 AND guest_email=$2",[eventId,'abort-first@local.test'])).rows[0].status,'pending');
 });

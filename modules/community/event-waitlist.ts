@@ -205,13 +205,21 @@ export const EVENT_DELIVERY_BATCH_SIZE=10;
 function definitelyRejected(error:unknown){
   return !!error&&typeof error==='object'&&'code' in error&&['E_RATE_LIMIT_EXCEEDED','E_DAILY_LIMIT_EXCEEDED'].includes(String(error.code));
 }
-export async function processEventWaitlist(pool:Pool,send:EventEmailSender,origin:string,now?:Date,eventId?:string):Promise<{reconciled:number;provider_accepted:number;failed:number}>{
+export async function processEventWaitlist(pool:Pool,send:EventEmailSender,origin:string,now?:Date,eventId?:string,signal?:AbortSignal):Promise<{reconciled:number;provider_accepted:number;failed:number}>{
+  if(signal?.aborted)return {reconciled:0,provider_accepted:0,failed:0};
   const clock=()=>now??new Date();
   const ids=(await pool.query("SELECT e.event_id FROM community_events e WHERE ($1::uuid IS NULL OR e.event_id=$1) AND EXISTS(SELECT 1 FROM community_event_waitlist w WHERE w.event_id=e.event_id AND w.status IN ('queued','invited')) ORDER BY e.waitlist_reconciled_at NULLS FIRST,e.event_id LIMIT 100",[eventId??null])).rows;
-  for(const row of ids)await transaction(pool,async q=>{const checkedAt=clock();await reconcileEventWaitlist(q,row.event_id,checkedAt);await q.query('UPDATE community_events SET waitlist_reconciled_at=$2 WHERE event_id=$1',[row.event_id,checkedAt]);});
+  let reconciled=0;
+  for(const row of ids){
+    if(signal?.aborted)return {reconciled,provider_accepted:0,failed:0};
+    await transaction(pool,async q=>{const checkedAt=clock();await reconcileEventWaitlist(q,row.event_id,checkedAt);await q.query('UPDATE community_events SET waitlist_reconciled_at=$2 WHERE event_id=$1',[row.event_id,checkedAt]);});
+    reconciled++;
+  }
+  if(signal?.aborted)return {reconciled,provider_accepted:0,failed:0};
   let accepted=0,failed=0;
   const candidates=(await pool.query("SELECT entry_id,event_id FROM community_event_waitlist WHERE status='invited' AND guest_email IS NOT NULL AND delivery_status='pending' AND ($1::uuid IS NULL OR event_id=$1) ORDER BY joined_at,entry_id LIMIT $2",[eventId??null,EVENT_DELIVERY_BATCH_SIZE])).rows;
 for(const candidate of candidates){
+  if(signal?.aborted)break;
   const claim=await transaction(pool,async q=>{
     const event=await eventRow(q,candidate.event_id,true);
     await reconcileEventWaitlist(q,event.event_id,clock());
@@ -241,7 +249,7 @@ for(const candidate of candidates){
     await q.query('UPDATE community_event_waitlist SET delivery_status=$2 WHERE entry_id=$1 AND invitation_id=$3',[entry.entry_id,status,entry.invitation_id]);
   });
 }
-return {reconciled:ids.length,...await processEventNotices(pool,send,origin,eventId,accepted,failed)};
+return {reconciled,...await processEventNotices(pool,send,origin,eventId,accepted,failed,signal)};
 }
 // A rolling day also bounds every calendar day; unknown attempts consume slots.
 const changeNoticeBudgetSql=`(n.kind<>'event_schedule_changed' OR (
@@ -249,10 +257,12 @@ const changeNoticeBudgetSql=`(n.kind<>'event_schedule_changed' OR (
    AND a.kind='event_schedule_changed' AND a.attempted_at>clock_timestamp()-interval '1 hour')
  AND (SELECT count(*) FROM community_event_participation_notices a WHERE a.event_id=n.event_id AND a.guest_email=n.guest_email AND a.notice_id<>n.notice_id
    AND a.kind='event_schedule_changed' AND a.attempted_at>clock_timestamp()-interval '1 day')<3))`;
-export async function processEventNotices(pool:Pool,send:EventEmailSender,origin:string,eventId?:string,accepted=0,failed=0){
+export async function processEventNotices(pool:Pool,send:EventEmailSender,origin:string,eventId?:string,accepted=0,failed=0,signal?:AbortSignal){
+if(signal?.aborted)return {provider_accepted:accepted,failed};
 const notices=(await pool.query(`SELECT notice_id,event_id FROM community_event_participation_notices n WHERE (n.status='pending' OR (n.status='queued' AND n.kind='event_announcement'))
  AND ($1::uuid IS NULL OR event_id=$1) AND ${changeNoticeBudgetSql} ORDER BY event_version,notice_id LIMIT $2`,[eventId??null,Math.max(0,EVENT_DELIVERY_BATCH_SIZE-accepted-failed)])).rows;
 for(const candidate of notices){
+  if(signal?.aborted)break;
   const claimed=await transaction(pool,async q=>{
     await eventRow(q,candidate.event_id,true);
     return (await q.query(`UPDATE community_event_participation_notices n SET status='unknown',attempted_at=clock_timestamp()

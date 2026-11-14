@@ -495,3 +495,48 @@ test('member presence reports last activity from the session that was actually u
   assert.equal((await request(`/members/presence?ids=${id}`,viewer)).data.items[0].last_seen_at,null);
   assert.equal((await request(`/me/conversations/${id}/messages`,viewer)).data.participant.last_seen_at,null);
 });
+
+test('public guest registration does not lock the event row while sending email',async()=>{
+  const owner=await signIn(),reviewer=await signIn(DEMO_USERS[1].email);
+  await guildMaster(reviewer.user.user_id,'guild_member_operations');
+  const created=await request('/events',owner,{...draft(),capacity:2,visibility:'open'}),id=created.data.event_id;
+  assert.equal((await request(`/events/${id}`,owner)).data.state,'published');
+  let lockError:string|null=null,checked=false;
+  const mailApp=createApp(pool,origin,'local',{eventEmailSender:async()=>{
+    checked=true;
+    const client=await pool.connect();
+    try{
+      await client.query('BEGIN');
+      await client.query('SELECT 1 FROM community_events WHERE event_id=$1 FOR UPDATE NOWAIT',[id]);
+      await client.query('COMMIT');
+    }catch(error:any){
+      await client.query('ROLLBACK').catch(()=>{});
+      lockError=error?.code??error?.message??String(error);
+    }finally{
+      client.release();
+    }
+  }});
+  const response=await mailApp.request(`${origin}/api/v1/public/events/${id}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'不鎖定訪客',email:'nolock@example.org',referral_code:null})});
+  assert.equal(response.status,200);
+  assert.equal(checked,true);
+  assert.equal(lockError,null);
+  const row=(await pool.query('SELECT state,email_sent_at IS NOT NULL AS sent FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[id,'nolock@example.org'])).rows[0];
+  assert.equal(row.state,'going');
+  assert.equal(row.sent,true);
+});
+
+test('failed referral RSVP email returns truthful 503 message while keeping member RSVP going',async()=>{
+  const owner=await signIn(),sharer=await signIn(DEMO_USERS[1].email),joiner=await signIn(DEMO_USERS[2].email);
+  const created=await request('/events',owner,{...draft(),capacity:3,visibility:'referral',online_url:'https://example.org/private-room'});
+  assert.equal(created.status,201,JSON.stringify(created.data));
+  const id=created.data.event_id;
+  const code=(await request(`/events/${id}/share-code`,sharer,{})).data.code as string;
+  const failingApp=createApp(pool,origin,'local',{eventEmailSender:async()=>{throw new Error('mail unavailable');}});
+  const response=await failingApp.request(`${origin}/api/v1/events/${id}/rsvp`,{method:'POST',headers:{Origin:origin,Cookie:joiner.cookie,'X-CSRF-Token':joiner.csrf,'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify({going:true,referral_code:code})});
+  assert.equal(response.status,503);
+  const data=await response.json() as {code:string;detail:string};
+  assert.equal(data.code,'event_email_delivery_failed');
+  assert.equal(data.detail,'已報名，但確認信沒有寄出；再按一次報名會重寄。');
+  const row=(await pool.query('SELECT state FROM community_event_rsvps WHERE event_id=$1 AND user_id=$2',[id,joiner.user.user_id])).rows[0];
+  assert.equal(row?.state,'going');
+});

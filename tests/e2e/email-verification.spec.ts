@@ -4,6 +4,7 @@ import { tokenHash } from '../../modules/identity-membership/service.js';
 
 test('account send error and one-use confirmation work on desktop and phone',async({page,e2eAuthPool})=>{
   await page.goto('/');
+  await page.locator('details.login-more > summary').click();
   await page.getByRole('button',{name:'作者示範帳號 maker@local.test',exact:true}).click();
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();

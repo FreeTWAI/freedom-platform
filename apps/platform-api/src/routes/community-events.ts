@@ -18,6 +18,7 @@ import { eventVideoHttp, announceEvent, cancelEvent, createEvent, eventReferralR
 import {readMemberEventCalendar} from '../../../../modules/community/event-calendar.js';
 import {readEventReminder,saveEventReminder} from '../../../../modules/community/event-reminders.js';
 import {mutateEventWaitlist,processEventWaitlist,processEventNotices,readEventParticipation,setEventWaitlistPolicy,updateEventSchedule} from '../../../../modules/community/event-waitlist.js';
+import {getAfterResponseSignal} from '../../../../modules/agent-commerce/operations/due-work.js';
 
 // Bounded event text/prize payload, including escaped supplementary Unicode.
 export const EVENT_DETAILS_REQUEST_BYTES=160*1024;
@@ -76,8 +77,9 @@ export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSend
   const dispatch=(eventId:string)=>{
     if(!emailSender||!runtime?.afterResponse)return;
     runtime.afterResponse(async()=>{
-      if(runtime.eventParticipationEnabled===true)await processEventWaitlist(pool,emailSender,origin,undefined,eventId);
-      else await processEventNotices(pool,emailSender,origin,eventId);
+      const signal=getAfterResponseSignal();
+      if(runtime.eventParticipationEnabled===true)await processEventWaitlist(pool,emailSender,origin,undefined,eventId,signal);
+      else await processEventNotices(pool,emailSender,origin,eventId,0,0,signal);
     });
   };
   if(runtime?.eventParticipationEnabled===true){
@@ -150,7 +152,7 @@ export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSend
     if((input.body as {going?:boolean})?.going&&result.visibility==='referral'&&emailSender){
       try{await emailSender(c.get('actor').email,'自由工坊：活動參與資料',
         `你已報名「${result.title}」。\n\n活動頁：${origin}/events/${eventId}\n\n地點：${result.location}${result.online_url?`\n線上參與連結：${result.online_url}`:''}`);}
-      catch{requireCondition(false,503,'event_email_delivery_failed','報名已確認，但 Email 提供者尚未確認接受郵件；這不代表未報名。請在活動專頁查看目前狀態。');}
+      catch{requireCondition(false,503,'event_email_delivery_failed','已報名，但確認信沒有寄出；再按一次報名會重寄。');}
     }
     return c.json(result);
   });

@@ -172,10 +172,9 @@ test('public event metadata reports guest_registration_available and guest regis
 
   await pool.query('UPDATE community_events SET capacity=10 WHERE event_id=$1',[eventId]);
   const existingEmail='already-going@local.test',freshEmail='brand-new@local.test';
-  let failSend=false,closeDuringSend=false,activeClient:any;
-  const providerPool={query:pool.query.bind(pool),async connect(){const client=await pool.connect();activeClient=client;return {query:client.query.bind(client),release(destroy?:boolean){activeClient=undefined;client.release(destroy);}};}} as unknown as Pool;
-  const flakyApp=createApp(providerPool,origin,'local',{eventEmailSender:async()=>{
-    if(closeDuringSend)await activeClient.query("UPDATE community_events SET starts_at=clock_timestamp()-interval '1 second' WHERE event_id=$1",[eventId]);
+  let failSend=false,closeDuringSend=false;
+  const flakyApp=createApp(pool,origin,'local',{eventEmailSender:async()=>{
+    if(closeDuringSend)await pool.query("UPDATE community_events SET starts_at=clock_timestamp()-interval '1 second' WHERE event_id=$1",[eventId]);
     if(failSend)throw Error('provider rejected');
   }});
   const first=await flakyApp.request(`${origin}/api/v1/public/events/${eventId}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'先行訪客',email:existingEmail})});

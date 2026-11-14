@@ -104,7 +104,7 @@ export function registerAuthenticationRoutes(app: PlatformFeatureApp, context: P
     await authRateLimit(pool,'password-reset-network',authNetwork(c),12,3600);
     await authRateLimit(pool,'password-reset-global','global',500,3600);
     await authRateLimit(pool,'password-reset-email',email,3,3600);
-    await requestPasswordReset(pool,email,origin,runtime.passwordEmailSender);
+    await requestPasswordReset(pool,email,origin,runtime.passwordEmailSender,runtime.afterResponse);
     return c.json({requested:true,message:'若此信箱有可用帳號，且寄送服務正常，重設連結會寄到信箱。'});
   });
   app.post('/api/v1/auth/reset/confirm',async c=>{
