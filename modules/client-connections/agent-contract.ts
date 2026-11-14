@@ -12229,6 +12229,9 @@ export const agentContract = {
                           },
                           "mine": {
                             "type": "boolean"
+                          },
+                          "share_id": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -12691,6 +12694,9 @@ export const agentContract = {
                     },
                     "mine": {
                       "type": "boolean"
+                    },
+                    "share_id": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -12716,7 +12722,8 @@ export const agentContract = {
                     "like_count",
                     "comment_count",
                     "liked",
-                    "mine"
+                    "mine",
+                    "share_id"
                   ],
                   "additionalProperties": {}
                 }
@@ -14002,6 +14009,9 @@ export const agentContract = {
                     },
                     "mine": {
                       "type": "boolean"
+                    },
+                    "share_id": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -14027,7 +14037,8 @@ export const agentContract = {
                     "like_count",
                     "comment_count",
                     "liked",
-                    "mine"
+                    "mine",
+                    "share_id"
                   ],
                   "additionalProperties": {}
                 }
@@ -14574,6 +14585,9 @@ export const agentContract = {
                     },
                     "mine": {
                       "type": "boolean"
+                    },
+                    "share_id": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -18650,6 +18664,9 @@ export const agentContract = {
                     },
                     "via_agent": {
                       "type": "boolean"
+                    },
+                    "share_id": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -18667,7 +18684,8 @@ export const agentContract = {
                     "created_at",
                     "updated_at",
                     "owner_name",
-                    "via_agent"
+                    "via_agent",
+                    "share_id"
                   ],
                   "additionalProperties": {}
                 }

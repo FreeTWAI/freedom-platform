@@ -12228,6 +12228,9 @@
                           },
                           "mine": {
                             "type": "boolean"
+                          },
+                          "share_id": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -12690,6 +12693,9 @@
                     },
                     "mine": {
                       "type": "boolean"
+                    },
+                    "share_id": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -12715,7 +12721,8 @@
                     "like_count",
                     "comment_count",
                     "liked",
-                    "mine"
+                    "mine",
+                    "share_id"
                   ],
                   "additionalProperties": {}
                 }
@@ -14001,6 +14008,9 @@
                     },
                     "mine": {
                       "type": "boolean"
+                    },
+                    "share_id": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -14026,7 +14036,8 @@
                     "like_count",
                     "comment_count",
                     "liked",
-                    "mine"
+                    "mine",
+                    "share_id"
                   ],
                   "additionalProperties": {}
                 }
@@ -14573,6 +14584,9 @@
                     },
                     "mine": {
                       "type": "boolean"
+                    },
+                    "share_id": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -18649,6 +18663,9 @@
                     },
                     "via_agent": {
                       "type": "boolean"
+                    },
+                    "share_id": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -18666,7 +18683,8 @@
                     "created_at",
                     "updated_at",
                     "owner_name",
-                    "via_agent"
+                    "via_agent",
+                    "share_id"
                   ],
                   "additionalProperties": {}
                 }
