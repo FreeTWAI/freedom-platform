@@ -62,7 +62,7 @@ test('master previews and registers an opaque tool, real bridge operations and h
  const sdk=await page.request.get('/guild-tool/v2/client.js');expect(sdk.status()).toBe(200);expect(sdk.headers()['access-control-allow-origin']).toBe('*');expect(await sdk.text()).toContain('createGuildTool');
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:testInfo.outputPath('tool-mobile.png'),fullPage:true});
  const before=page.url();await frame!.evaluate(()=>parent.postMessage({version:'freedom.guild-launchpad/v2',type:'request',operation:'navigate',payload:{action:'https://evil.example'},nonce:crypto.randomUUID(),tool_id:'forged',guild_key:'guild_ar',request_id:'evil'},'*'));expect(page.url()).toBe(before);
- await page.reload();await f.getByRole('button',{name:'讀檔',exact:true}).click();await expect(f.locator('output')).toContainText('preserved');
+ await page.reload();await expect(f.locator('output')).toContainText('signed_in');await f.getByRole('button',{name:'讀檔',exact:true}).click();await expect(f.locator('output')).toContainText('preserved');
  await f.getByRole('button',{name:'返回',exact:true}).click();await expect(page).toHaveURL(/#guilds\/guild_games\/tools$/);await page.goto(before);await page.getByRole('button',{name:'停用工具',exact:true}).click();await expect(page.locator('iframe[title="獨立工具"]')).toHaveCount(0);await expect(page.getByText('工具已停用或等待會長確認。',{exact:true})).toBeVisible();
 });
 test('origin profile proves the root, preserves own storage and exchanges through exact-origin SDK',async({page,e2eAuthPool})=>{
