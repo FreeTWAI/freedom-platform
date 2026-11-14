@@ -97,7 +97,7 @@ export async function mountSharingFixture(page:Page, kind='probe') {
           {${JSON.stringify(kind)}==='identity'?<ErrorIdentityProbe/>:${JSON.stringify(kind)}==='probe'?<Probe/>:${JSON.stringify(kind)}==='skill'?<SkillSubmission client={client} userId={user} onPublished={async()=>{}}/>:
           ${JSON.stringify(kind)}==='resume'?<SkillSubmission client={client} userId={user} resumeId={resumeId} onPublished={async()=>{}}/>:
           ${JSON.stringify(kind)}==='content'?<LanguageProvider><Navigation current="profile" currentHash={contentHash} onSelect={selectContent} canManageGuild={false} guildLaunchpadEnabled={false} communitySearchEnabled={false} personalContentEnabled={enabled} mobileOpen/><PlaceView defaultTab="profile" context={{client,session,locationHash:contentHash,site:{personal_content_enabled:enabled},selectTab:selectContent}} render={tab=>tab==='my-content'?<MyContent/>:<PersonalSpace client={client} session={session} contentEnabled={enabled}/>}/><ShareLauncher onChoose={()=>{}}/></LanguageProvider>:
-          ${JSON.stringify(kind)}==='relations'?<CommunitySearch client={client} authKey={user+':'+client.sessionGeneration} relationsEnabled={enabled}/>:
+          ${JSON.stringify(kind)}==='relations'?<LanguageProvider><React.Suspense fallback={null}><PlaceView defaultTab="profile" context={{client,session,locationHash:contentHash,site:{community_relations_enabled:enabled},selectTab:selectContent}} render={()=>null}/></React.Suspense><CommunitySearch client={client} authKey={user+':'+client.sessionGeneration} relationsEnabled={enabled}/></LanguageProvider>:
           ${JSON.stringify(kind)}==='cooperation'?<CoCreationPanel client={client} session={session}/>:
           ${JSON.stringify(kind)}==='showcase'?<ShowcasePanel/>:
           ${JSON.stringify(kind)}==='blocking'?<MemberBlockingAction client={client} userId={other} nickname="Synthetic peer" onChanged={()=>{}}/>:
@@ -408,9 +408,14 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await fixture(page,f=>f.reject(0));await expect(page.getByRole('heading',{name:'Local resumed edit'})).toBeVisible();
   },
   'community relations flag restores private controls only for enabled member':async page=>{
-    // UX-M-04: bookmarks and follows sit behind the closed 篩選 in 探索.
-    await mountSharingFixture(page,'relations');await page.locator('details.explore-filters > summary').click();await expect(page.getByRole('heading',{name:'我的書籤與追蹤'})).toBeVisible();
-    await fixture(page,f=>f.enabled(false));await expect(page.getByRole('heading',{name:'我的書籤與追蹤'})).toHaveCount(0);
+    await mountSharingFixture(page,'relations');
+    await page.locator('details.explore-filters > summary').click();
+    await expect(page.locator('details.explore-filters').getByRole('region',{name:'我的私人書籤與追蹤',exact:true})).toHaveCount(0);
+    await page.getByLabel('我的檢視',{exact:true}).selectOption('#me/saved');
+    await expect(page.getByRole('region',{name:'我的私人書籤與追蹤',exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'我的書籤與追蹤',exact:true})).toBeVisible();
+    await fixture(page,f=>f.enabled(false));
+    await expect(page.getByRole('heading',{name:'我的書籤與追蹤',exact:true})).toHaveCount(0);
   },
   'stable mutation error setter does not loop a dependent Guilds-style load effect':async page=>{
     await mountSharingFixture(page,'identity');await expect(page.getByLabel('Load cycles')).toHaveText('1');
