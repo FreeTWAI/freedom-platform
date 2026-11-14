@@ -219,7 +219,8 @@ test('forked Node read helper completes a real HTTP pairing and reads scoped Pos
      seen.push(new URL(String(input)).pathname);return fetch(input,init);
    };
    const pairing=await startPairing({origin:liveOrigin,kind:'storefront',clientName:'真正 HTTP Fork 客戶端',fetcher});
-   assert.equal(pairing.verification_uri,liveOrigin+'/#automation/connections');
+   // Deployed consumer libraries accept only /#account (tests/integration/consumer-libraries.test.ts).
+   assert.equal(pairing.verification_uri,liveOrigin+'/#account');
    const approval=await fetch(liveOrigin+'/api/v1/client-connections/'+pairing.user_code+'/approve',{method:'POST',headers:{Origin:liveOrigin,'Content-Type':'application/json',Cookie:member.cookie,'X-CSRF-Token':member.csrf,'Idempotency-Key':randomUUID()},body:JSON.stringify({confirmed:true,store_id:ownStore.store_id})});
    assert.equal(approval.status,200);
    const issued=await pollPairing({origin:liveOrigin,deviceSecret:pairing.device_secret,fetcher});assert.equal(issued.status,'authorized');

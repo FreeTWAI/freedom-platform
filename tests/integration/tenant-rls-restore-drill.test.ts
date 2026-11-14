@@ -926,7 +926,13 @@ test('J6-R3 sealed quarantine restore preserves tenant references, validated FKs
   for(const object of galleryObjects.get(spaces.c.tenantId)!)assert.equal(await restoredObjects.head(object.key),null);
   const restoredKeys = await foreignKeys(restoredPool);
   assert(restoredKeys.length > 0); assert.deepEqual(restoredKeys, await foreignKeys(owner));
-  for (const key of restoredKeys) assert.equal(key.convalidated, true);
+  // Migration 204 adds these foreign keys NOT VALID on purpose: their columns are new and NULL on
+  // old rows, and validating them would scan live tables while the deploy transaction holds its
+  // locks (tests/runtime/event-manage.test.ts pins that). Every other foreign key must be validated.
+  const deferredValidation = new Set(['skill_star_support_via_share_id_fkey', 'skill_star_support_via_user_id_fkey',
+    'guild_skill_book_bindings_share_id_fkey', 'member_skill_book_grants_share_id_fkey', 'oss_projects_share_id_fkey',
+    'skill_submissions_share_id_fkey']);
+  for (const key of restoredKeys) assert.equal(key.convalidated, !deferredValidation.has(key.conname), key.conname);
   for (const space of [spaces.a, spaces.b]) {
     const object = space.object!;
     const chain = (await restoredPool.query(`SELECT r.result_id,t.result_id target_result,t.asset_id target_asset,w.work_item_id,
