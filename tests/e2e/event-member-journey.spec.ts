@@ -235,7 +235,7 @@ test('member previews an event, an authorized officer approves it, and participa
   await page.reload();await page.getByRole('button',{name:'取消報名',exact:true}).click();await expect(page.getByRole('button',{name:'我要參加',exact:true})).toBeVisible();
   await logout(page);await login(page);await navigate(page,'我的內容');
   const own=page.getByRole('article').filter({has:page.getByRole('heading',{name:title,exact:true})});
-  await own.getByRole('link',{name:'查看',exact:true}).click();await openEventManagement(page);await expect(page.getByRole('region',{name:'管理活動',exact:true})).toBeVisible();
+  await own.getByRole('link',{name:'開啟原始內容',exact:true}).click();await openEventManagement(page);await expect(page.getByRole('region',{name:'管理活動',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'報名名單',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('dialog').getByRole('button',{name:'關閉',exact:true}).click();
   await page.getByRole('button',{name:'取消活動',exact:true}).click();await page.getByRole('button',{name:'確認取消活動',exact:true}).click();await expect(page.getByRole('region',{name:'管理活動',exact:true})).toContainText('已取消');
 });
@@ -264,7 +264,7 @@ for(const width of [1440,390])test(`unsaved event input survives rejected naviga
   await expect(form.getByRole('textbox',{name:'活動說明',exact:true})).toHaveValue('切換頁面、返回與關閉編輯都不能默默丟掉這段文字。');
   expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(true);
   await page.screenshot({path:info.outputPath(`event-draft-retained-${width}.png`),fullPage:true});
-  discard=true;await navigate(page,'我的內容');await expect(page).toHaveURL(/#me\/content$/);
+  discard=true;await navigate(page,'我的內容');await expect(page).toHaveURL(/#me$/);
   await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);
   await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('');expect(writes).toBe(0);
 });
@@ -284,7 +284,7 @@ test('event submission blocks departure while pending and saved edits require ex
   await expect(page.getByText('活動已發布。',{exact:true})).toBeVisible();expect(writes).toBe(1);
   const createdEvent=await(await createdResponse).json();
   await seedLegacyEventDraft(e2eAuthPool,createdEvent.event_id);
-  await navigate(page,'我的內容');await expect(page).toHaveURL(/#me\/content$/);await navigate(page,'社群活動');
+  await navigate(page,'我的內容');await expect(page).toHaveURL(/#me$/);await navigate(page,'社群活動');
   const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await card.getByRole('link',{name:'管理活動',exact:true}).click();
   await card.getByRole('button',{name:'編輯活動',exact:true}).click();
@@ -332,7 +332,7 @@ for(const width of [1440,390])test(`an unknown event submission survives a later
   await expect(form.getByLabel('開始時間',{exact:true})).toBeDisabled();await expect(form.locator('input[type="file"]')).toHaveCount(2);
   for(const input of await form.locator('input[type="file"]').all())await expect(input).toBeDisabled();
   await other.getByRole('link',{name:'管理活動',exact:true}).click();await expect(form).toBeVisible();await expect(page).toHaveURL(/#explore\/events$/);
-  await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);await expect(titleInput).toHaveValue(title);expect(attempts).toHaveLength(1);
+  await expect(page.getByRole('button',{name:'辦活動',exact:true})).toHaveCount(0);await openEventOptions(page);await expect(titleInput).toHaveValue(title);expect(attempts).toHaveLength(1);
   let prompts=0;page.on('dialog',async dialog=>{prompts++;await dialog.accept();});
   await navigate(page,'我的內容');await expect(page).toHaveURL(/#explore\/events$/);expect(prompts).toBe(0);
   await expect(page.getByRole('status').filter({hasText:'尚未確認原操作的結果'})).toBeVisible();
@@ -351,7 +351,7 @@ for(const width of [1440,390])test(`an unknown event submission survives a later
     await page.getByRole('button',{name:'辦活動',exact:true}).click();await openEventOptions(page);await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('');
     await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toHaveCount(0);
     expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(false);
-    await navigate(page,'我的內容');await expect(page).toHaveURL(/#me\/content$/);expect(prompts).toBe(0);
+    await navigate(page,'我的內容');await expect(page).toHaveURL(/#me$/);expect(prompts).toBe(0);
     await info.attach('ack-lost-original-command',{body:JSON.stringify({width,attempts,title,durable_count:1,departed_while_get200_held:true}),contentType:'application/json'});
     await page.screenshot({path:info.outputPath(`event-retry-left-${width}.png`),fullPage:true});
   }finally{releaseRefresh();}
@@ -549,7 +549,7 @@ for(const kind of ['banner','video'] as const)for(const ack of ['lost','malforme
     expect(durable).toEqual([{command:'save_banner',n:1},{command:'save_video',n:1}]);
     expect(Number((await e2eAuthPool.query('SELECT aggregate_version FROM community_events WHERE event_id=$1',[id])).rows[0].aggregate_version)).toBe(4);
     // Confirmed recovery also releases departure without waiting for a list refresh.
-    await navigate(page,'我的內容');await expect(page).toHaveURL(/#me\/content$/);
+    await navigate(page,'我的內容');await expect(page).toHaveURL(/#me$/);
     await info.attach('media-reconciliation',{body:JSON.stringify({kind,ack,reads,updates,commands,durable}),contentType:'application/json'});
   }finally{release();releaseList();}
 });

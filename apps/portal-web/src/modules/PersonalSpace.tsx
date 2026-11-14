@@ -5,7 +5,7 @@ import {requireItems,type PortalClient} from '../api';
 import type {SessionPayload} from '../types';
 import type {MemberCardData} from './Membership';
 import {MemberAvatar} from './MemberAvatar';
-import {personalContentActionPath,type PersonalContentItem} from './MyContent';
+import {ContentItemActions,personalContentActionPath,type PersonalContentItem} from './MyContent';
 import {PERSONAL_SPACE_PAGE_SIZE,personalSpaceGuilds,isPersonalSpaceScope,personalPostPath,createPersonalPostPageReader,type PersonalPostResult} from './personal-space-model';
 import './PersonalSpace.css';
 
@@ -16,10 +16,11 @@ const states:Record<string,InterfaceMessage>={draft:'space.state.draft',active:'
 const audiences:Record<string,InterfaceMessage>={private:'space.audience.private',community:'space.audience.community',public:'space.audience.public',workshop:'space.audience.workshop',guild:'space.audience.guild',open:'space.audience.open',referral:'space.audience.referral'};
 
 /** Signed-in owner's space, not a share capability or an author-directory endpoint. */
-export function PersonalSpace({client,session,contentEnabled,recognitionEnabled=false}:{client:PortalClient;session:SessionPayload;contentEnabled:boolean;recognitionEnabled?:boolean}){
+export function PersonalSpace({client,session,contentEnabled}:{client:PortalClient;session:SessionPayload;contentEnabled:boolean}){
   const {t}=useLanguage();
   const owner=session.user.user_id,generation=client.sessionGeneration;
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[revision,setRevision]=useState(0),[loading,setLoading]=useState(true);
+  const [status,setStatus]=useState('all');
   const [filter,setFilter]=useState<keyof typeof kinds>('all'),[page,setPage]=useState(0);
   useEffect(()=>{
     let live=true;const abort=new AbortController(),started=client.sessionGeneration;
@@ -41,7 +42,7 @@ export function PersonalSpace({client,session,contentEnabled,recognitionEnabled=
     return()=>{window.removeEventListener('focus',refresh);window.removeEventListener('freedom-profile-updated',refresh);document.removeEventListener('visibilitychange',visibility);};
   },[]);
   const current=isPersonalSpaceScope(snapshot,client,owner)?snapshot:null;
-  const filtered=useMemo(()=>current?.items.filter(item=>filter==='all'||item.kind===filter)??[],[current,filter]);
+  const filtered=useMemo(()=>current?.items.filter(item=>(filter==='all'||item.kind===filter)&&(status==='all'||(status==='published'?['published','active']:['draft','awaiting_upload','ready_for_review','pending','rejected']).includes(item.status)))??[],[current,filter,status]);
   const maxPage=Math.max(0,Math.ceil(filtered.length/PERSONAL_SPACE_PAGE_SIZE)-1),selectedPage=Math.min(page,maxPage);
   const shown=useMemo(()=>filtered.slice(selectedPage*PERSONAL_SPACE_PAGE_SIZE,(selectedPage+1)*PERSONAL_SPACE_PAGE_SIZE),[filtered,selectedPage]);
   const retry=()=>{setSnapshot(null);setRevision(value=>value+1);};
@@ -50,12 +51,11 @@ export function PersonalSpace({client,session,contentEnabled,recognitionEnabled=
       {current?.hero ? <>
         <MemberAvatar nickname={current.hero.nickname} avatarUrl={current.hero.avatar_url}/>
         <div className="personal-space-identity">
-          <p className="hint">{t('space.ownerOnly')}</p>
           <h2>{current.hero.nickname}</h2>
           {current.hero.positioning_title&&<p>{current.hero.positioning_title}</p>}
         </div>
       </> : <div className="personal-space-identity"><h2>{t('nav.profile')}</h2><p role="status">{current?.profileError?t('space.profileError'):t('space.profileLoading')}</p></div>}
-      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#account">{t('space.edit')}</a><a className="btn btn-secondary btn-small" href="#profile?view=settings">佈置主頁</a>{recognitionEnabled&&<a className="btn btn-secondary btn-small" href="#account?view=recognition">我的稱號與認證</a>}</div>
+      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#me/settings">編輯個人頁</a></div>
       {!!current?.hero?.guilds.length&&<details className="personal-space-memberships">
         <summary>{t('space.guilds')} <span>({current.hero.guilds.length})</span></summary>
         <ul className="personal-space-guilds" aria-label={t('space.guilds')}>{current.hero.guilds.map(guild=><li key={guild.guild_key}>{guild.name}</li>)}</ul>
@@ -64,19 +64,19 @@ export function PersonalSpace({client,session,contentEnabled,recognitionEnabled=
     <p className="hint personal-space-private">{t('space.privacy')}</p>
 
     <section className="personal-space-content stack" aria-label={t('space.content')}>
-      <div className="section-head"><h2>{t('nav.my-content')}</h2><div className="actions">{contentEnabled&&<a href="#my-content" className="btn btn-secondary btn-small">{t('space.manage')}</a>}<button className="btn btn-secondary btn-small" type="button" onClick={retry}>{t('space.refresh')}</button></div></div>
+      <div className="section-head"><h2>我的內容</h2>{contentEnabled&&<a href="#me/content/showcases/new" className="btn btn-secondary btn-small">新增作品草稿</a>}</div>
       {!contentEnabled?<p className="empty">{t('space.disabled')}</p>:<>
-        <div className="personal-space-filters" role="group" aria-label={t('space.filters')}>{Object.entries(kinds).map(([id,label])=><button key={id} type="button" className="btn btn-secondary btn-small" aria-pressed={filter===id} onClick={()=>{setFilter(id as keyof typeof kinds);setPage(0);}}>{t(label)}</button>)}</div>
+        <div className="personal-space-filters"><div role="group" aria-label="內容狀態">{[['all','全部'],['draft','草稿'],['published','已發布']].map(([id,label])=><button key={id} type="button" className="btn btn-secondary btn-small" aria-pressed={status===id} onClick={()=>{setStatus(id);setPage(0);}}>{label}</button>)}</div><select aria-label="內容類型" value={filter} onChange={event=>{setFilter(event.target.value as keyof typeof kinds);setPage(0);}}>{Object.entries(kinds).map(([id,label])=><option key={id} value={id}>{id==='all'?'全部類型':t(label)}</option>)}</select></div>
         {(loading||!current)&&<p role="status">{t('space.loading')}</p>}
-        {current?.contentError&&<div className="banner banner-error" role="alert">{t('space.error')}</div>}
-        {current&&!current.contentError&&filtered.length===0&&<div className="card stack"><h3>{t('space.empty',{kind:t(filter==='all'?'space.emptyAll':kinds[filter])})}</h3><p>{t('space.emptyHint')}</p><div className="actions"><a className="btn btn-secondary btn-small" href="#social">{t('space.post')}</a><a className="btn btn-secondary btn-small" href="#my-content">{t('space.organize')}</a></div></div>}
-        {current&&!current.contentError&&<PersonalContentPage key={`${owner}:${generation}:${revision}:${filter}:${selectedPage}`} client={client} owner={owner} items={shown}/>}
+        {current?.contentError&&<div className="banner banner-error" role="alert">{t('space.error')}<button type="button" className="btn btn-secondary btn-small" onClick={retry}>重新載入</button></div>}
+        {current&&!current.contentError&&filtered.length===0&&<div className="card stack"><h3>{t('space.empty',{kind:t(filter==='all'?'space.emptyAll':kinds[filter])})}</h3><p>{t('space.emptyHint')}</p><div className="actions"><a className="btn btn-secondary btn-small" href="#social">{t('space.post')}</a></div></div>}
+        {current&&!current.contentError&&<PersonalContentPage key={`${owner}:${generation}:${revision}:${filter}:${status}:${selectedPage}`} client={client} owner={owner} items={shown} onChanged={retry}/>}
         {current&&!current.contentError&&filtered.length>PERSONAL_SPACE_PAGE_SIZE&&<nav className="actions personal-space-pagination" aria-label={t('space.pagination')}><button className="btn btn-secondary" disabled={selectedPage===0} onClick={()=>setPage(selectedPage-1)}>{t('space.previous')}</button><span aria-live="polite">{t('space.page',{page:selectedPage+1,total:maxPage+1})}</span><button className="btn btn-secondary" disabled={selectedPage>=maxPage} onClick={()=>setPage(selectedPage+1)}>{t('space.next')}</button></nav>}
       </>}
     </section>
   </div>;
 }
-function PersonalContentPage({client,owner,items}:{client:PortalClient;owner:string;items:PersonalContentItem[]}){
+function PersonalContentPage({client,owner,items,onChanged}:{client:PortalClient;owner:string;items:PersonalContentItem[];onChanged:()=>void}){
   const {t,language}=useLanguage();
   const [previews,setPreviews]=useState<Record<string,PersonalPostResult>>({});
   const reader=useRef<ReturnType<typeof createPersonalPostPageReader>|null>(null);
@@ -117,6 +117,7 @@ function PersonalContentPage({client,owner,items}:{client:PortalClient;owner:str
       {social&&result?.state==='error'&&<p role="status">{t('space.postError')}</p>}
       {social&&(result?.state==='retrying'||(result?.state==='error'&&result.retryable))&&<button type="button" className="btn btn-secondary btn-small" disabled={result.state==='retrying'} aria-busy={result.state==='retrying'} onClick={event=>{if(document.activeElement===event.currentTarget)retryFocus.current={id:item.id,button:event.currentTarget};void reader.current?.retry(item.id);}}>{t('feedback.retry')}</button>}
       {path&&<a className="btn btn-secondary btn-small personal-space-source" href={path}>{social?t('space.openPost'):t('space.openSource')}</a>}
+      <ContentItemActions item={item} omit={path?(social?'view':action):undefined} onChanged={onChanged}/>
     </article>;
   })}</div>;
 }

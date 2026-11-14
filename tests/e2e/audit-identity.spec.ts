@@ -214,7 +214,7 @@ test('a failed member card load keeps quick links, claims nothing and recovers i
   await page.route('**/api/v1/assessment-definition', route => route.fulfill({ status: 503, body: '' }));
   await page.reload();
   const summary = page.getByRole('region', { name: '我的會員摘要', exact: true, includeHidden: true });
-  const guide = page.locator('.home-guide-disclosure');
+  const guide = page.locator('.home-personal');
   await expect(guide).toHaveJSProperty('open', false);
   const alert = page.getByRole('alert');
   await expect(alert).toBeVisible();
@@ -227,9 +227,9 @@ test('a failed member card load keeps quick links, claims nothing and recovers i
   await expect(page.locator('.member-featured')).toHaveCount(0);
   await openHomeGuide(page);
   const shortcuts = page.getByRole('navigation', { name: '常用入口', exact: true });
-  // The feed is already on the home page; only chat and people need shortcuts.
-  await expect(shortcuts.getByRole('button')).toHaveCount(2);
-  for (const name of ['開始聊天', '找夥伴']) await expect(shortcuts.getByRole('button', {name, exact: true})).toBeVisible();
+  // Home keeps its feed and recovery controls; navigation belongs to the place menu.
+  await expect(shortcuts).toHaveCount(0);
+  await expect(page.getByRole('link',{name:'編輯個人頁',exact:true})).toBeVisible();
   await expect(page.getByRole('region', {name: '首頁社群動態', exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: '建立貼文', exact: true})).toBeVisible();
   await pageFits(page, 'phone home error');

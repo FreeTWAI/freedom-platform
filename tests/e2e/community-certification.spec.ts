@@ -99,13 +99,13 @@ test('a delayed site flag reveals and focuses recognition in the existing accoun
  }finally{release();}
 });
 
-for(const width of [320,390])test(`private space keeps all three explicit profile entries reachable at ${width}px`,async({page})=>{
+for(const width of [320,390])test(`private space keeps one editor and recognition reachable at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:844});await enable(page);let writes=0;
  await page.route('**/api/v1/me/community-certification**',route=>{if(route.request().method()!=='GET')writes++;return route.fulfill({json:initial});});await login(page);
  await page.goto('/#profile');const actions=page.locator('.personal-space-hero-actions');
- for(const [name,href] of [['編輯資料與分享設定','#account'],['佈置主頁','#profile?view=settings'],['我的稱號與認證','#account?view=recognition']]){
+ for(const [name,href] of [['編輯個人頁','#me/settings']]){
   const link=actions.getByRole('link',{name,exact:true});await expect(link).toBeVisible();await expect(link).toHaveAttribute('href',href);const box=(await link.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
  }
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await actions.getByRole('link',{name:'我的稱號與認證',exact:true}).click();await expect(page.locator('[data-profile-recognition]')).toHaveAttribute('open','');expect(writes).toBe(0);
+ await actions.getByRole('link',{name:'編輯個人頁',exact:true}).click();await page.locator('[data-profile-recognition] summary').click();await expect(page.locator('[data-profile-recognition]')).toHaveAttribute('open','');expect(writes).toBe(0);
 });

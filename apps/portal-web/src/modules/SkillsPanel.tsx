@@ -56,7 +56,7 @@ export function SkillsPanel({ client, onNavigate, onManageGitHub }: ModulePanelP
 
     <div className="skill-library-welcome">
       <div><p className="eyebrow">從一個想做的事開始</p><p className="skill-library-lead">找到工具，讀懂做法，動手試試。</p><p className="muted">技能書是開源工具與實作指南。先看用途與準備事項，再依步驟練習；不需要先懂 GitHub。</p></div>
-      <div className="actions skill-library-jumps"><a className="btn btn-primary" href={`#${communityHeading}`} onClick={event=>{event.preventDefault();document.getElementById(communityHeading)?.scrollIntoView({block:'start'});document.getElementById(communityHeading)?.focus();}}>探索社群技能書 ↓</a><a className="btn btn-ghost" href={`#${guildHeading}`} onClick={event=>{event.preventDefault();document.getElementById(guildHeading)?.scrollIntoView({block:'start'});document.getElementById(guildHeading)?.focus();}}>查看公會技能書 ↓</a></div>
+      <div className="actions skill-library-jumps"><a className="btn btn-ghost" href={`#${communityHeading}`} onClick={event=>{event.preventDefault();document.getElementById(communityHeading)?.scrollIntoView({block:'start'});document.getElementById(communityHeading)?.focus();}}>探索社群技能書 ↓</a><a className="btn btn-ghost" href={`#${guildHeading}`} onClick={event=>{event.preventDefault();document.getElementById(guildHeading)?.scrollIntoView({block:'start'});document.getElementById(guildHeading)?.focus();}}>查看公會技能書 ↓</a></div>
     </div>
     <div className="skill-shelves">
       <section className="skill-shelf" aria-labelledby={communityHeading}>
@@ -136,5 +136,5 @@ function SkillDraftCallout({ client, revision, onOpen }: { client: ModulePanelPr
       setError(cause instanceof Error ? cause.message : '升級沒有完成。');
     } finally { setBusy(false); }
   }
-  return <div className="banner banner-info skill-draft-callout" role="status"><p>{view.text}</p><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void open()}>{view.label}</button>{error && <p role="alert" className="banner banner-error">{error}</p>}</div>;
+  return <div className="banner banner-info skill-draft-callout" role="status"><p>{view.text}</p><button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void open()}>{view.label}</button>{error && <p role="alert" className="banner banner-error">{error}</p>}</div>;
 }

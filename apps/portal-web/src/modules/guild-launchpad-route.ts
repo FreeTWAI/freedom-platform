@@ -1,3 +1,4 @@
+export const TOOL_ONLY_GUILDS = ['guild_games','guild_ar'] as const;
 const GUILD_KEY_PATTERN = /^(guild_[a-z0-9_]+|guild_custom_[0-9A-Fa-f]{32})$/;
 
 export function guildKeyFromHash(hash = typeof window === 'undefined' ? '' : window.location.hash): string | null {

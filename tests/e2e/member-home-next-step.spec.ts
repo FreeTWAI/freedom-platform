@@ -47,7 +47,6 @@ async function login(page: Page, expand = true, email = 'maker@local.test') {
   if (expand) {
     await openParticipation(page);
     await openHomeGuide(page);
-    await page.locator('.home-personal > summary').click();
   }
 }
 
@@ -69,23 +68,19 @@ for (const [width,height] of [[1440,1000],[320,844],[360,780],[375,667],[390,844
     const sessionRequest = page.waitForRequest(request => new URL(request.url()).pathname === '/api/v1/session');
     expect(await page.evaluate(async () => (await fetch('/api/v1/session')).status)).toBe(200);
     expect((await (await sessionRequest).allHeaders()).cookie).toMatch(/(?:^|;\s*)freedom_local_session=/);
-    // Both destinations must be reachable before opening the optional workshop.
-    if (width <= 860) await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open', false);
-    const discovery = page.getByRole('navigation', {name: '共創誌與遊戲', exact: true});
+    // Home keeps the journal; the guild place owns the arcade entry.
+    await expect(page.locator('.home-personal')).toHaveJSProperty('open', false);
+    const discovery = page.getByRole('navigation', {name: '共創誌', exact: true});
     await expect(discovery).toBeVisible();
-    const arcade = discovery.getByRole('link', {name: '遊戲大廳', exact: true});
-    await expect(arcade).toBeVisible();
-    await expect(arcade).toHaveAttribute('href', '#guilds/guild_games/tools/arcade');
-    await expect(arcade).not.toHaveAttribute('target', '_blank');
-    expect((await arcade.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    await expect(page.getByRole('link', {name: '遊戲大廳', exact: true})).toHaveCount(1);
+    await expect(page.getByRole('link', {name: '遊戲大廳', exact: true})).toHaveCount(0);
     const entry = page.getByRole('region', {name: '共創日誌', exact: true});
     await expect(entry).toBeVisible();
     await expect(discovery).toBeInViewport();
-    // The same three-game lobby now opens inside its guild, retaining this tab.
     const pagesBeforeArcade = context.pages().length;
-    await arcade.focus();
-    await page.keyboard.press('Enter');
+    await navigate(page,'職業公會');
+    const tools=page.getByRole('combobox',{name:'公會工具',exact:true});
+    expect((await tools.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await tools.selectOption('guild_games');
     await expect(page).toHaveURL(new URL('/#guilds/guild_games/tools/arcade', page.url()).href);
     expect(context.pages()).toHaveLength(pagesBeforeArcade);
     for (const title of ['這張能交嗎？', '蓋完就下班', '這疊有一百萬？']) {
@@ -330,7 +325,7 @@ test('home does not guess a next action while the member read waits or fails and
   await expect(summary).toHaveAttribute('aria-busy', 'true');
   await expect(summary).toContainText('正在載入名片');
   await expect(suggestion(page)).toHaveCount(0);
-  await expect(page.getByRole('navigation', { name: '常用入口', exact: true }).getByRole('button')).toHaveCount(2);
+  await expect(page.getByRole('navigation', { name: '常用入口', exact: true }).getByRole('button')).toHaveCount(0);
   mode = 'fail'; release();
   const alert = page.getByRole('alert').filter({ hasText: '名片暫時無法載入' });
   await expect(alert).toBeVisible();
@@ -482,7 +477,7 @@ for (const width of [320, 390]) test(`phone ${width}px keeps the composer in vie
   // Other journeys retain this shared member's cooperation records; this layout case owns its empty-history read.
   await stubJson(page, '/api/v1/engagements', { items: [] });
   await login(page, false);
-  await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open', false);
+  await expect(page.locator('.home-personal')).toHaveJSProperty('open', false);
   const disclosure = page.locator('.home-participation-disclosure');
   const toggle = disclosure.locator('summary');
   await expect(disclosure).toHaveJSProperty('open', false);
@@ -505,25 +500,19 @@ for (const width of [320, 390]) test(`phone ${width}px keeps the composer in vie
   await expect(disclosure).toHaveJSProperty('open', true);
   await expect(toggle).toBeFocused();
   const entries = page.getByRole('navigation', { name: '參與自由工坊', exact: true });
-  await expect(entries).toBeVisible();
-  await expect(entries.getByRole('button')).toHaveCount(4);
-  await expect(entries.getByRole('button')).toHaveText(['技能與工具找一本技能書，開始練習', '社群活動看看聚會，一起交流', '合作夥伴認識不同專長的人', '作品交流分享作品、提出需求']);
+  await expect(entries).toHaveCount(0);
   await expect(suggestion(page).getByRole('button', { name: '回到任務協作', exact: true })).toBeVisible();
-  const progress = page.getByRole('region', { name: '我的合作與內容', exact: true });
-  await expect(progress).toContainText('有合作等你接續處理');
-  await expect(progress.getByRole('button', { name: '接續我的內容', exact: true })).toBeVisible();
-  const entryBox = await entries.boundingBox(), feedBox = await page.locator('.home-timeline').boundingBox();
-  expect(entryBox!.y + entryBox!.height).toBeLessThan(feedBox!.y);
+  await expect(page.getByRole('region', { name: '我的合作與內容', exact: true })).toHaveCount(0);
+  const feedBox = await page.locator('.home-timeline').boundingBox();
   const nextBox = await suggestion(page).boundingBox();
   expect(nextBox!.y + nextBox!.height).toBeLessThan(feedBox!.y);
-  await entries.getByRole('button', { name: '技能與工具', exact: true }).focus();
-  await page.keyboard.press('Enter');
+  await suggestion(page).getByRole('button',{name:'前往技能書架',exact:true}).click();
   await expect(page).toHaveURL(/#explore\/resources$/);
   await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   await page.goBack();
   await expect(disclosure).toHaveJSProperty('open', false);
   await openParticipation(page);
-  await expect(entries).toBeVisible();
+  await expect(entries).toHaveCount(0);
   await toggle.focus();
   await page.keyboard.press('Space');
   await expect(disclosure).toHaveJSProperty('open', false);
@@ -532,120 +521,25 @@ for (const width of [320, 390]) test(`phone ${width}px keeps the composer in vie
   await page.evaluate(() => scrollTo(0, 0));
   await expect(composer).toBeInViewport();
   await openParticipation(page);
-  await progress.getByRole('button', { name: '查看合作紀錄', exact: true }).click();
+  await navigate(page,'合作紀錄');
   await expect(page).toHaveURL(/#guilds\/guild_opportunity_partnership\/tools\/engagement$/);
   await expect(page.getByText('還沒有合作紀錄', { exact: true })).toBeVisible();
 });
 
-test('cooperation summary distinguishes a failed read from empty data and retries once without commands', async ({ page }) => {
-  let mode: 'fail' | 'malformed' | 'hold' | 'ready' = 'fail', calls = 0, release!: () => void;
-  const held = new Promise<void>(resolve => { release = resolve; });
-  const commands: string[] = [];
-  page.on('request', request => { if (request.method() !== 'GET' && new URL(request.url()).pathname.startsWith('/api/v1/engagements')) commands.push(request.url()); });
-  await page.route(url => url.pathname === '/api/v1/engagements/summary', async route => {
-    calls++;
-    if (mode === 'fail') return route.fulfill({ status: 503, json: { title: '暫時無法讀取' } });
-    if (mode === 'malformed') return route.fulfill({ json: { has_engagements: false, needs_response: true } });
-    if (mode === 'hold') await held;
-    return route.fulfill({ json: { has_engagements: true, needs_response: false } });
-  });
-  await login(page, false);
-  const disclosure = page.locator('.home-participation-disclosure');
-  await expect(disclosure).toHaveJSProperty('open', false);
-  // The normal visible home feed settles without starting this hidden read.
-  await expect(page.locator('.home-timeline .social-zone')).toHaveAttribute('aria-busy', 'false');
-  expect(calls).toBe(0);
-  await openParticipation(page);
-  const progress = page.getByRole('region', { name: '我的合作與內容', exact: true });
-  await expect(progress).toContainText('合作進度暫時無法載入');
-  await expect(progress).not.toContainText('還沒有合作紀錄');
-  await expect(progress.getByRole('button', { name: '查看合作紀錄', exact: true })).toBeEnabled();
-  expect(calls).toBe(1);
-  const toggle = disclosure.locator(':scope > summary');
-  await toggle.click();
-  await expect(disclosure).toHaveJSProperty('open', false);
-  await openParticipation(page);
-  await expect(progress).toContainText('合作進度暫時無法載入');
-  expect(calls).toBe(1); // Reopening retains the failed attempt and explicit retry.
-  mode = 'malformed';
-  await progress.getByRole('button', { name: '重試合作進度', exact: true }).click();
-  await expect.poll(() => calls).toBe(2);
-  await expect(progress.getByRole('button', { name: '重試合作進度', exact: true })).toBeVisible();
-  mode = 'hold';
-  await progress.getByRole('button', { name: '重試合作進度', exact: true }).click();
-  const updating = progress.getByRole('button', { name: '正在更新…', exact: true });
-  await expect(updating).toHaveAttribute('aria-disabled', 'true');
-  await expect.poll(() => calls).toBe(3);
-  await toggle.click();
-  await expect(disclosure).toHaveJSProperty('open', false);
-  await openParticipation(page);
-  await expect(updating).toHaveAttribute('aria-disabled', 'true');
-  expect(calls).toBe(3); // A pending read is neither restarted nor duplicated.
-  await updating.focus();
-  await page.keyboard.press('Enter');
-  expect(calls).toBe(3);
-  await expect(page.getByRole('navigation', { name: '參與自由工坊', exact: true })).toBeVisible();
-  mode = 'ready'; release();
-  await expect(progress).toContainText('合作紀錄已更新');
-  await expect(progress.getByRole('button', { name: '更新合作進度', exact: true })).toBeFocused();
-  expect(commands).toEqual([]);
-});
-
-test('leaving home cancels its late summary and returning reads current facts with disabled content hidden', async ({ page }) => {
-  let calls = 0, release!: () => void;
-  const held = new Promise<void>(resolve => { release = resolve; });
-  await page.route(url => url.pathname === '/api/v1/site', async route => {
-    const response = await route.fetch();
-    await route.fulfill({ response, json: { ...await response.json(), personal_content_enabled: false } });
-  });
-  await page.route(url => url.pathname === '/api/v1/engagements/summary', async route => {
-    calls++;
-    if (calls === 1) { await held; await route.fulfill({ json: { has_engagements: true, needs_response: true } }).catch(() => {}); }
-    else await route.fulfill({ json: { has_engagements: false, needs_response: false } });
-  });
-  try {
-    await login(page, false);
-    await openParticipation(page);
-    const progress = page.getByRole('region', { name: '我的合作與內容', exact: true });
-    await expect(progress).toContainText('正在讀取合作進度');
-    await expect(progress.getByRole('button', { name: '接續我的內容', exact: true })).toHaveCount(0);
-    await page.getByRole('navigation', { name: '參與自由工坊', exact: true }).getByRole('button', { name: '合作夥伴', exact: true }).click();
-    await expect(page).toHaveURL(/#explore\/people$/);
-    await page.goBack();
-    await openParticipation(page);
-    await expect(progress).toContainText('還沒有合作紀錄');
-    release();
-    await expect(progress).not.toContainText('有合作等你接續處理');
-    expect(calls).toBe(2);
-  } finally { release(); }
-});
-
-test('switching accounts cannot apply the prior account cooperation response', async ({ page }) => {
-  let calls = 0, release!: () => void;
-  const held = new Promise<void>(resolve => { release = resolve; });
-  await page.route(url => url.pathname === '/api/v1/engagements/summary', async route => {
-    calls++;
-    if (calls === 1) { await held; await route.fulfill({ json: { has_engagements: true, needs_response: true } }).catch(() => {}); }
-    else await route.fulfill({ json: { has_engagements: false, needs_response: false } });
-  });
-  try {
-    await login(page, false);
-    await openParticipation(page);
-    const progress = page.getByRole('region', { name: '我的合作與內容', exact: true });
-    await expect(progress).toContainText('正在讀取合作進度');
-    await page.getByRole('button', { name: '設定', exact: true }).click();
-    await page.getByRole('menuitem', { name: '登出', exact: true }).click();
-    await expect(page.getByRole('button', { name: '登入', exact: true })).toBeVisible();
-    await login(page, false, 'client@local.test');
-    await expect(page.locator('.home-participation-disclosure')).toHaveJSProperty('open', false);
-    await expect(page.locator('.home-timeline .social-zone')).toHaveAttribute('aria-busy', 'false');
-    expect(calls).toBe(1); // The old account opening does not activate the new one.
-    await openParticipation(page);
-    await expect(progress).toContainText('還沒有合作紀錄');
-    release();
-    await expect(progress).not.toContainText('有合作等你接續處理');
-    expect(calls).toBe(2);
-  } finally { release(); }
+for(const mode of ['failure','leaving','account'] as const)test(`home has no duplicate cooperation read after ${mode}`,async({page})=>{
+ let calls=0;const commands:string[]=[];
+ page.on('request',request=>{if(request.method()!=='GET'&&new URL(request.url()).pathname.startsWith('/api/v1/engagements'))commands.push(request.url());});
+ await page.route(url=>url.pathname==='/api/v1/engagements/summary',route=>{calls++;return route.fulfill({status:503,json:{title:'暫時無法讀取'}});});
+ await login(page,false);await openParticipation(page);const homeUrl=page.url();
+ const progress=page.getByRole('region',{name:'我的合作與內容',exact:true});
+ await expect(progress).toHaveCount(0);
+ if(mode==='leaving'){await navigate(page,'工坊夥伴');await page.goBack();await expect(page).toHaveURL(/#explore$/);await page.goBack();await expect(page).toHaveURL(homeUrl);await openParticipation(page);}
+ if(mode==='account'){
+  await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'登出',exact:true}).click();
+  await expect(page.getByRole('button',{name:'登入',exact:true})).toBeVisible();await login(page,false,'client@local.test');await openParticipation(page);
+ }
+ await expect(page.locator('.home-timeline .social-zone')).toHaveAttribute('aria-busy','false');
+ await expect(progress).toHaveCount(0);expect(calls).toBe(0);expect(commands).toEqual([]);
 });
 
 test('the home action stays compact, readable and reachable in all themes on desktop and phones', async ({ page }) => {

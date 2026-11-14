@@ -61,7 +61,7 @@ export const interfaceMessages = {
   "space.profileError": ["個人摘要暫時讀取不到，你仍可查看下方內容。", "Your profile summary is unavailable. You can still browse your content below.", "プロフィール概要を読み込めません。下のコンテンツは閲覧できます。", "프로필 요약을 불러올 수 없습니다. 아래 콘텐츠는 볼 수 있습니다.", "El resumen no está disponible. Puedes ver tu contenido abajo."],
   "space.profileLoading": ["正在讀取個人摘要…", "Loading your profile…", "プロフィールを読み込み中…", "프로필 불러오는 중…", "Cargando tu perfil…"],
   "space.edit": ["編輯資料與分享設定", "Edit profile & sharing settings", "プロフィールと共有設定を編集", "프로필 및 공유 설정 편집", "Editar perfil y opciones de compartir"],
-  "space.privacy": ["這是本人的瀏覽空間，不是公開個人牆。名片分享與每篇內容的公開範圍仍由你另行設定。", "This is your own space, not a public wall. Profile sharing and each item’s visibility remain separate choices.", "ここは自分専用のスペースで、公開ウォールではありません。名刺の共有と各コンテンツの公開範囲は別々に設定します。", "이곳은 나만의 공간이며 공개 담벼락이 아닙니다. 프로필 공유와 각 콘텐츠의 공개 범위는 별도로 설정합니다.", "Este es tu espacio, no un muro público. Compartir el perfil y la visibilidad de cada contenido se configuran por separado."],
+  "space.privacy": ["這頁只有你看得到；每項內容仍照它自己的分享設定。", "Only you can see this page; each item keeps its own sharing setting.", "このページは自分だけが見られます。各コンテンツの共有設定はそのままです。", "이 페이지는 나만 볼 수 있으며 각 콘텐츠의 공유 설정은 그대로 유지됩니다.", "Solo tú puedes ver esta página; cada contenido conserva su propia configuración para compartir."],
   "space.content": ["本人內容", "Your content", "自分のコンテンツ", "내 콘텐츠", "Tu contenido"],
   "space.manage": ["管理草稿與發布", "Manage drafts & publishing", "下書きと公開を管理", "초안 및 게시 관리", "Gestionar borradores y publicaciones"],
   "space.refresh": ["重新整理", "Refresh", "再読み込み", "새로 고침", "Actualizar"],

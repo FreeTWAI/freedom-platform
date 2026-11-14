@@ -16,10 +16,10 @@ type Settings=ProfilePublicationSettingsData;
 function draftOf(value:Settings):Draft{return {visibility:value.visibility,display_name:value.display_name,bio:value.bio,links:value.links,layout:structuredClone(value.layout),include_cover:value.include_cover,cover_version:value.cover_version};}
 const empty:Draft={visibility:'private',display_name:'',bio:'',links:[],layout:structuredClone(defaultProfileLayout),include_cover:false,cover_version:null};
 const labels={private:'不公開（僅自己）',members:'同社群會員',public:'任何人（免登入）'};
-export function ProfilePublicationSettings(props:{client:PortalClient;session:SessionPayload;registerLeave:(guard:((hash:string|null)=>boolean)|null)=>void;onReturn:()=>void;onView:()=>void}){
+export function ProfilePublicationSettings(props:{client:PortalClient;session:SessionPayload;registerLeave:((guard:((hash:string|null)=>boolean)|null)=>void)|((guard:()=>boolean)=>()=>void);embedded?:boolean;onReturn?:()=>void;onView:()=>void}){
  return <SettingsContent key={`${props.session.user.user_id}:${props.client.sessionGeneration}`} {...props}/>;
 }
-function SettingsContent({client,session,registerLeave,onReturn,onView}:Parameters<typeof ProfilePublicationSettings>[0]){
+function SettingsContent({client,session,registerLeave,onReturn,onView,embedded}:Parameters<typeof ProfilePublicationSettings>[0]){
  const generation=client.sessionGeneration,owner=session.user.user_id,scope=useRef({client,generation});scope.current={client,generation};
  const current=()=>scope.current.client===client&&scope.current.generation===generation&&client.sessionGeneration===generation;
  const reader=useMemo(()=>createProfileReader(signal=>readProfileSettings(client,signal),current),[client,generation]);
@@ -43,9 +43,9 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
  useEffect(()=>{reader.start();return()=>reader.stop();},[reader]);
  useEffect(()=>{if(load.value&&current()){const data=load.value;setLoadedFor(reader);setAppliedRead(data);setSaved(data);setDraft(draftOf(data));setConfirmed(false);}},[load.value]);
  useEffect(()=>{
-  const guard=()=>(profileMutationBlocksLeave(mutationState)||coverState.current.busy||coverState.current.unknown)?false:!(dirty||coverState.current.dirty)||window.confirm('尚有未儲存的修改，確定離開？');registerLeave(guard);
+  const guard=()=>(profileMutationBlocksLeave(mutationState)||coverState.current.busy||coverState.current.unknown)?false:!(dirty||coverState.current.dirty)||window.confirm('尚有未儲存的修改，確定離開？');const unregister=registerLeave(guard);
   const unload=(event:BeforeUnloadEvent)=>{if(dirty||profileMutationBlocksLeave(mutationState)||coverState.current.busy||coverState.current.unknown||coverState.current.dirty){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',unload);
-  return()=>{registerLeave(null);window.removeEventListener('beforeunload',unload);};
+  return()=>{if(typeof unregister==='function')unregister();else (registerLeave as (guard:null)=>void)(null);window.removeEventListener('beforeunload',unload);};
  },[registerLeave,dirty,mutationState]);
  async function submit(retry=false){
   if(busy||(!retry&&profileMutationBlocksLeave(mutationState))||coverState.current.busy||coverState.current.unknown||coverState.current.dirty||!saved||!current()||!profileSettingsReadReady(reader.getSnapshot(),appliedRead))return;setValidation('');setNotice('');
@@ -73,7 +73,7 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
  const locked=operationLocked||!readReady;
  const refreshLocked=operationLocked||coverStatus.dirty||load.status==='loading';
  return <section className="profile-publication profile-publication-editor stack" aria-label="對外個人頁設定">
-  <div className="section-head"><h2>對外個人頁</h2><button type="button" className="btn btn-secondary btn-small" disabled={operationLocked} onClick={onReturn}>返回本人空間</button></div>
+  {!embedded&&<div className="section-head"><h2>對外個人頁</h2><button type="button" className="btn btn-secondary btn-small" disabled={operationLocked} onClick={onReturn}>返回本人空間</button></div>}
   <p className="profile-editor-purpose">用介紹、作品與連結，整理一個可以分享的個人頁。</p>
   {load.status==='error'&&<div role="alert"><p>{profileSettingsReadMessage(load.error)}</p><button className="btn btn-secondary btn-small" disabled={refreshLocked} onClick={()=>refreshSettings()}>重讀設定</button></div>}
   {load.status==='loading'&&<p role="status">正在讀取設定…</p>}
@@ -99,7 +99,7 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
    <section className="profile-preview stack"><div className="profile-preview-heading"><h3>草稿即時預覽</h3><span className="hint">外觀預覽</span></div><p className="hint">編輯會即時呈現，按儲存才生效。帳號稱號與認證請到已儲存個人頁查看。</p>{previewData.success?<ProfileText profile={previewData.data} coverUrl={draft.include_cover&&draft.cover_version?`/api/v1/me/profile-cover/image?v=${encodeURIComponent(draft.cover_version)}`:null}/>:<><p>名稱或連結尚未填妥，先顯示主題外觀示意；你填寫的內容仍保留。</p><ProfileText profile={{display_name:'主題外觀示意',bio:'',links:[],avatar_url:null,cover:null,layout:{...defaultProfileLayout,theme:draft.layout.theme,accent:draft.layout.accent,cover_style:draft.layout.cover_style}}}/></>}{!draft.bio.trim()&&!draft.layout.about.trim()&&!draft.links.length&&!draft.layout.featured.length&&<p className="profile-preview-guidance">還沒有介紹或作品。先寫一句話介紹，再展開「關於我與精選作品」或加入連結，讓訪客認識你。</p>}</section>
    </div>
    <div className="actions profile-editor-savebar"><button type="submit" className="btn btn-primary" disabled={locked||coverStatus.dirty||draft.visibility==='public'&&!confirmed}>{busy?'儲存中…':draft.visibility==='public'?'確認公開':'儲存'}</button><button type="button" className="btn btn-secondary btn-small" disabled={locked||coverStatus.dirty||!dirty} onClick={()=>{setDraft(draftOf(saved));setConfirmed(false);setNotice('已取消未儲存的修改。私人封面草稿仍可另行捨棄。');}}>取消修改</button><button type="button" className="btn btn-secondary btn-small" disabled={locked||coverStatus.dirty} onClick={()=>{if(window.confirm('將外觀恢復預設？文字名片與可見範圍保持不變，按儲存才生效。'))update({...draft,layout:structuredClone(defaultProfileLayout),include_cover:false,cover_version:null});}}>恢復預設外觀</button>{saved.aggregate_version&&<button type="button" className="btn btn-secondary btn-small" disabled={locked} onClick={onView}>查看已儲存個人頁</button>}</div>
-   <p className="hint profile-editor-boundary">這裡只設定這個個人頁，不會隱藏舊會員目錄、分享名片或其他已發布內容；私人草稿、聯絡資料與訂單不會自動加入。<a href="#account">前往資料與帳號設定，管理分享名片</a></p>
+   <p className="hint profile-editor-boundary">這裡只設定這個個人頁，不會隱藏舊會員目錄、分享名片或其他已發布內容；私人草稿、聯絡資料與訂單不會自動加入。{!embedded&&<a href="#account">前往資料與帳號設定，管理分享名片</a>}</p>
    {saved.visibility!=='private'&&saved.aggregate_version&&<p className="hint">個人頁連結：<a href={visitorProfileHash(owner)}>{visitorProfileHash(owner)}</a>（{labels[saved.visibility]}）</p>}
   </form>}
   {validation&&<p role="alert">{validation}</p>}{error&&<div role="alert"><p>{error}</p>{!lastFailureUnknown&&<p>若資料版本已更新，重讀會丟棄這份本機修改。<button className="btn btn-secondary btn-small" disabled={refreshLocked} onClick={()=>refreshSettings(true)}>重讀最新設定</button></p>}</div>}

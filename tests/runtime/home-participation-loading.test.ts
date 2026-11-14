@@ -84,9 +84,9 @@ function fixture(file: string, edit: (code: string) => string = code => code) {
   } throw Error('hook render did not settle'); };
   return {render, flush, disclosure, toggle(open: boolean) {
     disclosure.open = open;
-    find(tree, node => node.props?.className === 'home-participation-disclosure')!.props.onToggle({target: disclosure, currentTarget: disclosure});
+    find(tree, node => node.props?.className === 'home-participation-disclosure')!.props.onToggle?.({target: disclosure, currentTarget: disclosure});
     render(); flush();
-  }, active() { return find(tree, node => (node.type as any)?.displayName === 'HomeParticipation')!.props.active; },
+  }, active() { return Boolean(find(tree, node => (node.type as any)?.displayName === 'HomeParticipation'));  },
   dispose() { effects.forEach(effect => effect?.cleanup?.()); }};
 }
 function client() {
@@ -98,20 +98,12 @@ function client() {
 const props = (value: ReturnType<typeof client>) => ({client: value, session: {user: {user_id: 'same-user', display_name: 'Synthetic'}}, openHomeJournal: () => false});
 const settled = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 
-function closedReplacement(edit?: (source: string) => string) {
-  const f = fixture('MemberHome.tsx', edit), first = client(), second = client();
-  f.render(props(first)); f.flush(); assert.equal(f.active(), false);
-  f.toggle(true); assert.equal(f.active(), true);
-  f.toggle(false); assert.equal(f.active(), true, 'same mounted client retains activation after collapse');
-  f.render(props(second)); f.flush(); assert.equal(f.active(), false, 'same user/generation on a new client cannot inherit closed activation');
-  f.toggle(true); assert.equal(f.active(), true); f.dispose();
-}
-test('closed first-open latch is scoped to the actual client, user and generation', () => closedReplacement());
-test('an already-open section activates a replacement client, but new generation closes it', () => {
-  const f = fixture('MemberHome.tsx'), first = client(), second = client();
-  f.render(props(first)); f.flush(); f.toggle(true);
-  f.render(props(second)); assert.equal(f.active(), false); f.flush(); assert.equal(f.active(), true);
-  second.sessionGeneration++; f.render(props(second)); f.flush(); assert.equal(f.disclosure.open, false); assert.equal(f.active(), false); f.dispose();
+test('home no longer mounts the duplicate participation grid when opened or when the client changes',()=>{
+ const f=fixture('MemberHome.tsx'),first=client(),second=client();
+ f.render(props(first));f.flush();assert.equal(f.active(),false);
+ f.toggle(true);assert.equal(f.active(),false);
+ f.render(props(second));f.flush();assert.equal(f.active(),false);
+ second.sessionGeneration++;f.render(props(second));f.flush();assert.equal(f.disclosure.open,false);assert.equal(f.active(),false);f.dispose();
 });
 function inactiveRead(edit?: (source: string) => string) {
   const f = fixture('HomeParticipation.tsx', edit), value = client();
@@ -143,6 +135,5 @@ async function visibleReplacement(edit?: (source: string) => string) {
 test('replacement client facts are fenced in render before effect cleanup', () => visibleReplacement());
 test('negative controls reject eager reads and removed client identity fences', async () => {
   assert.throws(() => inactiveRead(code => code.replace('if (!active) return;', '')), /strictly equal/);
-  assert.throws(() => closedReplacement(code => code.replace('[client, session.user.user_id, sessionGeneration]', '[session.user.user_id, sessionGeneration]')), /cannot inherit closed activation/);
   await assert.rejects(visibleReplacement(code => code.replace('progressValue?.client === client &&', 'progressValue &&')), /replacement facts must be hidden/);
 });

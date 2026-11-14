@@ -16,9 +16,9 @@ test('home and navigation reveal secondary functions on demand and page tools re
   await expect(page.locator('.nav-primary > button')).toHaveText(['動態','探索','公會','自動化','我的']);
   await expect(page.locator('.nav-more')).toHaveCount(0);
   await expect(page.locator('.home-personal')).not.toHaveAttribute('open','');
-  await expect(page.locator('.home-destinations')).toBeVisible();
-  await expect(page.locator('.home-destinations button')).toHaveCount(4);
-  await expect(page.getByRole('navigation',{name:'常用入口'}).getByRole('button')).toHaveCount(2);
+  await expect(page.locator('.home-destinations')).toHaveCount(0);
+  await expect(page.locator('.home-destinations button')).toHaveCount(0);
+  await expect(page.getByRole('navigation',{name:'常用入口'}).getByRole('button')).toHaveCount(0);
   await expect(page.locator('.topbar').getByRole('button',{name:'參與編修'})).toBeHidden();
   const tools=page.locator('.page-tools-menu > summary');await tools.click();
   await page.locator('.topbar').getByRole('button',{name:'頁面說明',exact:true}).click();
@@ -109,7 +109,8 @@ for(const language of [
     await page.keyboard.press('Enter');
     await expect(disclosure).toHaveJSProperty('open',true);
     await expect(toggle.locator('.home-explore-close')).toHaveText(`${language.collapse} −`);
-    await expect(page.getByRole('navigation',{name:'參與自由工坊',exact:true}).getByRole('button')).toHaveCount(4);
+    await expect(page.getByRole('navigation',{name:'參與自由工坊',exact:true})).toHaveCount(0);
+    await expect(disclosure.getByRole('heading',{name:'公會與學習',exact:true})).toBeVisible();
     await toggle.press('Space');await expect(disclosure).toHaveJSProperty('open',false);
   }finally{await context.close();}
 });

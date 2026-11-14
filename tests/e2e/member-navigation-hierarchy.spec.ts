@@ -13,7 +13,7 @@ async function login(page:Page){
 test('home and global navigation reach the same supply catalog and preserve history on a phone',async({page})=>{
   await page.setViewportSize({width:390,height:844});await login(page);
   await openHomeGuide(page);
-  await page.locator('.home-destinations').getByRole('button',{name:'我的供貨商品庫 管理商品與合作條件',exact:true}).click();
+  await navigate(page,'供貨商品管理');
   await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
   await expect(page.getByRole('heading',{name:'供貨商品庫',level:1,exact:true})).toBeVisible();
   await navigate(page,'我的商店');await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store$/);
@@ -29,8 +29,8 @@ test('home and global navigation reach the same supply catalog and preserve hist
   await navigate(page,'供貨商品管理');
   await expect(page.getByRole('navigation',{name:'主要工作區'})).toBeHidden();
   await expect(page.locator('#main-content')).toBeFocused();
-  await navigate(page,'我的內容');await expect(page).toHaveURL(/#me\/content$/);
-  await expect(page.getByRole('heading',{name:'草稿與已發布內容',exact:true})).toBeVisible();
+  await navigate(page,'我的內容');await expect(page).toHaveURL(/#me$/);
+  await expect(page.getByRole('heading',{name:'我的內容',exact:true})).toBeVisible();
   // Old feed links and feature search continue to reach their existing destination.
   await navigate(page,'社群分享');await expect(page).toHaveURL(/#home$/);
 });
@@ -77,11 +77,9 @@ test('member hierarchy keeps one feed, distinct destinations and readable contro
     await page.evaluate(value=>{document.documentElement.dataset.theme=value;document.documentElement.dataset.experienceProfile=value;window.dispatchEvent(new Event('freedom-theme-changed'));},theme);
     await expect(page.locator('.home-timeline')).toBeVisible();
     await openHomeGuide(page);
-    const destinations=page.locator('.home-destinations');
-    await expect(destinations.getByRole('heading')).toHaveText(['商品與供貨','作品與活動']);
-    await expect(destinations.getByRole('button')).toHaveCount(4);
+    await expect(page.locator('.home-destinations,.home-shortcuts')).toHaveCount(0);
+    await expect(page.locator('.home-personal').getByRole('link',{name:'編輯個人頁'})).toBeVisible();
     await expect(page.locator('.platform-purpose--member,.home-module-card')).toHaveCount(0);
-    for(const button of await destinations.getByRole('button').all())expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     // The guide click scrolls on phones; capture the sticky header at the actual page top.
     await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
@@ -158,11 +156,10 @@ test('personal space is the only account content entry and legacy management ret
   await page.getByRole('menuitem',{name:'我的個人空間',exact:true}).click();
   await expect(page).toHaveURL(/#me$/);
   await expect(page.locator('.personal-space-content')).toBeVisible();
-  await page.getByRole('link',{name:'管理草稿與發布',exact:true}).click();
-  await expect(page).toHaveURL(/#me\/content$/);
-  await page.reload();await expect(page.getByRole('heading',{name:'草稿與已發布內容',exact:true})).toBeVisible();
-  await page.getByRole('link',{name:'返回我的個人空間',exact:true}).click();await expect(page).toHaveURL(/#me$/);
-  await page.goBack();await expect(page).toHaveURL(/#me\/content$/);
+  await page.evaluate(()=>{location.hash='#my-content';});await expect(page).toHaveURL(/#me$/);
+  await page.reload();await expect(page.getByRole('heading',{name:'我的內容',exact:true})).toBeVisible();
+  await page.getByRole('link',{name:'新增作品草稿',exact:true}).click();await expect(page).toHaveURL(/#me\/content\/showcases\/new$/);
+  await page.goBack();await expect(page).toHaveURL(/#me$/);
 });
 
 test('creation navigation keeps three task choices and all child routes discoverable on a phone',async({page})=>{
@@ -170,9 +167,10 @@ test('creation navigation keeps three task choices and all child routes discover
   await navigate(page,'作品與合作');
   await expect(page.getByRole('heading',{name:'探索',level:1,exact:true})).toBeVisible();
   const links=page.getByRole('navigation',{name:'作品與合作',exact:true});
-  await links.getByRole('link',{name:'投稿開源工具',exact:true}).click();await expect(page).toHaveURL(/#home\/share\/resource$/);
+  await expect(links).toHaveCount(0);await navigate(page,'開源投稿');await expect(page).toHaveURL(/#home\/share\/resource$/);
   await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
-  await links.getByRole('link',{name:'合作紀錄',exact:true}).click();await expect(page).toHaveURL(/#guilds\/guild_opportunity_partnership\/tools\/engagement$/);
+  await expect(page.getByLabel('GitHub 專案網址',{exact:true})).toBeFocused();
+  await navigate(page,'合作紀錄');await expect(page).toHaveURL(/#guilds\/guild_opportunity_partnership\/tools\/engagement$/);
   await expect(page.getByRole('heading',{name:'合作紀錄',level:1,exact:true})).toBeVisible();
   await navigate(page,'任務協作');
   await expect(page).toHaveURL(/#guilds\/guild_ai_project\/tools\/work$/);await expect(page.getByRole('heading',{name:'工作',level:1,exact:true})).toBeVisible();

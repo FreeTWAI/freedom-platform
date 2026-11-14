@@ -304,7 +304,7 @@ test('the home share button stays as compact as the profile button', async ({ pa
   await login(page);
   await themeOf(page, 'light');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  const edit = page.getByRole('button', { name: '編輯我的名片', exact: true });
+  const edit = page.getByRole('link', { name: '編輯個人頁', exact: true });
   const share = page.getByRole('button', { name: '分享自由工坊', exact: true });
   const row = page.locator('.home-member-actions');
   await expect(edit).toBeVisible();

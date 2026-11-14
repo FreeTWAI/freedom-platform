@@ -50,9 +50,8 @@ test('existing members reach their chosen entry and all six collaboration destin
     await page.goto('/#home');
     await openHomeGuide(page);
     const entry=page.getByRole('navigation',{name:'商品、作品與活動',exact:true});
-    await expect(entry).toBeVisible();
-    await expect(entry.getByRole('heading')).toHaveText(['商品與供貨','作品與活動']);
-    await expect(entry.getByRole('button')).toHaveCount(4);
+    await expect(entry).toHaveCount(0);
+    await expect(page.getByRole('link',{name:'編輯個人頁',exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();
     // The legacy intent remains reachable through its canonical global entry,
     // rather than duplicating six role-oriented buttons on the member home.

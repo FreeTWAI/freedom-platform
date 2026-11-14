@@ -9,12 +9,12 @@ async function login(page:Page){
   await expect(page.getByLabel('社群顯示名稱',{exact:true})).toBeVisible();
 }
 
-test('account puts share settings first, keeps three account groups, and disclosures preserve drafts without writes',async({page})=>{
+test('account puts profile and public page first, keeps existing account groups, and disclosures preserve drafts without writes',async({page})=>{
   const recommendations:string[]=[],writes:string[]=[];
   page.on('request',request=>{if(request.url().includes('/members/recommendations'))recommendations.push(request.url());if(request.method()==='POST'&&request.url().includes('/api/v1/me/'))writes.push(request.url());});
   await login(page);
   const sections=page.locator('.account-settings-section');
-  await expect(sections.locator(':scope > summary strong')).toHaveText(['分享名片設定（免登入）','個人資料','誰能看到我','帳號與安全']);
+  await expect(sections.locator(':scope > summary strong')).toHaveText(['個人資料','公開個人頁','分享名片設定（免登入）','誰能看到我','帳號與安全']);
   const section=(label:string)=>sections.getByText(label,{exact:true}).locator('xpath=ancestor::details[1]');
   const share=section('分享名片設定（免登入）'),personal=section('個人資料'),privacy=section('誰能看到我'),securitySection=section('帳號與安全');
   await expect(share).toHaveJSProperty('open',false);
@@ -51,21 +51,21 @@ test('account puts share settings first, keeps three account groups, and disclos
 test('cancelled navigation keeps account edits and accepted back discards only local drafts',async({page})=>{
   await login(page);
   // Establish a real prior history entry without changing account settings.
-  await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
+  await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');
   await page.goto('/#account');
   const name=page.getByLabel('社群顯示名稱',{exact:true});await name.fill('保留中的草稿');
   page.once('dialog',dialog=>dialog.dismiss());
-  await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
+  await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');
   await expect(page).toHaveURL(/#me\/settings$/);await expect(name).toHaveValue('保留中的草稿');
   page.once('dialog',dialog=>dialog.dismiss());await page.goBack();
   await expect(page).toHaveURL(/#me\/settings$/);await expect(name).toHaveValue('保留中的草稿');
-  page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
+  page.once('dialog',dialog=>dialog.accept());await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');
   await expect(page).toHaveURL(/#me$/);
 });
 
 test('uncertain profile save locks edits and retries the exact body, version and idempotency key',async({page})=>{
   await login(page);
-  await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
+  await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');
   await page.goto('/#account');
   await expect(page.getByLabel('社群顯示名稱',{exact:true})).toBeVisible();
   const original=await (await page.request.get('/api/v1/me/account')).json();
@@ -81,7 +81,7 @@ test('uncertain profile save locks edits and retries the exact body, version and
   await page.getByRole('button',{name:'儲存修改',exact:true}).click();
   await expect(page.getByRole('button',{name:'確認儲存結果',exact:true})).toBeVisible();
   await expect(page.getByLabel('社群顯示名稱',{exact:true})).toBeDisabled();
-  await expect(page.getByRole('button',{name:'返回我的個人空間',exact:true})).toBeDisabled();
+  await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');await expect(page).toHaveURL(/#me\/settings$/);
   await page.goBack();await expect(page).toHaveURL(/#me\/settings$/);
   await page.getByRole('button',{name:'確認儲存結果',exact:true}).click();
   await expect(page.getByText('修改已儲存。',{exact:true})).toBeVisible();

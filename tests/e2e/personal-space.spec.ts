@@ -25,8 +25,8 @@ test('PERSONAL-SPACE-UI-01: compact owner hero, genuine post body, bounded page 
  const hero=(await page.locator('.personal-space-hero').boundingBox())!,first=(await page.locator('.personal-space-entry').first().boundingBox())!;
  expect(hero.height).toBeLessThan(260);expect(first.y).toBeLessThan(844);
  await page.getByRole('button',{name:'下一頁',exact:true}).click();await expect(page.locator('.personal-space-entry')).toHaveCount(2);await expect(page.getByText('本人貼文正文 7',{exact:false})).toBeVisible();expect(reads).toHaveLength(8);
- await page.getByRole('button',{name:'作品',exact:true}).click();await expect(page.getByRole('heading',{name:'這裡還沒有作品'})).toBeVisible();expect(reads).toHaveLength(8);
- await page.getByRole('button',{name:'貼文',exact:true}).click();await expect(page.getByText('本人貼文正文 1',{exact:false})).toBeVisible();expect(reads).toHaveLength(14);
+ await page.getByLabel('內容類型',{exact:true}).selectOption('showcase');await expect(page.getByRole('heading',{name:'這裡還沒有作品'})).toBeVisible();expect(reads).toHaveLength(8);
+ await page.getByLabel('內容類型',{exact:true}).selectOption('social_post');await expect(page.getByText('本人貼文正文 1',{exact:false})).toBeVisible();expect(reads).toHaveLength(14);
  await page.screenshot({path:'test-results/personal-space-owner-390.png',fullPage:true});
 });
 
@@ -63,8 +63,8 @@ test('PERSONAL-SPACE-UI-04: page change cancels late body; failed inventory has 
  await synthetic(page);let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve});
  await page.route(`**/api/v1/social-posts?post_id=${id(1)}`,async route=>{await held;await route.fulfill({json:{items:[{...preview(1),note:'LATE_OLD_PAGE_BODY'}]}}).catch(()=>{});});
  try{await login(page);await page.getByRole('button',{name:'下一頁',exact:true}).click();await expect(page.getByText('本人貼文正文 7',{exact:false})).toBeVisible();release();await expect(page.locator('.personal-space')).not.toContainText('LATE_OLD_PAGE_BODY');
- await page.route('**/api/v1/me/content',route=>route.fulfill({status:503,json:{}}));await page.getByRole('button',{name:'重新整理',exact:true}).click();await expect(page.locator('.personal-space [role="alert"]')).toContainText('未取得資料不代表沒有內容');await expect(page.locator('.personal-space-entry')).toHaveCount(0);
- await page.unroute('**/api/v1/me/content');await page.route('**/api/v1/me/content',route=>route.fulfill({json:{items:[]}}));await page.getByRole('button',{name:'重新整理',exact:true}).click();await expect(page.getByRole('heading',{name:'這裡還沒有內容'})).toBeVisible();
+ await page.route('**/api/v1/me/content',route=>route.fulfill({status:503,json:{}}));await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(page.locator('.personal-space [role="alert"]')).toContainText('未取得資料不代表沒有內容');await expect(page.locator('.personal-space-entry')).toHaveCount(0);
+ await page.unroute('**/api/v1/me/content');await page.route('**/api/v1/me/content',route=>route.fulfill({json:{items:[]}}));await page.getByRole('button',{name:'重新載入',exact:true}).click();await expect(page.getByRole('heading',{name:'這裡還沒有內容'})).toBeVisible();
  }finally{release();}
 });
 
@@ -82,9 +82,9 @@ test('PERSONAL-SPACE-UI-06: real owner inventory/exact post respects hidden, del
  await login(page);const session=await(await page.request.get('/api/v1/session')).json(),origin=new URL(page.url()).origin;
  const created=await page.request.post('/api/v1/social-posts/notes',{headers:{Origin:origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':crypto.randomUUID()},data:{text:'PERSONAL_SPACE_REAL_PRIVATE_NOTE\n真實來源的本人正文'}});expect(created.status()).toBe(201);const post=await created.json();
  const guest=await browser.newContext();
- try{await page.getByRole('button',{name:'重新整理',exact:true}).click();const card=page.getByRole('article',{name:'貼文：PERSONAL_SPACE_REAL_PRIVATE_NOTE',exact:true});await expect(card).toContainText('真實來源的本人正文');await expect(card.getByRole('link',{name:'開啟貼文與留言'})).toHaveAttribute('href',`/?social-post=${post.post_id}#social`);
+ try{await page.evaluate(()=>window.dispatchEvent(new Event('focus')));const card=page.getByRole('article',{name:'貼文：PERSONAL_SPACE_REAL_PRIVATE_NOTE',exact:true});await expect(card).toContainText('真實來源的本人正文');await expect(card.getByRole('link',{name:'開啟貼文與留言'})).toHaveAttribute('href',`/?social-post=${post.post_id}#social`);
  const anon=await guest.newPage();await anon.goto(`${origin}/posts/${post.post_id}`);await expect(anon.locator('body')).not.toContainText('PERSONAL_SPACE_REAL_PRIVATE_NOTE');
- for(const state of ['hidden','deleted']){await e2eAuthPool.query('UPDATE community_social_posts SET state=$1 WHERE post_id=$2',[state,post.post_id]);await page.getByRole('button',{name:'重新整理',exact:true}).click();await expect(card).toBeVisible();await expect(card.getByRole('link')).toHaveCount(0);await expect(card).not.toContainText('真實來源的本人正文');}
+ for(const state of ['hidden','deleted']){await e2eAuthPool.query('UPDATE community_social_posts SET state=$1 WHERE post_id=$2',[state,post.post_id]);await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(card).toBeVisible();await expect(card.getByRole('link')).toHaveCount(0);await expect(card).not.toContainText('真實來源的本人正文');}
  }finally{
   try{await guest.close();}finally{
    // Deleted posts still consume the daily budget. Remove only this case's row
@@ -118,7 +118,7 @@ for(const width of [320,390,1280])test(`PERSONAL-SPACE-UI-07: ${width}px owner c
 });
 
 test('PERSONAL-SPACE-UI-08: language/theme panels preserve an account form draft, focus and browser history',async({page})=>{
- await login(page);await page.getByRole('link',{name:'編輯資料與分享設定',exact:true}).click();await expect(page).toHaveURL(/#me\/settings$/);const input=page.getByLabel('社群顯示名稱',{exact:true});await input.fill('尚未儲存的本人草稿');
+ await login(page);await page.getByRole('link',{name:'編輯個人頁',exact:true}).click();await expect(page).toHaveURL(/#me\/settings$/);const input=page.getByLabel('社群顯示名稱',{exact:true});await input.fill('尚未儲存的本人草稿');
  for(const label of ['English','日本語','한국어','Español','繁體中文']){await openSettingsPanel(page,'language');const option=page.getByRole('menuitemradio',{name:label,exact:true});await option.click();await expect(option).toBeFocused();await expect(input).toHaveValue('尚未儲存的本人草稿');await closeSettingsMenu(page);}
  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'自由工坊－夜航',exact:true}).click();await closeSettingsMenu(page);await expect(input).toHaveValue('尚未儲存的本人草稿');
  // This journey intentionally leaves the unsaved form; accept only this confirmation.
@@ -243,8 +243,8 @@ for(const width of [320,375,390,768,1280])test(`PERSONAL-SPACE-UI-17: ${width}px
  expect(identityBox.y).toBeCloseTo(avatarBox.y,0);expect(identityBox.width).toBeGreaterThan(120);
  expect(actionBox.y).toBeGreaterThanOrEqual(Math.max(identityBox.y+identityBox.height,avatarBox.y+avatarBox.height));
  expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
- await expect(action.getByRole('link')).toHaveCount(2);
- for(const [name,href] of [['編輯資料與分享設定','#account'],['佈置主頁','#profile?view=settings']]){
+ await expect(action.getByRole('link')).toHaveCount(1);
+ for(const [name,href] of [['編輯個人頁','#me/settings']]){
   const link=action.getByRole('link',{name,exact:true});await expect(link).toBeVisible();await expect(link).toHaveAttribute('href',href);
   const box=(await link.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
  }
@@ -256,6 +256,6 @@ for(const width of [320,375,390,768,1280])test(`PERSONAL-SPACE-UI-17: ${width}px
  for(const name of names)await expect(details.getByText(name,{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.keyboard.press('Space');await expect(details).not.toHaveAttribute('open');await expect(summary).toBeFocused();
- longIdentity=true;await page.getByRole('button',{name:'重新整理',exact:true}).click();await expect(identity).toContainText('VeryLongUnbrokenCreatorName'.repeat(5));
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(action.getByRole('link',{name:'編輯資料與分享設定',exact:true})).toHaveAttribute('href','#account');await expect(action.getByRole('link',{name:'佈置主頁',exact:true})).toHaveAttribute('href','#profile?view=settings');
+ longIdentity=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(identity).toContainText('VeryLongUnbrokenCreatorName'.repeat(5));
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(action.getByRole('link',{name:'編輯個人頁',exact:true})).toHaveAttribute('href','#me/settings');
 });

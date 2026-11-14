@@ -41,7 +41,7 @@ test('synthetic entry budget: two required fields and one guild choice reach use
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();await expect(page.locator('.welcome-optional')).not.toHaveAttribute('open','');
   await page.getByLabel('找感興趣的公會').fill('AI 開發公會');await quickJoin(page);
   await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
-  await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open',false);
+  await expect(page.locator('.home-personal')).toHaveJSProperty('open',false);
   await openHomeGuide(page);
   await openHomeLearning(page);
   const next=page.getByRole('region',{name:'公會與技能書建議',exact:true});
@@ -54,8 +54,8 @@ test('synthetic entry budget: two required fields and one guild choice reach use
   await expect(next.getByRole('button',{name:/^(查看社群任務|分享作品與需求)$/})).toBeVisible();
   await page.screenshot({path:'test-results/calm-home-320.png',fullPage:true});
   await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'test-results/calm-home-1440.png',fullPage:true});await page.setViewportSize({width:320,height:720});
-  // Wait for the responsive disclosure state before opening it through the UI.
-  await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open',false);
+  // Resizing keeps the member's explicitly opened personal disclosure.
+  await expect(page.locator('.home-personal')).toHaveJSProperty('open',true);
   await openHomeGuide(page);
   await openHomeLearning(page);
   await next.getByRole('button',{name:'進入AI 開發公會聊天室',exact:true}).click();await expect(page.getByRole('heading',{name:'AI 開發公會・公會閒聊',exact:true})).toBeVisible();await expect(page.getByRole('textbox',{name:'在 AI 開發公會 發言'})).toBeVisible();

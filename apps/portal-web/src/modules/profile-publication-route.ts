@@ -4,6 +4,8 @@ export function parseProfileRoute(hash:string):ProfileRoute|null{
   if(hash==='#profile')return {kind:'workspace'};
   if(!hash.startsWith('#profile?'))return null;
   const params=new URLSearchParams(hash.slice('#profile?'.length));
+  // Inert query metadata on the owner alias never selects another member.
+  if(!params.has('member')&&!params.has('view'))return {kind:'workspace'};
   if([...params.keys()].length!==1)return {kind:'invalid'};
   if(params.get('view')==='settings')return {kind:'settings'};
   const id=params.get('member');return id&&uuid.test(id)?{kind:'visitor',id:id.toLowerCase()}:{kind:'invalid'};
