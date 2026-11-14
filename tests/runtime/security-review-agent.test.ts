@@ -170,3 +170,19 @@ test('agent co-sharers can retract only their own endorsement and cannot moderat
  assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1 AND user_id=$2',[id,a.user.user_id])).rows[0].n,1);
  for(const decision of ['restore','confirm'])assert.equal((await req(`/admin/api/shares/${id}/${decision}`,{token,body:{reason:'try to moderate'}})).status,403);
 });
+
+test('agent REST refuses a CSRF header on both read and write',async()=>{
+ const session=await ready(),token=(await issue(session,['read','share'])).access_token;
+ for(const request of [
+  {path:'/api/v1/me/credit'},
+  {path:'/api/v1/events',body:{title:'合成活動',starts_at:'2099-01-01T10:00:00Z',location:'合成場地'}},
+ ]){
+  for(const csrf of ['synthetic','']){
+   const result=await req(request.path,{token,headers:{'X-CSRF-Token':csrf},...(request.body?{body:request.body}:{})});
+   assert.equal(result.status,400,result.text);
+   assert.match(result.text,/ambiguous_credentials/);
+   assert.match(result.text,/請只使用 Agent 金鑰/);
+  }
+ }
+ assert.equal((await req('/api/v1/me/credit',{token})).status,200);
+});

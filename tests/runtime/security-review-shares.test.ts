@@ -13,6 +13,7 @@ import {fetchShareLink} from '../../modules/shares/adapters/link.js';
 import {repositoryFacts} from '../../modules/shares/adapters/repository.js';
 import {refreshRepository} from '../../modules/shares/repository-cache.js';
 import {createPromotionLink,creditPromotionClick} from '../../modules/community/promotion.js';
+import {communityCatalog} from '../../modules/community/catalog.js';
 import {applyShareBackfill} from '../../modules/shares/backfill.js';
 import {creditEventRegistrations} from '../../modules/shares/credit.js';
 import {moderateShare} from '../../modules/shares/moderation.js';
@@ -287,4 +288,84 @@ test('admin share routes require verified active admin and CSRF, scope community
  assert.equal(await count(id),0,'Restore does not rewrite previously confirmed reversal history');
  await pool.query('UPDATE platform_admins SET active=false WHERE admin_id=$1',[adminId]);
  assert.equal((await request('confirm',valid,key)).status,403,'Revoked admin cannot replay a receipt');
+});
+
+
+test('legacy and canonical links credit one share per sharer and Taipei day live and in backfill',async()=>{
+ const created=await createShare(pool,command(actors[0],{url:'https://github.com/synthetic/repository-18009'}),{fetcher:async()=>Response.json(repository(18009))});
+ const id=created.share_id, book=communityCatalog.skill_books[0].id;
+ await pool.query('UPDATE shares SET legacy_ref=$2 WHERE share_id=$1',[id,JSON.stringify([{kind:'book',id:book}])]);
+ const legacy=await createPromotionLink(pool,actors[1],{kind:'skill_book',target:`book:${book}`});
+ const canonical=await shareLink(pool,command(actors[1],{},'security.links'),id);
+ const day=new Date('2026-11-13T12:00:00Z');
+ const click=async(code:string,network:string,now=day)=>creditPromotionClick(pool,{code,userAgent:'Mozilla/5.0',network,sessionUserId:null,now});
+ await click(legacy.code,'legacy-live');
+ assert.equal(await count(id,'qualified_click_day'),1,'legacy link resolves to canonical share live');
+ await click(canonical.code,'canonical-live');
+ assert.equal(await count(id,'qualified_click_day'),1,'link kind does not duplicate a same-day fact');
+ const other=await createPromotionLink(pool,actors[2],{kind:'skill_book',target:`book:${book}`});
+ await click(other.code,'other-sharer');
+ await click(canonical.code,'second-day',new Date(day.getTime()+86400000));
+ assert.equal(await count(id,'qualified_click_day'),3,'another sharer and day each earn one fact');
+ // Simulate historical source clicks recorded before this share existed in the ledger.
+ const backfillDay='2026-11-20';
+ const rows=(await pool.query('SELECT link_id,community_id,user_id,kind FROM promotion_links WHERE code=ANY($1::text[])',[[legacy.code,canonical.code]])).rows;
+ await pool.query('ALTER TABLE promotion_clicks DISABLE TRIGGER promotion_share_credit');
+ try{
+  for(const [i,row] of rows.entries())await pool.query(`INSERT INTO promotion_clicks(link_id,click_day,visitor_key,network_key,community_id,user_id,kind,created_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$2::date::timestamptz)`,[row.link_id,backfillDay,`v:historical-${i}`,'a'.repeat(64),row.community_id,row.user_id,row.kind]);
+ }finally{await pool.query('ALTER TABLE promotion_clicks ENABLE TRIGGER promotion_share_credit');}
+ const previousTZ=process.env.TZ;process.env.TZ='Asia/Taipei';
+ try{await applyShareBackfill(pool,{repositories:[],events:[]},true);}finally{if(previousTZ===undefined)delete process.env.TZ;else process.env.TZ=previousTZ;}
+ const facts=await pool.query("SELECT source_ref FROM share_credit_events WHERE share_id=$1 AND user_id=$2 AND basis='qualified_click_day' AND source_ref LIKE $3",[id,actors[1].user_id,`%${backfillDay}`]);
+ assert.equal(facts.rows.length,1,'backfill deduplicates historical cross-kind clicks');
+ assert.equal(await count(id,'qualified_click_day'),4,'backfill adds only the new day and retains other sharers');
+ await applyShareBackfill(pool,{repositories:[],events:[]},true);
+ assert.equal(await count(id,'qualified_click_day'),4,'repeating backfill adds no facts');
+});
+
+test('event sharing uses the shared daily link cap while publication remains available and counts',async()=>{
+ const {createEvent}=await import('../../modules/community/events.js');
+ const {shareEvent}=await import('../../modules/community/event-sharing.js');
+ const members:Actor[]=[];
+ for(let i=0;i<3;i++){
+  const id=randomUUID(),session=randomUUID();
+  await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active,onboarding_required)
+   SELECT $1,community_id,$2,'Synthetic member',password_hash,$3,true,false FROM users WHERE user_id=$4`,[id,`quota-${id}@example.com`,randomUUID(),DEMO_USERS[0].user_id]);
+  await pool.query("INSERT INTO sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$1,now()+interval '1 day')",[session,id]);
+  members.push({user_id:id,community_id:DEMO_COMMUNITY,session_hash:session} as Actor);
+ }
+ const fill=async(actor:Actor,n:number)=>{const prefix=randomUUID().replaceAll('-','').slice(0,5);await pool.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code,revoked_at)
+  SELECT $1,$2,'platform','workshop','q'||$3||lpad(n::text,4,'0'),now() FROM generate_series(1,$4) n`,[DEMO_COMMUNITY,actor.user_id,prefix,n]);};
+ const event=async(actor:Actor)=>createEvent(pool,command(actor,{title:`Quota ${randomUUID()}`,starts_at:'2099-01-01T10:00:00Z',location:'合成場地'},'quota.event'));
+ const original=await event(members[0]);await fill(members[0],199);
+ const existing=(await shareEvent(pool,command(members[0],{},'quota.share'),original.event_id)).path;
+ assert.ok(existing.startsWith('/go/'));
+ const published=await event(members[0]);
+ assert.equal(published.state,'published');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM promotion_links WHERE user_id=$1',[members[0].user_id])).rows[0].n,201);
+ assert.equal((await shareEvent(pool,command(members[0],{},'quota.share'),original.event_id)).path,existing);
+ await fill(members[1],200);
+ await assert.rejects(shareEvent(pool,command(members[1],{},'quota.share'),original.event_id),{status:429,code:'promotion_link_limit'});
+ await fill(members[2],199);
+ const race=await Promise.allSettled([shareEvent(pool,command(members[2],{},'quota.share'),original.event_id),createPromotionLink(pool,members[2],{kind:'platform',target:'tester-map'})]);
+ assert.equal(race.filter(x=>x.status==='fulfilled').length,1);
+ const failure=race.find(x=>x.status==='rejected');assert.ok(failure&&failure.status==='rejected');assert.equal(failure.reason.code,'promotion_link_limit');
+});
+
+test('event promotion clicks create one canonical share reach fact per sharer and day',async()=>{
+ const {createEvent}=await import('../../modules/community/events.js');
+ const event=await createEvent(pool,command(actors[0],{title:'Synthetic reach event',starts_at:'2099-01-01T10:00:00Z',location:'Synthetic venue'},'reach.event'));
+ const share=(await pool.query("SELECT share_id FROM shares WHERE kind='event' AND ref_id=$1",[event.event_id])).rows[0].share_id;
+ const first=(await pool.query("SELECT code FROM promotion_links WHERE kind='event' AND target_key=$1 AND user_id=$2",[event.event_id,actors[0].user_id])).rows[0].code;
+ const second=await createPromotionLink(pool,actors[1],{kind:'event',target:event.event_id});
+ const day=new Date('2026-11-15T12:00:00Z');
+ const click=(code:string,network:string,now:Date)=>creditPromotionClick(pool,{code,userAgent:'Mozilla/5.0',network,sessionUserId:null,now});
+ await click(first,'event-first',day);
+ assert.equal(await count(share,'qualified_click_day'),1,'one click must not create two event reach facts');
+ await click(second.code,'event-second',day);
+ await click(first,'event-tomorrow',new Date(day.getTime()+86400000));
+ assert.equal(await count(share,'qualified_click_day'),3,'another sharer and another day each earn one fact');
+ const refs=(await pool.query("SELECT source_ref FROM share_credit_events WHERE share_id=$1 AND basis='qualified_click_day'",[share])).rows.map(row=>row.source_ref);
+ assert.ok(refs.every(ref=>ref.startsWith(`click:${share}:`)),'every event fact uses the canonical share identity');
 });

@@ -2,6 +2,7 @@ import {requireSharePublicationQuota} from './publication-quota.js';
 import {randomBytes} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {endorseShare,creditEventRegistrations} from './credit.js';
+import {createPromotionLinkRow} from '../community/promotion.js';
 import {requireCondition} from '../../packages/shared/problem.js';
 /** Internal domain port: called in the event's publication transaction, never from client facts. */
 export async function publishEventShare(q:PoolClient,event:any,newPublication=false){
@@ -14,6 +15,6 @@ export async function publishEventShare(q:PoolClient,event:any,newPublication=fa
  await endorseShare(q,share,event.organizer_ref);
  await creditEventRegistrations(q,event.event_id);
  await q.query(`INSERT INTO community_event_share_codes(event_id,user_id,code) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,[event.event_id,event.organizer_ref,randomBytes(18).toString('base64url')]);
- await q.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code) VALUES($1,$2,'event',$3,$4) ON CONFLICT DO NOTHING`,[event.community_id,event.organizer_ref,event.event_id,randomBytes(7).toString('base64url')]);
+ await createPromotionLinkRow(q,{community_id:event.community_id,user_id:event.organizer_ref,kind:'event',target_key:event.event_id,allowOverCap:true});
  return share;
 }

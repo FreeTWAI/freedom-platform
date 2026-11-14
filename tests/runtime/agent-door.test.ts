@@ -536,3 +536,65 @@ test('installed cookie-only private AI readers retain their credential rejection
   }
  }
 });
+
+test('former guild registrants cannot receive or read private event notices through browser or agent',async()=>{
+ const organizer=await ready(0),former=await ready(1),current=await ready(2);
+ const token=(await issue(former,['read'])).access_token;
+ const created=await req('/api/v1/events',{session:organizer,body:eventBody()});assert.equal(created.status,201,JSON.stringify(created.data));
+ const id=created.data.event_id,community=created.data.community_id,guild='guild_games';
+ await pool.query("UPDATE community_events SET visibility='guild',event_kind='guild_skill_exchange',guild_key=$2 WHERE event_id=$1",[id,guild]);
+ for(const member of [former,current])await pool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state)
+   VALUES($1,$2,$3,$4,'active') ON CONFLICT(community_id,user_id,guild_key) DO UPDATE SET state='active'`,[randomUUID(),community,member.user.user_id,guild]);
+ for(const member of [former,current])assert.equal((await req(`/api/v1/events/${id}/rsvp`,{session:member,body:{going:true}})).status,200);
+ const announce=async(message:string)=>{
+  const version=(await pool.query('SELECT aggregate_version FROM community_events WHERE event_id=$1',[id])).rows[0].aggregate_version;
+  const result=await req(`/api/v1/events/${id}/announcements`,{session:organizer,body:{message},headers:{'If-Match':`"${version}"`}});
+  assert.equal(result.status,200,JSON.stringify(result.data));
+ };
+ await announce('離開前的私人通知');
+ assert.ok(JSON.stringify((await req('/api/v1/me/notifications',{session:former})).data).includes('離開前的私人通知'));
+ await pool.query("UPDATE positioning_profession_memberships SET state='left' WHERE community_id=$1 AND user_id=$2 AND guild_key=$3",[community,former.user.user_id,guild]);
+ await announce('離開後的私人通知');
+ assert.equal((await pool.query("SELECT count(*)::int n FROM member_notifications WHERE recipient_ref=$1 AND action_resource_id=$2 AND kind='event_announcement'",[former.user.user_id,id])).rows[0].n,1);
+ for(const result of [await req('/api/v1/me/notifications',{session:former}),await req('/api/v1/me/notifications',{token})]){
+  assert.equal(result.status,200);assert.equal(result.data.unread_count,0);assert.equal(result.data.items.length,0);
+ }
+ const hidden=(await pool.query('SELECT notification_id FROM member_notifications WHERE recipient_ref=$1 AND action_resource_id=$2',[former.user.user_id,id])).rows[0].notification_id;
+ assert.equal((await req(`/api/v1/me/notifications/${hidden}/read`,{session:former,body:{}})).status,404);
+ const cleared=await req('/api/v1/me/inbox/read-all',{session:former,body:{scope:'notifications'}});assert.equal(cleared.status,200);assert.equal(cleared.data.notifications_updated,0);
+ assert.equal((await pool.query('SELECT read_at FROM member_notifications WHERE notification_id=$1',[hidden])).rows[0].read_at,null);
+ const present=await req('/api/v1/me/notifications',{session:current});assert.equal(present.status,200);assert.equal(present.data.items.filter((n:any)=>n.action?.resource_id===id).length,2);
+ const publicEvent=await req('/api/v1/events',{session:organizer,body:{...eventBody(),title:'公開活動'}});assert.equal(publicEvent.status,201,JSON.stringify(publicEvent.data));
+ assert.equal((await req(`/api/v1/events/${publicEvent.data.event_id}/rsvp`,{session:former,body:{going:true}})).status,200);
+ const version=(await pool.query('SELECT aggregate_version FROM community_events WHERE event_id=$1',[publicEvent.data.event_id])).rows[0].aggregate_version;
+ assert.equal((await req(`/api/v1/events/${publicEvent.data.event_id}/announcements`,{session:organizer,body:{message:'公開通知'},headers:{'If-Match':`"${version}"`}})).status,200);
+ assert.ok(JSON.stringify((await req('/api/v1/me/notifications',{token})).data).includes('公開通知'));
+});
+
+test('agent event sharing refuses new links at the daily cap but returns an existing link',async()=>{
+ const organizer=await ready(0),member=await ready(1),token=(await issue(member,['share'])).access_token;
+ const one=await req('/api/v1/events',{session:organizer,body:{...eventBody(),title:'第一個活動'}});
+ const two=await req('/api/v1/events',{session:organizer,body:{...eventBody(),title:'第二個活動'}});
+ assert.equal(one.status,201);assert.equal(two.status,201);
+ const path=(id:string)=>`/api/v1/events/${id}/share`;
+ const first=await req(path(one.data.event_id),{token,body:{}});assert.equal(first.status,200,JSON.stringify(first.data));
+ const community=(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[member.user.user_id])).rows[0].community_id;
+ const prefix=randomUUID().replaceAll('-','').slice(0,5);
+ await pool.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code,revoked_at)
+   SELECT $1,$2,'platform','workshop','a'||$3||lpad(n::text,4,'0'),now() FROM generate_series(1,199) n`,[community,member.user.user_id,prefix]);
+ const rejected=await req(path(two.data.event_id),{token,body:{}});assert.equal(rejected.status,429,JSON.stringify(rejected.data));
+ const browserRejected=await req(path(two.data.event_id),{session:member,body:{}});assert.equal(browserRejected.status,429,JSON.stringify(browserRejected.data));
+ for(const credentials of [{token},{session:member}]){const repeated=await req(path(one.data.event_id),{...credentials,body:{}});assert.equal(repeated.status,200);assert.equal(repeated.data.path,first.data.path);}
+});
+
+test('agent event interest refuses a foreign-community event without recording interest',async()=>{
+ const member=await ready(),token=(await issue(member,['rsvp'])).access_token;
+ const foreign=randomUUID(),foreignEvent=randomUUID(),ownEvent=randomUUID();
+ const ownCommunity=(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[member.user.user_id])).rows[0].community_id;
+ await pool.query('INSERT INTO communities(community_id,name) VALUES($1,$2)',[foreign,'Synthetic foreign']);
+ for(const [id,community] of [[foreignEvent,foreign],[ownEvent,ownCommunity]])await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,registration_mode,external_registration_url)
+   VALUES($1,$2,$3,'合成活動','合成內容','2099-01-01T10:00:00Z','2099-01-01T11:00:00Z','online','線上','published','open','external','https://example.com/register')`,[id,community,member.user.user_id]);
+ assert.equal((await req(`/api/v1/events/${foreignEvent}/interest`,{token,body:{}})).status,404);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM community_event_interests WHERE event_id=$1',[foreignEvent])).rows[0].n,0);
+ assert.equal((await req(`/api/v1/events/${ownEvent}/interest`,{token,body:{}})).status,200);
+});

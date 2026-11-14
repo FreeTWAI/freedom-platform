@@ -185,29 +185,38 @@ function linkView(row: { kind: PromotionKind; target_key: string; code: string }
   return { kind: row.kind, target: row.target_key, code: row.code, path: `/go/${row.code}`, title, points };
 }
 
+/** All promotion link producers serialize on the same member/day budget. */
+export async function createPromotionLinkRow(q: PoolClient, input: {community_id:string;user_id:string;kind:PromotionKind;target_key:string;now?:Date;allowOverCap?:boolean}) {
+  const now=input.now??new Date();
+  await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`promo-link:${input.user_id}:${taipeiDate(now)}`]);
+  const existing=async()=> (await q.query(`SELECT link_id,kind,target_key,code FROM promotion_links
+    WHERE community_id=$1 AND user_id=$2 AND kind=$3 AND target_key=$4 AND revoked_at IS NULL`,[input.community_id,input.user_id,input.kind,input.target_key])).rows[0];
+  const prior=await existing();if(prior)return {row:prior,created:false};
+  if(!input.allowOverCap){
+    const used=(await q.query('SELECT count(*)::int AS n FROM promotion_links WHERE user_id=$1 AND created_at>=$2',[input.user_id,taipeiDayStart(now)])).rows[0].n;
+    requireCondition(used<PROMOTION_LINK_CAP,429,'promotion_link_limit','今天建立的分享連結已達上限。');
+  }
+  for(let attempt=0;attempt<5;attempt++){
+    const row=(await q.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code,created_at)
+      VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING link_id,kind,target_key,code`,
+      [input.community_id,input.user_id,input.kind,input.target_key,randomBytes(7).toString('base64url'),now])).rows[0];
+    if(row)return {row,created:true};
+    const other=await existing();if(other)return {row:other,created:false};
+  }
+  throw new Problem(503,'promotion_link_unavailable','分享連結暫時無法建立，請稍後再試。');
+}
+
 export async function createPromotionLink(pool: Pool, actor: Actor, raw: unknown, now = new Date(), publicCommunity?: string | null): Promise<PromotionLinkView> {
   const body = linkInput.parse(raw);
-  const day = taipeiDayStart(now);
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       return await transaction(pool, async q => {
         await lockMemberSession(q, actor);
-        await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`promo-link:${actor.user_id}:${taipeiDate(now)}`]);
         const { title, key } = await assertTarget(q, actor, body.kind, body.target, publicCommunity);
-        const existing = (await q.query(`SELECT link_id,kind,target_key,code FROM promotion_links
-          WHERE community_id=$1 AND user_id=$2 AND kind=$3 AND target_key=$4 AND revoked_at IS NULL`, [actor.community_id, actor.user_id, body.kind, key])).rows[0];
-        if (existing) {
-          const points = await pointsFor(q, existing.link_id, now);
-          await assertCurrentSessionClock(q, actor);
-          return linkView(existing, title, points);
-        }
-        const used = (await q.query('SELECT count(*)::int AS n FROM promotion_links WHERE user_id=$1 AND created_at>=$2', [actor.user_id, day])).rows[0].n as number;
-        requireCondition(used < PROMOTION_LINK_CAP, 429, 'promotion_link_limit', '今天建立的分享連結已達上限。');
-        const code = randomBytes(7).toString('base64url');
-        const inserted = (await q.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code,created_at)
-          VALUES($1,$2,$3,$4,$5,$6) RETURNING link_id,kind,target_key,code`, [actor.community_id, actor.user_id, body.kind, key, code, now])).rows[0];
+        const link=await createPromotionLinkRow(q,{community_id:actor.community_id,user_id:actor.user_id,kind:body.kind,target_key:key,now});
+        const points=link.created?{week:0,month:0,all:0}:await pointsFor(q,link.row.link_id,now);
         await assertCurrentSessionClock(q, actor);
-        return linkView(inserted, title, { week: 0, month: 0, all: 0 });
+        return linkView(link.row,title,points);
       });
     } catch (error) {
       const pg = error as { code?: string; constraint?: string };

@@ -129,16 +129,23 @@ ALTER TABLE promotion_clicks DROP CONSTRAINT promotion_clicks_kind_check;
 ALTER TABLE promotion_clicks ADD CONSTRAINT promotion_clicks_kind_check CHECK (kind IN ('member_card','platform','skill_book','social_post','member_service','event','share'));
 
 -- Only the existing bot/self/budget-filtered promotion writer supplies clicks.
--- One qualified link-day, not a claim of unique humans or raw page views.
+-- One qualified share/sharer/day, not a claim of unique humans or raw page views.
 CREATE FUNCTION share_promotion_credit() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE s shares; actor uuid;
 BEGIN
-  IF NEW.kind<>'share' THEN RETURN NEW; END IF;
-  SELECT s0.* INTO s FROM shares s0 JOIN promotion_links l ON l.target_key=s0.share_id::text AND l.community_id=s0.community_id WHERE l.link_id=NEW.link_id;
+  SELECT s0.* INTO s FROM shares s0 JOIN promotion_links l ON l.community_id=s0.community_id
+    AND (l.kind='share' AND l.target_key=s0.share_id::text
+      OR l.kind='event' AND s0.kind='event' AND s0.ref_id::text=l.target_key
+      OR l.kind='social_post' AND s0.kind='post' AND s0.ref_id::text=l.target_key
+      OR l.kind='member_service' AND s0.kind='service' AND s0.ref_id::text=l.target_key
+      OR l.kind='skill_book' AND EXISTS(SELECT 1 FROM jsonb_array_elements(s0.legacy_ref) r WHERE
+        (r->>'kind'='book' AND l.target_key='book:'||(r->>'id')) OR
+        (r->>'kind'='skill_submission' AND l.target_key='submission:'||(r->>'id'))))
+    WHERE l.link_id=NEW.link_id AND s0.state='published' ORDER BY s0.share_id LIMIT 1;
   IF s.share_id IS NULL THEN RETURN NEW; END IF;
   IF NEW.visitor_key ~ '^m:[0-9a-f-]{36}$' THEN actor=substring(NEW.visitor_key FROM 3)::uuid; END IF;
   INSERT INTO share_credit_events(community_id,share_id,user_id,role,basis,units,source_ref,actor_user_id)
-    VALUES(s.community_id,s.share_id,NEW.user_id,'spreader','qualified_click_day',1,'click:'||NEW.link_id||':'||NEW.click_day,actor) ON CONFLICT DO NOTHING;
+    VALUES(s.community_id,s.share_id,NEW.user_id,'spreader','qualified_click_day',1,'click:'||s.share_id||':'||NEW.user_id||':'||to_char(NEW.click_day,'YYYY-MM-DD'),actor) ON CONFLICT DO NOTHING;
   RETURN NEW;
 END $$;
 CREATE TRIGGER promotion_share_credit AFTER INSERT ON promotion_clicks FOR EACH ROW EXECUTE FUNCTION share_promotion_credit();

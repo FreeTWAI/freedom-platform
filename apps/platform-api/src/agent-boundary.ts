@@ -15,6 +15,7 @@ export function agentBoundary(pool:Pool,responseHeaders:(path:string)=>Record<st
   if(!authorization||!/fw_agent_/i.test(authorization))return next();
   for(const [name,value] of Object.entries(responseHeaders(c.req.path)))c.header(name,value);
   requireCondition(c.req.header('Cookie')===undefined,400,'ambiguous_credentials','請只使用一種登入憑證。');
+  requireCondition(c.req.header('X-CSRF-Token')===undefined,400,'ambiguous_credentials','請只使用 Agent 金鑰。');
   const actor=await authenticateAgent(pool,authorization);
   try {
    const route=matchedRoutes(c).find(r=>r.method===c.req.method);

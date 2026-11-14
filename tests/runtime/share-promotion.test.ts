@@ -1561,6 +1561,7 @@ test('S1: revoked link or deactivated owner link is refused at /go and scores ze
     assert.match(html, /分享連結目前無法開啟/);
     assert.equal(gone.headers.get('location'), null);
     assert.doesNotMatch(html, /og:|data-target|data-code|公開分享/);
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM promotion_clicks c JOIN promotion_links l USING(link_id) WHERE l.code=$1', [code])).rows[0].n, 0);
     await click(code, REAL);
     assert.equal(await pointsOf(code), 0);
   }

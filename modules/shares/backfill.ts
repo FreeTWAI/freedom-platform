@@ -84,16 +84,18 @@ export async function applyShareBackfill(pool:Pool,plan:Pick<BackfillPlan,'repos
   const claims=(await q.query(`SELECT c.*,s.share_id FROM repo_credit_claims c JOIN shares s USING(repo_id,community_id)
     WHERE c.state='verified' AND c.role IN ('original_author','co_original_author') AND s.state='published'`)).rows;
   for(const c of claims)if(await appendCredit(q,{share_id:c.share_id,community_id:c.community_id,user_id:c.user_id,role:'original_author',basis:'claim_verified',source_ref:`claim:${c.claim_id}`}))counts.credits++;
-  // Per-link/day facts reuse the already-filtered promotion source. No copied URL or manual report earns credit.
-  const clicks=(await q.query(`SELECT DISTINCT ON(c.link_id,c.click_day) c.*,s.share_id FROM promotion_clicks c JOIN promotion_links l USING(link_id)
-    JOIN shares s ON s.community_id=c.community_id AND (l.kind='share' AND l.target_key=s.share_id::text
+  // Resolve each filtered promotion source to its canonical share; one fact per sharer and day.
+  const clicks=(await q.query(`SELECT DISTINCT ON(s.share_id,c.user_id,c.click_day) c.*,to_char(c.click_day,'YYYY-MM-DD') AS click_day_text,s.share_id FROM promotion_clicks c JOIN promotion_links l USING(link_id)
+    JOIN LATERAL (SELECT s.* FROM shares s WHERE s.community_id=l.community_id AND s.state='published' AND (l.kind='share' AND l.target_key=s.share_id::text
       OR l.kind='event' AND s.kind='event' AND s.ref_id::text=l.target_key
+      OR l.kind='social_post' AND s.kind='post' AND s.ref_id::text=l.target_key
+      OR l.kind='member_service' AND s.kind='service' AND s.ref_id::text=l.target_key
       OR l.kind='skill_book' AND EXISTS(SELECT 1 FROM jsonb_array_elements(s.legacy_ref) r WHERE
-       (r->>'kind'='book' AND l.target_key='book:'||(r->>'id')) OR (r->>'kind'='skill_submission' AND l.target_key='submission:'||(r->>'id'))))
-    WHERE s.state='published' AND c.visitor_key<>'m:'||c.user_id::text
+       (r->>'kind'='book' AND l.target_key='book:'||(r->>'id')) OR (r->>'kind'='skill_submission' AND l.target_key='submission:'||(r->>'id')))) ORDER BY s.share_id LIMIT 1) s ON true
+    WHERE c.visitor_key<>'m:'||c.user_id::text
       AND (c.visitor_key NOT LIKE 'm:%' OR NOT is_verification_test_account(substring(c.visitor_key FROM 3)::uuid))
-    ORDER BY c.link_id,c.click_day,c.created_at`)).rows;
-  for(const c of clicks)if(await appendCredit(q,{share_id:c.share_id,community_id:c.community_id,user_id:c.user_id,role:'spreader',basis:'qualified_click_day',source_ref:`click:${c.link_id}:${new Date(c.click_day).toISOString().slice(0,10)}`,actor_user_id:c.visitor_key.startsWith('m:')?c.visitor_key.slice(2):null}))counts.credits++;
+    ORDER BY s.share_id,c.user_id,c.click_day,c.created_at,c.link_id`)).rows;
+  for(const c of clicks)if(await appendCredit(q,{share_id:c.share_id,community_id:c.community_id,user_id:c.user_id,role:'spreader',basis:'qualified_click_day',source_ref:`click:${c.share_id}:${c.user_id}:${c.click_day_text}`,actor_user_id:c.visitor_key.startsWith('m:')?c.visitor_key.slice(2):null}))counts.credits++;
   const events=(await q.query("SELECT DISTINCT ref_id FROM shares WHERE kind='event' AND state='published' ORDER BY ref_id")).rows;
   for(const event of events)counts.credits+=await creditEventRegistrations(q,event.ref_id);
   await q.query(apply?'COMMIT':'ROLLBACK');return counts;
