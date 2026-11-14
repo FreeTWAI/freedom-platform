@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import assert from 'node:assert/strict';
 import {before,after,test} from 'node:test';
 import {randomUUID} from 'node:crypto';
@@ -35,7 +36,7 @@ before(async()=>{
   await admin.query(`CREATE ROLE ${migrator} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE ROLE ${runtime} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator}; GRANT USAGE ON SCHEMA ${schema} TO ${runtime}`);
-  created=true;await migrate(owner);
+  created=true;await setFixtureRolePasswords(admin,[migrator,runtime]);await migrate(owner);
   const template=await readFile('deploy/cloudflare/sql/20-runtime-grants.psql','utf8');
   const substitute=(sql:string)=>sql.replaceAll('SCHEMA public',`SCHEMA ${schema}`).replaceAll("'public'",`'${schema}'`).replaceAll(':"runtime"',`"${runtime}"`).replaceAll(":'runtime'",`'${runtime}'`);
   const q=await owner.connect();try{

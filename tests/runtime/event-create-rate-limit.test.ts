@@ -41,7 +41,7 @@ async function create(session = sessions[0], key = randomUUID(), body = details(
     method: 'POST', headers: { Origin: origin, Cookie: session.cookie, 'X-CSRF-Token': session.csrf,
       'Content-Type': 'application/json', 'Idempotency-Key': key }, body: JSON.stringify(body),
   });
-  return { status: response.status, data: z.object({ event_id: z.uuid().optional(), code: z.string().optional() }).parse(await response.json()) };
+  return { status: response.status, data: z.object({ event_id: z.uuid().optional(), code: z.string().optional(), detail: z.string().optional() }).parse(await response.json()) };
 }
 async function effects() {
   return (await pool.query(`SELECT (SELECT count(*)::int FROM community_events) AS events,
@@ -115,4 +115,36 @@ test('invalid timestamp offsets are validation errors without quota or command e
     const stored = (await pool.query("SELECT to_char(ends_at AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS.US') AS instant FROM community_events WHERE event_id=$1", [accepted.data.event_id])).rows[0];
     assert.equal(stored.instant, expected);
   }
+});
+
+test('UX-F-09: end-time validation errors name 結束時間 in Chinese without raw ends_at: prefix', async () => {
+  const badOrder = await create(sessions[0], randomUUID(), {
+    ...details(), starts_at: '2099-01-02T12:00:00Z', ends_at: '2099-01-02T11:00:00Z',
+  });
+  assert.equal(badOrder.status, 422);
+  assert.equal(badOrder.data.code, 'validation_failed');
+  assert.doesNotMatch(badOrder.data.detail ?? '', /ends_at\s*:/);
+  assert.match(badOrder.data.detail ?? '', /^結束時間/);
+  assert.match(badOrder.data.detail ?? '', /結束時間須晚於開始時間/);
+
+  const badFormat = await create(sessions[0], randomUUID(), {
+    ...details(), starts_at: '2099-01-02T12:00:00Z', ends_at: '2099-01-02T00:00:00+16:00',
+  });
+  assert.equal(badFormat.status, 422);
+  assert.equal(badFormat.data.code, 'validation_failed');
+  assert.doesNotMatch(badFormat.data.detail ?? '', /ends_at\s*:/);
+  assert.match(badFormat.data.detail ?? '', /^結束時間/);
+
+  const created = await create(sessions[0], randomUUID(), details());
+  assert.equal(created.status, 201);
+  const updatedRes = await app.request(origin + `/api/v1/events/${created.data.event_id}/update`, {
+    method: 'POST',
+    headers: { Origin: origin, Cookie: sessions[0].cookie, 'X-CSRF-Token': sessions[0].csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID(), 'If-Match': '"1"' },
+    body: JSON.stringify({ ...details(), starts_at: '2099-01-02T12:00:00Z', ends_at: '2099-01-02T12:00:00Z' }),
+  });
+  assert.equal(updatedRes.status, 422);
+  const updatedData = z.object({ code: z.string().optional(), detail: z.string().optional() }).parse(await updatedRes.json());
+  assert.equal(updatedData.code, 'validation_failed');
+  assert.doesNotMatch(updatedData.detail ?? '', /ends_at\s*:/);
+  assert.match(updatedData.detail ?? '', /^結束時間/);
 });

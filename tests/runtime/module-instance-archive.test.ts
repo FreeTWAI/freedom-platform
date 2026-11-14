@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { createApp } from '../../apps/platform-api/src/app.js';
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import { InstanceDetailSchema, RegistryOperationSchema } from '../../contracts/guild-launchpad/v1/module-registry.js';
 import { LaunchpadContextSchema } from '../../contracts/guild-launchpad/v1/tenant-work.js';
 import { launchApplication, advanceOperation, sweepDueOperations } from '../../modules/module-registry/service.js';
@@ -689,6 +690,7 @@ test('restricted runtime role archives and a max-1 pool alternating tenants expo
   const second = { owner: person.session, ...secondSpace, instanceId: enabled.data.instance_id as string };
   const role = `fp_archive_runtime_${process.pid}_${Date.now()}`;
   await h.admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`);
+  await setFixtureRolePasswords(h.admin, [role]);
   let runtime: Pool | undefined;
   try {
     await h.admin.query(`GRANT USAGE ON SCHEMA ${h.schema} TO ${role}`);

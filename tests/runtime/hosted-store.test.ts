@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import {createStorefrontProductPhotoLifecycle} from '../../modules/assets/storefront-product-photo.js';
 import {LIVE_PUBLIC_ORIGIN} from '../../apps/platform-api/src/routes/published-skills.js';
 import assert from 'node:assert/strict';
@@ -115,6 +116,7 @@ before(async () => {
     GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ${h.schema} TO ${role};
     REVOKE INSERT,UPDATE,DELETE ON ${h.schema}.module_definitions,${h.schema}.application_definitions,${h.schema}.guild_application_offerings,${h.schema}.tenant_capacity_policies,${h.schema}.tenant_authority_policies FROM ${role};
     GRANT UPDATE(policy_lock) ON ${h.schema}.tenant_capacity_policies,${h.schema}.tenant_authority_policies TO ${role}`);
+  await setFixtureRolePasswords(h.admin, [role]);
   const runtimeUrl = new URL(url); runtimeUrl.username = role; runtimeUrl.password = '';
   runtime = new Pool({ connectionString: runtimeUrl.toString(), options: `-c search_path=${h.schema} -c statement_timeout=20000`, max: 12 });
   app = createApp(runtime, h.origin, 'local', { guildLaunchpadEnabled: true });

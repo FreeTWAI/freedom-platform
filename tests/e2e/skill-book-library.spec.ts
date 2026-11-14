@@ -602,12 +602,12 @@ for(const width of [1280,390])test(`skill introductions defer unvisited content 
   await expect(practice.getByRole('link',{name:'完整頁面 ↗',exact:true})).toHaveAttribute('href','/development/skills/supplier-client');
   await practice.locator('summary').click();await expect(practice).not.toHaveAttribute('open','');
   const content=await modal.locator(':scope > .stack').elementHandle();
-  await expect(page.locator('.skill-share-dialog')).toHaveCount(0);
+  await expect(page.locator('.skill-share-dialog[open]')).toHaveCount(0);
   await expect.poll(()=>reads).toBe(1);
   await page.keyboard.press('Escape');await expect(modal).not.toBeVisible();await expect(trigger).toBeFocused();
   releaseFirst();
   await expect.poll(()=>content!.evaluate(element=>element.isConnected)).toBe(true);
-  await expect(page.locator('.skill-share-dialog')).toHaveCount(0);
+  await expect(page.locator('.skill-share-dialog[open]')).toHaveCount(0);
   await trigger.press('Enter');await expect(modal).toBeVisible();
   await expect(modal.locator('.skill-intro-usage-notes .skill-intro-purpose')).toHaveText('Fresh reopened introduction');
   await expect(modal).not.toContainText('Late closed introduction');
@@ -615,7 +615,7 @@ for(const width of [1280,390])test(`skill introductions defer unvisited content 
   expect(await content!.evaluate(element=>element===element.closest('dialog')?.querySelector(':scope > .stack'))).toBe(true);
   const shareTrigger=modal.getByRole('button',{name:'分享技能',exact:true});
   await shareTrigger.click();
-  const nested=page.locator('.skill-share-dialog');await expect(nested).toBeVisible();
+  const nested=page.locator('.skill-share-dialog[open]');await expect(nested).toBeVisible();
   await nested.locator('.share-intros > summary').click();
   await expect(nested).toContainText('Synthetic share introduction');
   await page.keyboard.press('Escape');await expect(nested).toHaveCount(0);await expect(modal).toBeVisible();await expect(shareTrigger).toBeFocused();

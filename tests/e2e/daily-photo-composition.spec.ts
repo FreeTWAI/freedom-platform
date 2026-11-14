@@ -51,8 +51,11 @@ async function textBounds(owner:Locator){
         const range=document.createRange();range.selectNodeContents(text);
         for(const rect of range.getClientRects()){
           if(!rect.width||!rect.height)continue;
-          const own=target.getBoundingClientRect();
-          if(rect.left<own.left-1||rect.right>own.right+1||rect.top<own.top-1||rect.bottom>own.bottom+1)bad.push(`${target.className}: text outside its control`);
+          // The shutter label is an inline line box; glyph ink can extend past
+          // that box while remaining fully inside the actual button.
+          const control=target.matches('.fw-arcade-shutter small')?target.closest<HTMLElement>('.fw-arcade-shutter')!:target;
+          const own=control.getBoundingClientRect();
+          if(rect.left<own.left-1||rect.right>own.right+1||rect.top<own.top-1||rect.bottom>own.bottom+1)bad.push(`${target.tagName}.${target.className}: ${JSON.stringify(text.textContent)} text outside its control: text ${JSON.stringify(rect.toJSON())}, control ${JSON.stringify(own.toJSON())}`);
           let parent:HTMLElement|null=target;
           while(parent){
             const style=getComputedStyle(parent),clip=/(hidden|clip|scroll|auto)/.test(`${style.overflowX} ${style.overflowY}`),p=parent.getBoundingClientRect();

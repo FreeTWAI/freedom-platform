@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import {applyConfirmedPaymentHeld,cancelPaidOrder} from '../../modules/agent-commerce/checkout/payments.js';
 import {seedStandingAgreement} from './drop-ship-fixture.js';
 import {seedSelfShipment} from './self-ship-fixture.js';
@@ -110,6 +111,7 @@ before(async () => {
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator};
     GRANT USAGE ON SCHEMA ${schema} TO ${runtimeRole}`);
   created = true;
+  await setFixtureRolePasswords(admin, [migrator, runtimeRole]);
   await migrate(owner);
   await ensureSyntheticModuleTables(owner);
   const template = await readFile(new URL('../../deploy/cloudflare/sql/20-runtime-grants.psql', import.meta.url), 'utf8');

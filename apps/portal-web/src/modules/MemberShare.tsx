@@ -15,12 +15,9 @@ type Preview={userId:string;nickname:string;guild:string|null;capabilities:strin
 type Local={includeAvatar:boolean;design:CardDesign;headline:string;links:DraftLink[];showProfileLinks:boolean;prefs:Record<string,boolean>;profileLinks:ProfileItem[];sharePath:string|null;enabled:boolean};
 type SaveKind='idle'|'dirty'|'saving'|'saved'|'error'|'conflict';
 type Explicit={enabled:boolean;rotate:boolean};
-const control=/[\u0000-\u001f\u007f]/;
 const chars=(value:string)=>Array.from(value).length;
 const savedCopy=(enabled:boolean)=>enabled?'已自動儲存，分享頁就是這個樣子。':'已自動儲存。建立分享連結後，朋友看到的就是這個樣子。';
-const HEADLINE_ACTION='請先修正一句話介紹，再按一次。';
 const blank:Local={includeAvatar:false,design:'calm',headline:'',links:[],showProfileLinks:true,prefs:{},profileLinks:[],sharePath:null,enabled:false};
-function headlineIssue(value:string){if(control.test(value))return '一句話介紹請使用單行文字。';if(chars(value.trim())>60)return '一句話介紹最多 60 個字。';return '';}
 function versionNum(value:number|string|null|undefined){if(value===null||value===undefined||value==='')return null;const n=Number(value);return Number.isFinite(n)?n:null;}
 function signature(state:Local){
   const prefs=Object.keys(state.prefs).sort().map(key=>[key,state.prefs[key]]);
@@ -39,18 +36,25 @@ function featuredNames(member:PreviewMember,labels:Record<string,string>){
   return (member.featured_capabilities??available).filter(id=>available.includes(id)).slice(0,3).map(id=>id.startsWith('custom:')?id.slice(7):labels[id]??id);
 }
 
-export function MemberShare({client}:{client:PortalClient}){
-  const [local,setLocal]=useState<Local>(blank),[ready,setReady]=useState(false),[draftLabel,setDraftLabel]=useState(''),[draftUrl,setDraftUrl]=useState(''),[editing,setEditing]=useState<DraftLink|null>(null),[importOpen,setImportOpen]=useState(false),[social,setSocial]=useState<SocialItem[]|null>(null),[socialError,setSocialError]=useState(''),[socialLoading,setSocialLoading]=useState(false),[preview,setPreview]=useState<Preview|null>(null),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[headlineError,setHeadlineError]=useState(''),[status,setStatus]=useState<{kind:SaveKind;message:string}>({kind:'idle',message:''}),[actionBusy,setActionBusy]=useState(false);
-  const profileGeneration=useRef(0),fetchGen=useRef(0),localRef=useRef(blank),serverRef=useRef<{enabled:boolean;version:number|null}>({enabled:false,version:null}),editGen=useRef(0),lastSavedSig=useRef(''),explicitRef=useRef<Explicit|null>(null),running=useRef(false),pumpAgain=useRef(false),refreshSerial=useRef(0),debounce=useRef(0),unsavedRef=useRef(false);
+export function MemberShare({client,onEditHeadline}:{client:PortalClient;onEditHeadline?:()=>void}){
+  const [local,setLocal]=useState<Local>(blank),[ready,setReady]=useState(false),[draftLabel,setDraftLabel]=useState(''),[draftUrl,setDraftUrl]=useState(''),[editing,setEditing]=useState<DraftLink|null>(null),[importOpen,setImportOpen]=useState(false),[social,setSocial]=useState<SocialItem[]|null>(null),[socialError,setSocialError]=useState(''),[socialLoading,setSocialLoading]=useState(false),[preview,setPreview]=useState<Preview|null>(null),[publicBio,setPublicBio]=useState<{hasRow:boolean;text:string}|null>(null),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[status,setStatus]=useState<{kind:SaveKind;message:string}>({kind:'idle',message:''}),[actionBusy,setActionBusy]=useState(false);
+  const profileGeneration=useRef(0),fetchGen=useRef(0),localRef=useRef(blank),serverRef=useRef<{enabled:boolean;version:number|null}>({enabled:false,version:null}),editGen=useRef(0),lastSavedSig=useRef(''),explicitRef=useRef<Explicit|null>(null),running=useRef(false),pumpAgain=useRef(false),refreshSerial=useRef(0),debounce=useRef(0),unsavedRef=useRef(false),readyRef=useRef(false),publicBioRef=useRef<{hasRow:boolean;text:string}|null>(null),pendingBioSyncRef=useRef(false);
   // The singleton client outlives this editor; queued edits must never adopt a new session.
   const mounted=useRef(false),lifetime=useRef(0),ownerGeneration=useRef(client.sessionGeneration);
   const current=(scope:number)=>mounted.current&&lifetime.current===scope&&client.sessionGeneration===ownerGeneration.current;
   const refreshRef=useRef<()=>void>(()=>{});
-  unsavedRef.current=status.kind==='dirty'||status.kind==='saving'||status.kind==='error'||Boolean(headlineError);
+  unsavedRef.current=status.kind==='dirty'||status.kind==='saving'||status.kind==='error';
   function apply(data:ShareSettings){
     window.clearTimeout(debounce.current);
-    const next:Local={includeAvatar:data.include_avatar,design:data.design??'calm',headline:data.headline??'',links:(data.links??[]).map(link=>({...link,id:crypto.randomUUID()})),showProfileLinks:data.show_profile_links??true,prefs:data.profile_link_prefs??{},profileLinks:data.profile_links??[],sharePath:data.share_path,enabled:data.enabled};
-    localRef.current=next;serverRef.current={enabled:data.enabled,version:versionNum(data.aggregate_version)};lastSavedSig.current=signature(next);editGen.current+=1;setLocal(next);setHeadlineError('');setEditing(null);setReady(true);
+    const version=versionNum(data.aggregate_version);
+    const bioText=publicBioRef.current?.hasRow?publicBioRef.current.text.trim():'';
+    const initialHeadline=version===null&&publicBioRef.current?.hasRow&&chars(bioText)<=60?bioText:(data.headline??'');
+    const next:Local={includeAvatar:data.include_avatar,design:data.design??'calm',headline:initialHeadline,links:(data.links??[]).map(link=>({...link,id:crypto.randomUUID()})),showProfileLinks:data.show_profile_links??true,prefs:data.profile_link_prefs??{},profileLinks:data.profile_links??[],sharePath:data.share_path,enabled:data.enabled};
+    localRef.current=next;serverRef.current={enabled:data.enabled,version};lastSavedSig.current=signature(next);editGen.current+=1;readyRef.current=true;setLocal(next);setEditing(null);setReady(true);
+    if(pendingBioSyncRef.current){
+      pendingBioSyncRef.current=false;
+      if(version!==null&&publicBioRef.current?.hasRow&&chars(bioText)<=60&&bioText!==next.headline.trim())assign({headline:bioText},'now');
+    }
   }
   async function reloadConflict(scope:number){
     const data=await client.get<ShareSettings>('/me/member-card-share');
@@ -62,13 +66,6 @@ export function MemberShare({client}:{client:PortalClient}){
     for(;;){
       if(!current(scope))return;
       pumpAgain.current=false;
-      const issue=headlineIssue(localRef.current.headline);
-      if(issue){
-        const dropped=explicitRef.current;explicitRef.current=null;
-        setHeadlineError(issue);setActionBusy(false);
-        if(dropped)setStatus({kind:'dirty',message:HEADLINE_ACTION});
-        break;
-      }
       const job=explicitRef.current;explicitRef.current=null;
       const sig=signature(localRef.current);
       if(!job&&sig===lastSavedSig.current){setStatus({kind:'saved',message:savedCopy(localRef.current.enabled)});break;}
@@ -112,20 +109,18 @@ export function MemberShare({client}:{client:PortalClient}){
   }
   function assign(partial:Partial<Local>,when:'now'|'debounce'|'none'){
     const previous=localRef.current,next={...previous,...partial};
-    localRef.current=next;setLocal(next);setHeadlineError(headlineIssue(next.headline));
+    localRef.current=next;setLocal(next);
     if(signature(next)===signature(previous))return;
     editGen.current+=1;
     // A match with the previous response is not saved while that request, or a queued one, may store a different card.
     if(signature(next)===lastSavedSig.current&&!running.current&&!pumpAgain.current&&!explicitRef.current){window.clearTimeout(debounce.current);setStatus({kind:'saved',message:savedCopy(next.enabled)});return;}
     setStatus({kind:'dirty',message:'有變更尚未儲存'});
-    if(headlineIssue(next.headline)||when==='none'){window.clearTimeout(debounce.current);return;}
-    if(when==='debounce'){window.clearTimeout(debounce.current);debounce.current=window.setTimeout(()=>{if(!headlineIssue(localRef.current.headline))kick();},800);return;}
+    if(when==='none'){window.clearTimeout(debounce.current);return;}
+    if(when==='debounce'){window.clearTimeout(debounce.current);debounce.current=window.setTimeout(()=>kick(),800);return;}
     window.clearTimeout(debounce.current);kick();
   }
   function runExplicit(job:Explicit){
     window.clearTimeout(debounce.current);
-    const issue=headlineIssue(localRef.current.headline);
-    if(issue){setHeadlineError(issue);return;}
     explicitRef.current=job;setActionBusy(true);kick();
   }
   async function refreshProfile(){
@@ -136,7 +131,7 @@ export function MemberShare({client}:{client:PortalClient}){
       const got=versionNum(data.aggregate_version),current=serverRef.current.version;
       if(current!==null&&(got===null||got<current))return;
       // lastSavedSig still names the previous response while a save is in flight, so a matching edit is not clean.
-      const clean=!running.current&&signature(localRef.current)===lastSavedSig.current&&!headlineIssue(localRef.current.headline);
+      const clean=!running.current&&signature(localRef.current)===lastSavedSig.current;
       if(!ready){apply(data);setStatus({kind:'idle',message:''});return;}
       if(got!==current){if(clean){apply(data);setStatus({kind:'idle',message:''});}return;}
       refreshSerial.current+=1;
@@ -151,16 +146,36 @@ export function MemberShare({client}:{client:PortalClient}){
   }
   refreshRef.current=()=>{void refreshProfile();};
   useEffect(()=>{const warn=(event:BeforeUnloadEvent)=>{if(!unsavedRef.current)return;event.preventDefault();event.returnValue='';};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
-  async function loadPreview(){const profile=++profileGeneration.current;try{
+  async function loadPreview(syncHeadline=false){const profile=++profileGeneration.current;
+      void client.get<{bio?:string|null;aggregate_version?:string|null}>('/me/profile-publication').then(pub=>{
+        if(profile!==profileGeneration.current)return;
+        const nextBio={hasRow:pub?.aggregate_version!=null,text:pub?.bio??''};
+        publicBioRef.current=nextBio;
+        setPublicBio(nextBio);
+        if(!nextBio.hasRow)return;
+        const nextHeadline=nextBio.text.trim();
+        if(chars(nextHeadline)>60)return;
+        if(!readyRef.current){if(syncHeadline)pendingBioSyncRef.current=true;return;}
+        if(serverRef.current.version===null){
+          if(!running.current&&!unsavedRef.current&&nextHeadline!==localRef.current.headline.trim()){
+            const next={...localRef.current,headline:nextHeadline};
+            localRef.current=next;lastSavedSig.current=signature(next);setLocal(next);
+          }
+        }else if(syncHeadline&&nextHeadline!==localRef.current.headline.trim()){
+          assign({headline:nextHeadline},'now');
+        }
+      }).catch(()=>{});
+      try{
       const account=await client.get<{user_id:string;nickname:string;avatar:{avatar_url:string|null}}>('/me/account');
       const [member,labels]=await Promise.all([client.get<PreviewMember>(`/members/${account.user_id}`),client.get<{capability_categories:{options:{id:string;label:string}[]}[]}>('/assessment-definition').then(definition=>Object.fromEntries(definition.capability_categories.flatMap(group=>group.options.map(option=>[option.id,option.label])))).catch(()=>({} as Record<string,string>))]);
       if(profile!==profileGeneration.current)return;setPreview({userId:account.user_id,nickname:member.nickname||account.nickname,guild:member.primary_guild?.name??null,capabilities:featuredNames(member,labels),avatarUrl:member.avatar_url??account.avatar.avatar_url});
     }catch{if(profile===profileGeneration.current)setPreview(null);}}
-  useEffect(()=>{mounted.current=true;lifetime.current++;setLoadError('');void refreshProfile();
-    void loadPreview();
-    const refresh=()=>{refreshRef.current();void loadPreview();};
-    window.addEventListener('focus',refresh);window.addEventListener('freedom-profile-updated',refresh);window.addEventListener('freedom-social-links-updated',refresh);
-    return()=>{mounted.current=false;lifetime.current++;explicitRef.current=null;pumpAgain.current=false;running.current=false;profileGeneration.current++;fetchGen.current++;window.clearTimeout(debounce.current);window.removeEventListener('focus',refresh);window.removeEventListener('freedom-profile-updated',refresh);window.removeEventListener('freedom-social-links-updated',refresh);};},[client]);
+  useEffect(()=>{mounted.current=true;lifetime.current++;readyRef.current=false;publicBioRef.current=null;pendingBioSyncRef.current=false;setLoadError('');setPublicBio(null);void refreshProfile();
+    void loadPreview(false);
+    const refresh=()=>{refreshRef.current();void loadPreview(false);};
+    const profileUpdated=()=>{refreshRef.current();void loadPreview(true);};
+    window.addEventListener('focus',refresh);window.addEventListener('freedom-profile-updated',profileUpdated);window.addEventListener('freedom-social-links-updated',refresh);
+    return()=>{mounted.current=false;lifetime.current++;readyRef.current=false;publicBioRef.current=null;pendingBioSyncRef.current=false;explicitRef.current=null;pumpAgain.current=false;running.current=false;profileGeneration.current++;fetchGen.current++;window.clearTimeout(debounce.current);window.removeEventListener('focus',refresh);window.removeEventListener('freedom-profile-updated',profileUpdated);window.removeEventListener('freedom-social-links-updated',refresh);};},[client]);
   function commit(label:string,url:string,ignore?:string){const parsed=parseCardLink(label,url);if(!parsed.ok){setNotice(parsed.message);return null;}if(localRef.current.links.some(link=>link.url===parsed.link.url&&link.id!==ignore)){setNotice('這個連結已經在名片上。');return null;}setNotice('');return parsed.link;}
   function addLink(event:FormEvent){event.preventDefault();if(localRef.current.links.length>=8){setNotice('名片連結最多 8 個。');return;}const link=commit(draftLabel,draftUrl);if(!link)return;assign({links:[...localRef.current.links,{...link,id:crypto.randomUUID()}]},'now');setDraftLabel('');setDraftUrl('');}
   function move(index:number,delta:number){const next=index+delta,links=localRef.current.links;if(next<0||next>=links.length)return;const copy=[...links];const [item]=copy.splice(index,1);copy.splice(next,0,item!);assign({links:copy},'now');}
@@ -172,17 +187,16 @@ export function MemberShare({client}:{client:PortalClient}){
     const link=commit(item.label,item.url);if(!link)return;assign({links:[...localRef.current.links,{...link,id:crypto.randomUUID()}]},'now');
   }
   const url=local.enabled&&local.sharePath?new URL(local.sharePath,window.location.origin).href:'';
-  const pending=(status.kind==='dirty'||status.kind==='saving')&&!headlineError;
-  const blocked=pending||Boolean(headlineError)||status.kind==='error';
+  const displayHeadline=publicBio?(publicBio.hasRow?publicBio.text.trim():(publicBio.text.trim()||local.headline)):local.headline;
+  const pending=status.kind==='dirty'||status.kind==='saving';
+  const blocked=pending||status.kind==='error';
   return <section className="card stack member-share-settings" aria-label="分享我的工坊名片"><h2>分享我的工坊名片</h2><p>朋友打開連結就能看到你選的樣式、一句話介紹、連結，以及你設為「平台公開」的聯絡方式和社群連結（可逐項隱藏），並從名片加入自由工坊。所有變更都會自動儲存。</p>
     {loadError&&<div className="banner banner-error" role="alert"><p>{loadError}</p><button type="button" className="btn btn-ghost" onClick={()=>void client.get<ShareSettings>('/me/member-card-share').then(apply).catch(cause=>setLoadError(cause instanceof Error?cause.message:'分享設定暫時無法載入。'))}>重讀分享設定</button></div>}
     {!ready&&!loadError&&<p role="status">正在載入分享設定…</p>}
     {ready&&<div className="member-share-layout"><div className="member-share-fields">
       <label className="checkbox-row"><input type="checkbox" checked={local.includeAvatar} onChange={event=>assign({includeAvatar:event.target.checked},'now')}/>在分享頁顯示我的頭像</label>
       <div className="ecard-design-picker" role="group" aria-label="名片樣式">{cardDesigns.map(([key,name])=><button type="button" className="ecard-design-option" key={key} aria-pressed={local.design===key} onClick={()=>assign({design:key},'now')}><span className={`ecard-swatch ecard-swatch-${key}`} aria-hidden="true"/>{name}</button>)}</div>
-      <label className="field">一句話介紹<input value={local.headline} onChange={event=>assign({headline:event.target.value},'debounce')} onBlur={()=>{window.clearTimeout(debounce.current);if(!headlineIssue(localRef.current.headline)&&(running.current||signature(localRef.current)!==lastSavedSig.current))kick();}} placeholder="例如：做開源的人"/></label>
-      <p className="field-hint">最多 60 個字。留白就只顯示公會和專長。</p>
-      {headlineError&&<p role="alert">{headlineError}</p>}
+      <div className="field"><span>一句話介紹</span><p>{displayHeadline||'尚未設定'}</p><a className="btn btn-secondary btn-small" href="#me/settings?view=page" onClick={onEditHeadline}>到公開個人頁編輯</a></div>
       <div className="ecard-link-editor"><h3>名片連結</h3><p className="field-hint">最多 8 個。按鈕會顯示名稱，下面附上網址的網域。</p>
         <ul className="ecard-link-list">{local.links.map((link,index)=><li key={link.id}>{editing?.id===link.id?<form className="ecard-link-draft" onSubmit={finishEdit}><label className="field">連結名稱<input required maxLength={30} value={editing.label} onChange={event=>setEditing({...editing,label:event.target.value})}/></label><label className="field">連結網址<input type="url" required maxLength={300} value={editing.url} onChange={event=>setEditing({...editing,url:event.target.value})}/></label><div className="ecard-link-row"><button className="ecard-icon-btn">完成編輯</button><button type="button" className="ecard-icon-btn" onClick={()=>setEditing(null)}>取消</button></div></form>:<div className="ecard-link-row"><div className="ecard-link-meta"><strong>{link.label}</strong><span>{link.url}</span></div><button type="button" className="ecard-icon-btn" disabled={index===0} aria-label={`上移第 ${index+1} 個連結 ${link.label}`} onClick={()=>move(index,-1)}>上移</button><button type="button" className="ecard-icon-btn" disabled={index===local.links.length-1} aria-label={`下移第 ${index+1} 個連結 ${link.label}`} onClick={()=>move(index,1)}>下移</button><button type="button" className="ecard-icon-btn" disabled={editing!==null} aria-label={`編輯第 ${index+1} 個連結 ${link.label}`} onClick={()=>setEditing({...link})}>編輯</button><button type="button" className="ecard-icon-btn" aria-label={`移除第 ${index+1} 個連結 ${link.label}`} onClick={()=>assign({links:localRef.current.links.filter(item=>item.id!==link.id)},'now')}>移除</button></div>}</li>)}</ul>
         {local.links.length<8&&editing===null&&<form className="ecard-link-draft" onSubmit={addLink}><label className="field">連結名稱<input maxLength={30} value={draftLabel} onChange={event=>setDraftLabel(event.target.value)}/></label><label className="field">連結網址<input type="url" inputMode="url" maxLength={300} value={draftUrl} onChange={event=>setDraftUrl(event.target.value)} placeholder="https://"/></label><button type="submit" className="btn btn-ghost">加入連結</button></form>}
@@ -195,7 +209,7 @@ export function MemberShare({client}:{client:PortalClient}){
         {local.profileLinks.length===0?<p>你還沒有設為「平台公開」的聯絡方式或社群連結。在這頁上方的聯絡方式或社群連結設定公開對象後，就會出現在這裡。</p>:<ul className="ecard-profile-list">{local.profileLinks.map(item=><li className="ecard-profile-row" key={item.source}><BrandIcon platform={item.platform}/><div className="ecard-profile-copy"><strong>{item.label}</strong>{item.handle&&<span>{item.handle}</span>}</div><label className="checkbox-row"><input type="checkbox" checked={item.shown} aria-label={`顯示 ${item.label} 在名片上`} onChange={event=>{const shown=event.target.checked;assign({prefs:{...localRef.current.prefs,[item.source]:shown},profileLinks:localRef.current.profileLinks.map(row=>row.source===item.source?{...row,shown}:row)},'now');}}/>顯示在名片上</label>{item.source==='contact:email'&&<p className="field-hint">Email 是你的登入帳號，預設不放上名片。</p>}</li>)}</ul>}
       </section>
     </div>
-    <div className="member-share-preview"><aside className="ecard-preview" aria-label="名片預覽"><div className="ecard-preview-head"><h3>名片預覽</h3><p className="ecard-save-status" role="status">{status.message}{status.kind==='error'&&<button type="button" className="btn btn-ghost" onClick={()=>{setStatus({kind:'dirty',message:'有變更尚未儲存'});kick();}}>重試</button>}</p></div><div className="ecard-preview-stage" data-design={local.design}><MemberCardDownload shareUrl={url} disabled={blocked||actionBusy||!preview}><MemberECard design={local.design} nickname={preview?.nickname||'會員'} headline={local.headline} guildName={preview?.guild??null} capabilities={preview?.capabilities??[]} avatarUrl={local.includeAvatar?preview?.avatarUrl??null:null} links={local.links} profileLinks={visibleProfile(local)} heading="p" shareUrl={url}/></MemberCardDownload></div></aside>
+    <div className="member-share-preview"><aside className="ecard-preview" aria-label="名片預覽"><div className="ecard-preview-head"><h3>名片預覽</h3><p className="ecard-save-status" role="status">{status.message}{status.kind==='error'&&<button type="button" className="btn btn-ghost" onClick={()=>{setStatus({kind:'dirty',message:'有變更尚未儲存'});kick();}}>重試</button>}</p></div><div className="ecard-preview-stage" data-design={local.design}><MemberCardDownload shareUrl={url} disabled={blocked||actionBusy||!preview}><MemberECard design={local.design} nickname={preview?.nickname||'會員'} headline={displayHeadline} guildName={preview?.guild??null} capabilities={preview?.capabilities??[]} avatarUrl={local.includeAvatar?preview?.avatarUrl??null:null} links={local.links} profileLinks={visibleProfile(local)} heading="p" shareUrl={url}/></MemberCardDownload></div></aside>
       {local.enabled&&url?<MemberCardShareActions client={client} target={preview?.userId} title={preview?.nickname?`${preview.nickname}的工坊名片`:'工坊名片'} url={url} pending={pending} blocked={blocked}/>:<div className="actions"><button type="button" className="btn btn-primary" disabled={actionBusy} onClick={()=>runExplicit({enabled:true,rotate:false})}>建立分享連結</button></div>}
       {local.enabled&&url&&<div className="actions"><button type="button" className="btn btn-ghost" disabled={actionBusy} onClick={()=>runExplicit({enabled:true,rotate:true})}>更新連結</button><button type="button" className="btn btn-ghost" disabled={actionBusy} onClick={()=>runExplicit({enabled:false,rotate:false})}>停用分享</button></div>}
     </div></div>}

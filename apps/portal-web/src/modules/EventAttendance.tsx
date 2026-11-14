@@ -140,9 +140,6 @@ function Content({client, eventId, userId, canView = true, onBlockedChange, isOw
   const blocked = loading || busy || unknown || Boolean(error);
   return <section className="event-attendance" aria-label="會員到場紀錄">
     <h3>會員到場紀錄</h3>
-    <p>只有目前的主辦者可查看及逐人記錄。報名不等於到場；「尚未確認」也不代表缺席。</p>
-    <p className="field-hint">這裡記錄主辦確認的時間，不是實際抵達時間。平台尚未提供完成認定或發獎功能，到場紀錄不代表已完成或已發獎。</p>
-    <p className="field-hint">公開報名訪客仍請看「報名名單」；這裡只處理會員，不會依姓名或信箱合併身份。</p>
     {notice && <p role="status">{notice}</p>}
     {error && <p role="alert" className="banner banner-error">{error}</p>}
     {loading && <p role="status">正在讀取到場紀錄…</p>}
@@ -152,6 +149,12 @@ function Content({client, eventId, userId, canView = true, onBlockedChange, isOw
       <button type="button" className="btn btn-ghost" disabled={!canView || busy || loading} onClick={() => void load()}>重新讀取到場紀錄</button>
     </div>
     {unknown && <p className="field-hint">原會員、內容、操作編號與版本仍保留。確認前不能送出另一筆操作或離開本頁；持續無法確認時請聯絡平台管理員。</p>}
+    <p className="field-hint">報名不等於到場；「尚未確認」也不代表缺席。</p>
+    <details className="event-attendance-help">
+      <summary>說明</summary>
+      <p className="field-hint">只有目前的主辦者可查看及逐人記錄。這裡記錄主辦確認的時間，不是實際抵達時間。平台尚未提供完成認定或發獎功能，到場紀錄不代表已完成或已發獎。</p>
+      <p className="field-hint">公開報名訪客仍請看「報名名單」；這裡只處理會員，不會依姓名或信箱合併身份。</p>
+    </details>
     {canView && page && <>
       {page.items.length === 0 ? <p>這一頁沒有目前報名或曾有到場紀錄的會員。</p> : <ul className="event-attendance-list">{page.items.map(row => <li key={row.member_ref}>
         <strong>{row.nickname}</strong>

@@ -4,6 +4,14 @@ html[data-device-offline=true]{--chat-safe-top:0px}
 .app-install-trigger svg{flex:none}
 .login-entry-tools{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
 .login-entry-tools .login-language-row{margin:0;width:auto;flex:1;min-width:0}
+.login-entry-tools .language-picker label>span{white-space:nowrap;flex:none}
+.login-landing-cta{display:flex;flex-wrap:wrap;gap:10px}
+.login-landing-cta .btn-primary{min-height:48px}
+.login-card form>.btn{width:100%;min-height:48px}
+.login-more{grid-column:1/-1;display:grid;gap:12px}
+.login-more>summary{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 16px;border:1px solid var(--line);border-radius:10px;background:var(--bg-elev);cursor:pointer;justify-self:start;font-weight:600}
+.login-more-body{display:grid;gap:16px}
+.login-more-tools{display:flex;justify-content:flex-start}
 .app-install-dialog{width:min(440px,calc(100vw - 24px));max-height:calc(100dvh - 24px - var(--app-safe-top) - var(--app-safe-bottom));padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--bg-elev);color:var(--ink);overflow:auto;overscroll-behavior:contain}
 .app-install-dialog[open]{display:grid;gap:14px}
 .app-install-dialog::backdrop{background:#11182788}
@@ -27,9 +35,15 @@ html[data-device-offline=true]{--chat-safe-top:0px}
   html .messages-hub .messages-thread[data-chat-open=true] .messages-refresh{top:calc(10px + var(--chat-safe-top));right:calc(10px + var(--app-safe-right))}
   html .messages-hub .messages-thread[data-chat-open=true]>.messages-compose{padding-left:max(10px,var(--app-safe-left));padding-right:max(10px,var(--app-safe-right));padding-bottom:max(12px,var(--app-safe-bottom))}
 }
+@media(max-width:860px){
+  .login-more{order:3;grid-column:auto}
+  .login-landing-cta .btn-primary{width:100%}
+}
 @media(max-width:420px){
   /* Leave room for different system-font wrapping while keeping artwork and 44px controls. */
   .login-layout:has(.login-entry-tools){row-gap:4px}
-  /* The select retains its accessible Language label while both entry tools fit one row. */
-  .login-entry-tools .language-picker label>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+}
+@media(max-width:360px){
+  /* The select retains its accessible 語言 label while both entry tools fit one row without clipping. */
+  .login-entry-tools .language-picker label>span{display:none}
 }

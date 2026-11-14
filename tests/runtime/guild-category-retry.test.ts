@@ -184,21 +184,21 @@ test('GuildCard separates workspace navigation, introduction and optional member
   const tree=GuildCard({guild:{...guild,membership:active?{...guild.membership,state:'active'}:null,skill_books:[],purpose:'Synthetic',first_step:'Read',is_primary:false},client:{sessionGeneration:1},busy:false,onPrimary:()=>calls.push('primary'),onMembership:()=>calls.push('membership'),onSecondary:()=>calls.push('secondary'),launchpadEnabled:enabled,onLaunchpad:()=>calls.push('workspace')});
   const elements=nodes(tree),buttons=elements.filter(n=>n.type==='button');
   const settings=elements.filter(n=>n.type==='details'&&n.props.className==='guild-membership-settings');
-  assert.equal(settings.length,active?1:0);
+  assert.equal(settings.length,1);
+  assert.equal(settings[0].props.open,undefined,'settings begin collapsed');
   if(active){
-   assert.equal(settings[0].props.open,undefined,'settings begin collapsed');
    const labels=nodes(settings[0]).filter(n=>n.type==='button').map(n=>text(n.props.children));
    assert.ok(labels.includes('設為主要公會'));assert.ok(labels.includes('退出Synthetic guild'));
    assert.ok(buttons.some(n=>text(n.props.children)==='查看公會介紹'));
   }else {
    const join=buttons.find(n=>text(n.props.children)==='加入Synthetic guild');
-   assert.match(join.props.className,/\bbtn-primary\b/);
-   assert.equal(buttons.filter(n=>/\bbtn-primary\b/.test(n.props.className??'')).length,1,'join is the only primary action before membership');
+   assert.match(join.props.className,/\bbtn-secondary\b/);
+   assert.equal(buttons.filter(n=>/\bbtn-primary\b/.test(n.props.className??'')).length,0,'unjoined card is secondary unless designated as primaryJoin');
   }
   const workspace=buttons.find(n=>text(n.props.children)===(active?'進入公會工作區':'預覽公會工作區'));
   assert.equal(Boolean(workspace),enabled);
   assert.deepEqual(calls,[],'rendering and discovery do not join or change preferences');
-  if(workspace){assert.match(workspace.props.className,active?/\bbtn-primary\b/:/\bbtn-ghost\b/);workspace.props.onClick();assert.deepEqual(calls,['workspace']);}
+  if(workspace){assert.match(workspace.props.className,active?/\bbtn-secondary\b/:/\bbtn-ghost\b/);workspace.props.onClick();assert.deepEqual(calls,['workspace']);}
  }
 });
 
@@ -235,9 +235,9 @@ test('GuildCard and PositioningPanels tolerate partial directory and onboarding 
  const partialGuild={guild_key:'test_guild',name:'測試公會',entry_questions:{questions:[{id:'q1',prompt:'想練習什麼？',options:[{id:'a',label:'練習寫作'},{id:'b',label:'練習設計'}]}]}};
  const tree=GuildCard({guild:partialGuild as any,client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{}});
  const elements=nodes(tree),buttons=elements.filter(n=>n.type==='button');
- assert.ok(buttons.some(n=>[n.props.children].flat().join('')==='公會技能書庫 · 0'));
+ assert.ok(buttons.some(n=>[n.props.children].flat().join('')==='公會技能書庫 · 0 個原作資源'));
  assert.ok(elements.some(n=>n.type==='p'&&text(n.props.children)==='技能書整理中'));
- const booksLauncher=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,useState:(value:unknown)=>[value===null?'books':value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null,GuildMembers:()=>null});
+ const booksLauncher=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,distinctOriginalRepoCount,useState:(value:unknown)=>[value===null?'books':value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null,GuildMembers:()=>null});
  const openBooks=nodes(booksLauncher({guild:partialGuild as any,client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{}}));
  assert.ok(openBooks.some(n=>n.props?.className==='guild-library-books'&&text(n.props.children).includes('技能書整理中')));
  const filterCode=stripTypeScriptTypes(extract('  const search=query.trim().toLocaleLowerCase();','  const chosenKeys='));

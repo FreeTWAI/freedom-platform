@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 import {randomUUID} from 'node:crypto';
 import {Pool,type PoolClient} from 'pg';
 import {createApp} from '../../apps/platform-api/src/app.js';
@@ -18,6 +19,7 @@ export async function checkoutHarness(prefix:string,options:{publicSchema?:boole
   await h.admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     GRANT USAGE ON SCHEMA ${h.schema} TO ${role}; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${h.schema} TO ${role};
     GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ${h.schema} TO ${role}; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ${h.schema} TO ${role}`);
+  await setFixtureRolePasswords(h.admin,[role]);
   const runtimeUrl=new URL(url);runtimeUrl.username=role;runtimeUrl.password='';
   const runtime=new Pool({connectionString:runtimeUrl.toString(),options:`-c search_path=${h.schema} -c statement_timeout=20000`,max:12});
   const app=createApp(runtime,h.origin,'local',{guildLaunchpadEnabled:true,hostedReservationsEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY});

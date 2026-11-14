@@ -1,5 +1,5 @@
 import {openAccountSettings} from './navigation.js';
-import { test,expect } from './fixtures.js';
+import { test,expect } from './member-feature-fixture.js';
 import { tokenHash } from '../../modules/identity-membership/service.js';
 
 test('account send error and one-use confirmation work on desktop and phone',async({page,e2eAuthPool})=>{

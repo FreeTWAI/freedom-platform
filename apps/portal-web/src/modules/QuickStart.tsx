@@ -14,15 +14,23 @@ const recoveryMessages = {
   ko: {checking:'가입 상태 확인 중…', incomplete:'아직 가입이 완료되지 않았습니다. 선택한 길드와 답변은 유지됩니다. “길드에 가입하고 시작하기”를 눌러 계속하세요.', failed:'가입 상태를 확인하지 못했습니다. 다시 시도하세요. 선택한 길드와 답변은 유지됩니다.'},
   es: {checking:'Comprobando la afiliación…', incomplete:'La afiliación aún no se ha completado. Tu gremio y respuestas se conservan. Selecciona «Unirme al gremio y empezar» para continuar.', failed:'No se pudo confirmar la afiliación. Inténtalo de nuevo. Tu gremio y respuestas se conservan.'},
 } as const;
+const quickUiMessages = {
+  'zh-Hant': {showAll: '查看全部公會', filter: '篩選'},
+  en: {showAll: 'Show all guilds', filter: 'Filter'},
+  ja: {showAll: 'すべてのギルドを見る', filter: '絞り込み'},
+  ko: {showAll: '전체 길드 보기', filter: '필터'},
+  es: {showAll: 'Ver todos los gremios', filter: 'Filtrar'},
+} as const;
+const RECOMMENDED_LIMIT = 4;
 type QuickDirectory={items:GuildSummary[];loading:boolean;error:string;reload:()=>void};
 export function QuickStart({client,onCompleted,directory}:{client:PortalClient;onCompleted:()=>void;directory?:QuickDirectory}){
   const {language,t}=useLanguage();
-  const [localGuilds,setGuilds]=useState<GuildSummary[]>([]),[primary,setPrimary]=useState(''),[query,setQuery]=useState(''),[topic,setTopic]=useState<GuildTopic|''>('');
+  const [localGuilds,setGuilds]=useState<GuildSummary[]>([]),[primary,setPrimary]=useState(''),[query,setQuery]=useState(''),[topic,setTopic]=useState<GuildTopic|''>(''),[showAll,setShowAll]=useState(false);
   const [step,setStep]=useState<1|2>(1),[answersByGuild,setAnswersByGuild]=useState<Record<string,Record<string,string>>>({});
   const [localLoading,setLoading]=useState(true),[localError,setLoadError]=useState(''),[recovering,setRecovering]=useState(false);
   const [recoveryFeedback,setRecoveryFeedback]=useState<'incomplete'|'failed'|null>(null);
   const recoveryRequest=useRef<AbortController|null>(null),joiningRequest=useRef(false);
-  const recoveryText=recoveryMessages[language];
+  const recoveryText=recoveryMessages[language],quickUi=quickUiMessages[language];
   const generation=useRef(0),heading=useRef<HTMLHeadingElement>(null),skipFocus=useRef(true),{mutate,busy,error}=useModuleMutation(client);
   const guilds=directory?.items??localGuilds,loading=directory?.loading??localLoading,loadError=localError||directory?.error||'';
   const supplied=directory!==undefined;
@@ -59,17 +67,22 @@ export function QuickStart({client,onCompleted,directory}:{client:PortalClient;o
       if(recoveryRequest.current===request)recoveryRequest.current=null;
     }
   }
+  const filtering=Boolean(query.trim()||topic);
   const visible=guilds.filter(guild=>(!topic||guild.tags?.includes(topic))&&(!query.trim()||`${guild.name} ${guild.purpose} ${guild.skill_books.map(book=>book.title).join(' ')}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())));
+  const limitToRecommended=!showAll&&!filtering&&(!primary||visible.slice(0,RECOMMENDED_LIMIT).some(guild=>guild.guild_key===primary));
+  const displayed=limitToRecommended?visible.slice(0,RECOMMENDED_LIMIT):visible;
+  const hasMore=limitToRecommended&&visible.length>RECOMMENDED_LIMIT;
   return <section className="quick-start card stack" aria-label={t('quick.region')}>
-    <header><h2 ref={heading} tabIndex={-1} id="quick-start-step-title">{step===1?t('quick.choose'):t('quick.questions',{name:selected?.name??'這個公會',count:questions.length})}</h2>{step===1&&<p>{t('quick.intro')}</p>}</header>
+    <header><h2 ref={heading} tabIndex={-1} id="quick-start-step-title">{step===1?t('quick.choose'):t('quick.questions',{name:selected?.name??'這個公會',count:questions.length})}</h2></header>
     {step===1&&<><label className="field">{t('quick.search')}<input type="search" value={query} onChange={event=>setQuery(event.target.value)} maxLength={100} placeholder={t('quick.example')}/></label>
-      <GuildTopicFilter value={topic} onChange={setTopic}/>
-      <div className="actions quick-join-actions"><button type="button" className="btn btn-primary" disabled={!selected||!questions.length||loading||busy||recovering} onClick={()=>setStep(2)}>{t(selected&&questions.length?'quick.nextCount':'quick.next',{count:questions.length})}</button>{selected&&<span className="field-hint">{t('quick.selected',{name:selected.name})}</span>}</div>
+      <details className="quick-filter-disclosure"><summary>{quickUi.filter}</summary><GuildTopicFilter value={topic} onChange={setTopic}/><p className="field-hint">{t('quick.intro')}</p></details>
       {loading&&<p role="status">{t('quick.loading')}</p>}
       {loadError&&<div className="banner banner-error" role="alert"><p>{language==='zh-Hant'?loadError:t('error.generic')}</p><button type="button" className="btn btn-ghost" disabled={loading||busy} onClick={()=>{setLoadError('');if(directory)directory.reload();else void load();}}>{t('quick.reload')}</button></div>}
-      {!loading&&!loadError&&<><p className="field-hint">{t('quick.count',{count:visible.length,total:guilds.length})}</p><fieldset className="quick-guild-options" disabled={busy||recovering}><legend>{t('quick.choose')}</legend>{visible.map(guild=><label className={`quick-guild-option${primary===guild.guild_key?' is-selected':''}`} key={guild.guild_key}>
+      {!loading&&!loadError&&<><p className="field-hint">{t('quick.count',{count:displayed.length,total:guilds.length})}</p><fieldset className="quick-guild-options" disabled={busy||recovering}><legend>{t('quick.choose')}</legend>{displayed.map(guild=><label className={`quick-guild-option${primary===guild.guild_key?' is-selected':''}`} key={guild.guild_key}>
         <input type="radio" name="quick-primary" value={guild.guild_key} checked={primary===guild.guild_key} onChange={()=>setPrimary(guild.guild_key)}/><span><strong lang="zh-Hant">{guild.name}</strong><span className="quick-guild-purpose multiline-text" lang="zh-Hant">{guild.purpose}</span><GuildTags tags={guild.tags}/><span className="field-hint">{t('quick.books',{count:guild.skill_books.length})}</span></span>
-      </label>)}</fieldset>{!visible.length&&<p>{t('quick.noGuilds')}</p>}</>}
+      </label>)}</fieldset>{!displayed.length&&<p>{t('quick.noGuilds')}</p>}
+      {hasMore&&<div className="actions"><button type="button" className="btn btn-secondary quick-show-all" onClick={()=>setShowAll(true)}>{quickUi.showAll}</button></div>}
+      <div className="actions quick-join-actions"><button type="button" className="btn btn-primary" disabled={!selected||!questions.length||loading||busy||recovering} onClick={()=>setStep(2)}>{t(selected&&questions.length?'quick.nextCount':'quick.next',{count:questions.length})}</button>{selected&&<span className="field-hint">{t('quick.selected',{name:selected.name})}</span>}</div></>}
     </>}
     {step===2&&selected&&<><p className="quick-guild-purpose multiline-text" lang="zh-Hant">{selected.purpose}</p><div className="actions"><button type="button" className="btn btn-ghost" disabled={busy||recovering} onClick={()=>setStep(1)}>{t('quick.change')}</button></div>
       <div lang="zh-Hant"><GuildQuestionFields questions={questions} answers={answers} disabled={busy||recovering} onChange={(questionId,optionId)=>setAnswersByGuild(current=>({...current,[selected.guild_key]:{...(current[selected.guild_key]??{}),[questionId]:optionId}}))}/></div>

@@ -155,6 +155,7 @@ test('an event share link lands on the public page and shows the click', async (
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, eventGo, url => url.pathname === `/events/${eventId}` && url.searchParams.has('ref'), e2eAuthPool);
   await card.getByRole('link', { name: '管理活動', exact: true }).click();
+  await expect(page.getByRole('region', { name: '管理活動', exact: true })).toBeVisible();
   await card.locator('summary').filter({ hasText: '其他設定' }).click();
   await card.getByRole('button', { name: '分享報名統計', exact: true }).click();
   const report = card.locator('.event-referral-report');
@@ -564,10 +565,12 @@ async function themeOf(page: Page, theme: 'light' | 'dark' | 'versefolk') {
 
 test('screenshots cover the boards, social zone, dialogs and interstitial', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(120_000);
+  const screenshotEventId = randomUUID(), screenshotTitle = `推廣截圖活動 ${screenshotEventId}`;
   await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
-    SELECT $1,$2,$3,$4,'用來確認活動分享點擊。',now()-interval '29 days',now()+interval '2 days','online','線上','published','open','other'
-    WHERE NOT EXISTS (SELECT 1 FROM community_events WHERE title=$4)`, [randomUUID(), COMMUNITY, MAKER, EVENT_TITLE]);
+    VALUES($1,$2,$3,$4,'合成截圖活動',now()-interval '1 day',now()+interval '2 days','online','線上','published','open','other')`,
+  [screenshotEventId, COMMUNITY, MAKER, screenshotTitle]);
   let screenshotGo = '';
+  try {
   await login(page);
   for (const theme of ['light', 'versefolk'] as const) {
     await openBoards(page);
@@ -596,12 +599,12 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
     }
     await page.setViewportSize({ width: 1280, height: 900 });
     await navigate(page, '社群活動');
-    const card = page.locator('article.experience-card').filter({ has: page.getByRole('heading', { name: EVENT_TITLE, level: 3 }) });
+    const card = page.locator('article.experience-card').filter({ has: page.getByRole('heading', { name: screenshotTitle, level: 3 }) });
     await card.scrollIntoViewIfNeeded();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
       await card.getByRole('button', { name: '分享活動', exact: true }).click();
-      const eventDialog = page.getByRole('dialog', { name: `分享「${EVENT_TITLE}」`, exact: true });
+      const eventDialog = page.getByRole('dialog', { name: `分享「${screenshotTitle}」`, exact: true });
       await expect(eventDialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
       screenshotGo = (await eventDialog.locator('.skill-share-url').innerText()).trim();
       await eventDialog.screenshot({ path: `${SHOTS}/event-share-${theme}-${width}.png` });
@@ -623,14 +626,21 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
   await guest.setViewportSize({ width: 390, height: 844 });
   await guest.screenshot({ path: `${SHOTS}/interstitial-dark-390.png`, fullPage: true });
   await context.close();
+  } finally {
+    await e2eAuthPool.query(`DELETE FROM promotion_clicks WHERE link_id IN (SELECT link_id FROM promotion_links WHERE kind='event' AND target_key=$1)`, [screenshotEventId]);
+    await e2eAuthPool.query(`DELETE FROM promotion_links WHERE kind='event' AND target_key=$1`, [screenshotEventId]);
+    await e2eAuthPool.query(`DELETE FROM community_event_share_codes WHERE event_id=$1`, [screenshotEventId]);
+    await e2eAuthPool.query(`DELETE FROM community_events WHERE event_id=$1`, [screenshotEventId]);
+  }
 });
 
 test('the author can delete their social post', async ({ page, e2eAuthPool }) => {
   await ensureSocialFixture(e2eAuthPool, YOUTUBE, 'youtube', 'E2E 示範影片');
   await login(page);
   await navigate(page, '社群分享');
-  await selectSocialFeed(page,'全部動態');
-  const youtube = page.locator('article.social-card').filter({ has: page.getByRole('heading', { name: 'E2E 示範影片', level: 3 }) });
+  const title = `E2E 刪除影片 ${randomUUID()}`;
+  await sharePost(page, 'https://www.youtube.com/watch?v=e2eDemo0002', title);
+  const youtube = page.locator('article.social-card').filter({ has: page.getByRole('heading', { name: title, level: 3 }) });
   await youtube.getByText('⋯',{exact:true}).click();
   await youtube.getByRole('button', { name: '刪除', exact: true }).click();
   await page.getByRole('dialog', { name: '刪除貼文？', exact: true }).getByRole('button', { name: '確定刪除', exact: true }).click();

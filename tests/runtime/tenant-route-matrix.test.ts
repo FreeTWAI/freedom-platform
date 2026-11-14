@@ -1,5 +1,6 @@
 import {emptySellerPolicies} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import {photoSourcePng} from '../helpers/hosted-store-photo.js';
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -124,6 +125,7 @@ before(async () => {
     CREATE ROLE ${runtimeRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator};
     GRANT USAGE ON SCHEMA ${schema} TO ${runtimeRole}`);
+  await setFixtureRolePasswords(admin,[migrator,runtimeRole]);
   created = true;
   await migrate(owner);
   await ensureSyntheticModuleTables(owner);

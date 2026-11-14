@@ -240,7 +240,7 @@ test('PUBLIC-POST-09 cancelling the share dialog and native handoff never opts a
   await shareModal.getByRole('button',{name:'分享',exact:true}).click();
   await expect.poll(()=>author.page.evaluate(()=>(window as unknown as {publicPostShareControl:{calls:unknown[]}}).publicPostShareControl.calls.length)).toBe(1);
   const control=await author.page.evaluate(()=>(window as unknown as {publicPostShareControl:{calls:{data:ShareData;active:boolean}[];copies:number}}).publicPostShareControl);
-  expect(control.calls[0]).toEqual({data:{title:'自由工坊的貼文',url:`${e2eOrigin()}/?social-post=${post.post_id}#social`},active:true});expect(control.copies).toBe(0);expect(writes).toEqual([]);expect(await sharing(author,post.post_id)).toEqual(before);
+  expect(control.calls[0]).toEqual({data:{title:post.note,url:`${e2eOrigin()}/?social-post=${post.post_id}#social`},active:true});expect(control.copies).toBe(0);expect(writes).toEqual([]);expect(await sharing(author,post.post_id)).toEqual(before);
   await shareModal.getByRole('button',{name:'關閉分享',exact:true}).click();
   await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
 });

@@ -229,9 +229,12 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
 
     </div>
     </details>
-    <nav className="home-discovery-links" aria-label="共創誌">
-      <HomeJournal onOpen={openHomeJournal}/>
-    </nav>
+    <div className="home-discovery-links">
+      <ShareButton title="自由工坊" fallbackUrl="/" makeLink={promotionLink(client, 'platform', 'workshop')} text="自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。" label="分享自由工坊" buttonClassName="btn btn-primary"/>
+      <nav aria-label="共創誌">
+        <HomeJournal onOpen={openHomeJournal}/>
+      </nav>
+    </div>
     <RecentEvents client={client}/><section className="home-timeline" aria-label="首頁社群動態"><SocialZone focusPost={focusPost} client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-personal home-disclosure">
@@ -253,7 +256,6 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
       <div className="home-member-actions">
         <a className="btn btn-ghost" href="#me/settings">編輯個人頁</a>
         {showAssessment && <button type="button" className="btn btn-ghost" onClick={() => onNavigate?.('positioning')}>補做定位測驗</button>}
-        <ShareButton title="自由工坊" fallbackUrl="/" makeLink={promotionLink(client, 'platform', 'workshop')} text="自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。" label="分享自由工坊"/>
       </div>
     </section>
     <MemberRecommendations client={client}/>

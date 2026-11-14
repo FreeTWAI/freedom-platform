@@ -34,6 +34,7 @@ function harness(revalidatePublic=false){
   const reads:any[]=[],writes:any[]=[],listeners=new Map<string,()=>void>(),storage=new Map<string,string>();
   const client={sessionGeneration:1,get:(path:string,options:any)=>new Promise((resolve,reject)=>reads.push({path,options,resolve,reject})),post:(path:string,body:any,options:any)=>new Promise((resolve,reject)=>writes.push({path,body:JSON.parse(JSON.stringify(body)),options,resolve,reject}))};
   const props:any={client,id,onLogin:()=>{},participationEnabled:false,revalidatePublic};
+  const GuestEventParticipation=()=>null;
   const depsEqual=(a:any[],b:any[])=>a.length===b.length&&a.every((value,index)=>value===b[index]);
   const react={
     useRef:(value:any)=>{const at=scope.index++;return scope.hooks[at]??(scope.hooks[at]={current:value});},
@@ -47,7 +48,7 @@ function harness(revalidatePublic=false){
     fetch:(path:string,options:any)=>new Promise((resolve,reject)=>reads.push({path,options,resolve:(value:unknown)=>resolve({ok:true,json:async()=>value}),reject})),
     localStorage:{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)},
     window:{location,addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name)},
-    require:(name:string)=>{if(name==='../portal-route')return {currentLegacyHash:()=>legacyHash(location.hash)};if(name==='react')return react;if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};if(name==='zod')return {z};if(name==='../api')return {ApiError};if(name==='../format')return {formatIsoLocal:(value:string)=>value};if(name.includes('modules/community/event-prize-details'))return prizeRules;if(name==='./EventPrizePhoto')return {EventPrizePhotoEditor:()=>null};if(name==='./event-prize-photo-client')return prizePhotoRules;if(name==='./EventPrizeDetails')return {EventPrizeDetails:()=>null};if(name==='./EventParticipation')return {GuestEventParticipation:()=>null,readEventParticipationToken:()=>null};if(name.endsWith('.css'))return {};throw Error(name);},
+    require:(name:string)=>{if(name==='../portal-route')return {currentLegacyHash:()=>legacyHash(location.hash)};if(name==='react')return react;if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};if(name==='zod')return {z};if(name==='../api')return {ApiError};if(name==='../format')return {formatIsoLocal:(value:string)=>value};if(name.includes('modules/community/event-prize-details'))return prizeRules;if(name==='./EventPrizePhoto')return {EventPrizePhotoEditor:()=>null};if(name==='./event-prize-photo-client')return prizePhotoRules;if(name==='./EventPrizeDetails')return {EventPrizeDetails:()=>null};if(name==='./EventParticipation')return {GuestEventParticipation,readEventParticipationToken:()=>null};if(name.endsWith('.css'))return {};throw Error(name);},
   });
   function cleanup(){for(const hook of inner.hooks)hook?.cleanup?.();}
   function render(){scope=outer;outer.index=0;const wrapper=module.exports.PublicEventPage(props);if(wrapper.key!==key){cleanup();inner={hooks:[],index:0,effects:[]};key=wrapper.key;}scope=inner;inner.index=0;const tree=wrapper.type(wrapper.props);while(inner.effects.length)inner.effects.shift()!();return tree;}
@@ -57,7 +58,7 @@ function harness(revalidatePublic=false){
   const form=()=>find(view(),node=>node.type==='form')!;
   const submit=()=>{const target=form();assert.ok(target,'registration form exists');target.props.onSubmit({preventDefault(){}});};
   const button=()=>find(view(),node=>node.type==='button'&&/報名並寄送|重試原報名|寄送中/.test(text(node)))!;
-  view();return {props,client,reads,writes,view,field,fill,form,submit,button,cleanup,storage,location,focus:()=>listeners.get('focus')?.()};
+  view();return {props,client,reads,writes,view,field,fill,form,submit,button,cleanup,storage,location,GuestEventParticipation,focus:()=>listeners.get('focus')?.()};
 }
 async function ready(h:ReturnType<typeof harness>,value=event()){h.reads[0].resolve(value);await settle();h.fill('text','Original guest');h.fill('email','original@example.test');}
 const tuple=(request:any)=>JSON.stringify({path:request.path,body:request.body,skipAuthHandler:request.options.skipAuthHandler});
@@ -109,4 +110,43 @@ test('old client-scope submit handler cannot send old contact data after replace
   const h=harness();await ready(h);const submit=h.form().props.onSubmit;
   h.props.client={...h.client};h.view();h.reads.at(-1).resolve(event());await settle();
   submit({preventDefault(){}});assert.equal(h.writes.length,0);assert.equal(h.field('email').props.value,'');h.cleanup();
+});
+
+for(const failure of [
+  {label:'503 definitive',error:new ApiError({message:'服務暫時無法回應（503）。尚未確認結果，請稍後重試。',status:503,network:true,definitiveResponse:true})},
+  {label:'503 non-JSON',error:new ApiError({message:'服務暫時無法回應（503）。尚未確認結果，請稍後重試。',status:503,network:true,definitiveResponse:false})},
+  {label:'422 definitive',error:new ApiError({message:'報名資料格式不符。',status:422,definitiveResponse:true})},
+  {label:'422 non-definitive',error:new ApiError({message:'請求未完成（422），請稍後重試。',status:422,definitiveResponse:false})},
+])test(`HTTP ${failure.label} keeps inputs editable and shows one short line with 再試一次`,async()=>{
+  const h=harness();await ready(h);h.submit();h.writes[0].reject(failure.error);await settle();
+  const rendered=text(h.view());
+  assert.doesNotMatch(rendered,/尚未確認/);assert.match(rendered,/再試一次/);
+  assert.equal(Boolean(h.field('text').props.disabled),false);assert.equal(Boolean(h.field('email').props.disabled),false);
+  h.fill('email','retry@example.test');h.submit();
+  assert.equal(h.writes[1].body.email,'retry@example.test');h.writes[1].resolve(ack);await settle();
+  assert.match(text(h.view()),/報名已確認/);h.cleanup();
+});
+
+test('lost answer (network or timeout) enters unknown state and freezes original draft for retry',async()=>{
+  for(const error of [
+    new ApiError({message:'無法連線到伺服器，尚未確認結果。請確認網路後重試。',network:true}),
+    new ApiError({message:'連線等候過久，尚未確認結果。請稍後重試。',status:503,network:true,timedOut:true}),
+  ]){
+    const h=harness();await ready(h);h.submit();h.writes[0].reject(error);await settle();
+    assert.match(text(h.view()),/尚未確認這次報名結果/);assert.match(text(h.button()),/重試原報名與寄信/);
+    assert.equal(h.field('text').props.disabled,true);assert.equal(h.field('email').props.disabled,true);
+    h.submit();assert.equal(tuple(h.writes[1]),tuple(h.writes[0]));h.writes[1].resolve(ack);await settle();
+    assert.match(text(h.view()),/報名已確認/);h.cleanup();
+  }
+});
+
+test('deployment without guest registration hides guest form and offers sign-in instead',async()=>{
+  const h=harness();h.props.participationEnabled=true;
+  h.reads[0].resolve(event({guest_registration_available:false}));await settle();
+  const root=h.view();
+  assert.equal(Boolean(h.form()),false);
+  assert.equal(Boolean(find(root,node=>node.type===h.GuestEventParticipation)),false);
+  assert.ok(find(root,node=>node.type==='button'&&/登入/.test(text(node))));
+  assert.doesNotMatch(text(root),/報名並寄送參與資料/);
+  h.cleanup();
 });

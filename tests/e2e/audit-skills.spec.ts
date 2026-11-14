@@ -68,7 +68,7 @@ for (const width of [1280, 390]) {
       await page.getByRole('button', { name: '免費預覽技能書', exact: true }).click();
       await expect(page.getByRole('button', { name: '未解鎖', exact: true })).toHaveAttribute('aria-pressed', 'true');
       // The catalog's 26 社群技能書 sit on their own shelf; the guild shelf previews the other 29.
-      await expect(page.getByText('顯示 29 / 29 本技能書', { exact: true })).toBeVisible();
+      await expect(page.getByText('顯示 29 / 29 個原作資源', { exact: true })).toBeVisible();
       await expect(page.locator('.community-library article[data-access="locked"]')).toHaveCount(29);
       expect(await readableText(page.locator('.community-library'), '.skill-library-description .field-hint')).toBeGreaterThan(0);
       await summariesReachable(page.locator('main'));
@@ -85,19 +85,22 @@ for (const width of [1280, 390]) {
       await card.getByRole('button', { name: '預覽技能書', exact: true }).click();
       const dialog = page.getByRole('dialog', { name: 'Hao 社群貼文技能書', exact: true });
       const upstream = 'https://github.com/Hao0321/claude-skill-social-post';
-      await dialog.getByText('作者與共同開發（進階）', {exact: true}).click();
-      await expect(dialog.getByRole('link', { name: '開啟原作 ↗', exact: true })).toHaveAttribute('href', upstream);
-      await expect(dialog.getByRole('link', { name: 'Fork 原作 ↗', exact: true })).toHaveAttribute('href', `${upstream}/fork`);
-      await expect(dialog.getByRole('link', { name: 'Fork 專案 ↗', exact: true })).toHaveAttribute('href', `${upstream}/fork`);
-      await expect(dialog.getByRole('link', { name: 'Follow 原作者 ↗', exact: true })).toHaveAttribute('href', 'https://github.com/Hao0321');
-      await expect(dialog.locator('.github-star-control')).toHaveCount(1);
+      const primary = dialog.locator('.skill-intro-primary-actions');
+      await expect(primary.getByRole('link', { name: '查看原作 Repo ↗', exact: true })).toHaveAttribute('href', upstream);
+      await expect(primary.getByRole('link', { name: 'Fork 專案 ↗', exact: true })).toHaveAttribute('href', `${upstream}/fork`);
+      await expect(primary.locator('.github-star-control')).toHaveCount(1);
+      const notes = dialog.locator('.skill-intro-usage-notes');
+      await notes.locator(':scope > summary').click();
+      await expect(notes.getByRole('link', { name: 'Fork 原作 ↗', exact: true })).toHaveAttribute('href', `${upstream}/fork`);
+      await expect(notes.getByRole('link', { name: 'Fork 專案 ↗', exact: true })).toHaveAttribute('href', `${upstream}/fork`);
+      await expect(notes.getByRole('link', { name: 'Follow 原作者 ↗', exact: true })).toHaveAttribute('href', 'https://github.com/Hao0321');
+      await expect(notes.locator('.github-star-control')).toHaveCount(1);
       const collaboration = dialog.locator('.skill-intro-collaboration');
       await expect(collaboration.getByRole('link', { name: '查看原作 PR ↗', exact: true })).toHaveAttribute('href', `${upstream}/pulls`);
       await expect(collaboration.getByRole('link', { name: '交給 Agent ↗', exact: true })).toHaveAttribute('href', '/development/skills/social-post/SKILL.md');
       await expect(dialog.getByText('參與開發', { exact: true })).toHaveCount(0);
       await expect(dialog.getByRole('link', { name: '查看來源專案 ↗', exact: true })).toHaveCount(0);
       await expect(dialog.getByRole('link', { name: '工坊協作版本 ↗', exact: true })).toHaveCount(0);
-      await dialog.getByText('作者、授權與收錄來源', { exact: true }).click();
       await expect(dialog).toContainText('來源 GitHub 帳號：Hao0321');
       await expect(dialog).toContainText('收錄版本：');
       // Source, status and help text in the dialog must stay readable on phones (DESIGN: body ≥ 14px).
@@ -183,10 +186,10 @@ for (const width of [1280, 390]) {
       await author.click();
       const card = page.getByRole('dialog', { name: '自由工坊名片', exact: true });
       await expect(card).toBeVisible();
-      await expect(card.getByRole('link', { name: '查看來源 GitHub ↗', exact: true })).toHaveAttribute('href', 'https://github.com/Hao0321');
+      await expect(card.getByRole('link', { name: '查看原作 GitHub ↗', exact: true })).toHaveAttribute('href', 'https://github.com/Hao0321');
       await card.getByRole('button', { name: '關閉作者名片', exact: true }).click();
       await expect(author).toBeFocused();
-      await page.getByText('作者、版本與參與開發', { exact: true }).click();
+      await page.locator('.sp-usage-notes > summary').click();
       await expect(page.locator('.public-skill-source').getByRole('link', { name: 'Hao0321', exact: true })).toHaveAttribute('href', 'https://github.com/Hao0321');
       await summariesReachable(page.locator('body'));
       await noOverflow(page);
@@ -278,7 +281,7 @@ for (const width of [1280, 390]) {
       await card.getByRole('button', { name: '預覽技能書', exact: true }).click();
       const intro = page.locator('dialog.skill-intro-dialog[data-book-id="project-template"]');
       await expect(intro).toBeVisible();
-      await intro.getByText('作者與共同開發（進階）', {exact: true}).click();
+      await intro.locator('.skill-intro-usage-notes > summary').click();
       await intro.getByRole('button', { name: '加入共同開發', exact: true }).click();
       const access = page.getByRole('dialog', { name: '開發啟用任務', exact: true });
       await access.getByRole('button', { name: '加入AI 開發公會', exact: true }).click();
@@ -312,6 +315,10 @@ for (const width of [1280, 390]) {
 
 async function openQuickstartBook(page: Page) {
   await emptyShelf(page);
+  await page.route('**/api/v1/skills/supplier-client/collaboration', async route => {
+    const response = await route.fetch(), body = await response.json();
+    await route.fulfill({ response, json: { ...body, original_cache: { ...body.original_cache, quick_start: 'npm run read -- products' } } });
+  });
   await login(page);
   await navigate(page, '技能書架');
   await page.getByRole('button', { name: '未解鎖', exact: true }).click();
@@ -330,7 +337,8 @@ test('quickstart commands copy exactly by keyboard at 390px and keep responsive 
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { writes.push(text); } } });
   });
   const { dialog, trigger } = await openQuickstartBook(page);
-  const command = dialog.locator('.skill-intro-command');
+  const command = dialog.locator('.skill-intro-original-start .skill-intro-command');
+  await expect(command).toHaveText('npm run read -- products');
   const expected = await command.textContent();
   expect(expected).toContain('npm run read -- products');
   expect(await page.evaluate(() => (window as unknown as { __quickstartWrites: string[] }).__quickstartWrites)).toEqual([]);
@@ -353,6 +361,7 @@ test('quickstart commands copy exactly by keyboard at 390px and keep responsive 
   await expect(noCommand).toBeVisible();
   await expect(noCommand.locator('.skill-intro-command')).toHaveCount(0);
   await expect(noCommand.getByRole('button', { name: '複製指令', exact: true })).toHaveCount(0);
+  await noCommand.locator('.skill-intro-usage-notes > summary').click();
   await expect(noCommand.getByRole('heading', { name: '準備', exact: true })).toBeVisible();
 });
 
@@ -365,7 +374,9 @@ test('quickstart rejection can select and retry, while unavailable clipboard kee
     } } });
   });
   const { dialog } = await openQuickstartBook(page);
-  const expected = await dialog.locator('.skill-intro-command').textContent();
+  const command = dialog.locator('.skill-intro-original-start .skill-intro-command');
+  await expect(command).toHaveText('npm run read -- products');
+  const expected = await command.textContent();
   const copy = dialog.getByRole('button', { name: '複製指令', exact: true });
   await copy.click();
   await expect(dialog.getByRole('status').filter({ hasText: '未能複製' })).toBeVisible();
@@ -374,7 +385,7 @@ test('quickstart rejection can select and retry, while unavailable clipboard kee
   await expect(select).toBeVisible();
   await select.focus(); await page.keyboard.press('Enter');
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(expected);
-  await expect(dialog.locator('.skill-intro-command')).toBeFocused();
+  await expect(command).toBeFocused();
   await copy.click();
   await expect(dialog.getByRole('status').filter({ hasText: '指令已複製' })).toBeVisible();
   await expect(select).toHaveCount(0);
@@ -387,7 +398,7 @@ test('quickstart rejection can select and retry, while unavailable clipboard kee
   await expect(dialog.getByRole('status').filter({ hasText: '指令已複製' })).toHaveCount(0);
   await select.focus(); await page.keyboard.press('Enter');
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(expected);
-  await expect(dialog.locator('.skill-intro-command')).toBeFocused();
+  await expect(command).toBeFocused();
   expect(await page.evaluate(() => (window as unknown as { __quickstartWrites: string[] }).__quickstartWrites)).toEqual([expected, expected]);
 });
 

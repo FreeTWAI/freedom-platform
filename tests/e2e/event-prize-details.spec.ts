@@ -183,7 +183,7 @@ for(const width of [320,390])eventTest(`prize description survives create, reloa
     await expectPrize(publicPage.getByRole('region',{name:'活動獎品說明',exact:true}));
     await expect(publicPage.getByRole('button',{name:'編輯活動',exact:true})).toHaveCount(0);
   }finally{await immediateGuest.close();}
-  await page.goto(`/#events/${id}/manage`);await page.reload();await page.getByText('其他設定',{exact:true}).click();
+  await page.goto(`/#events/${id}/manage`);await page.reload();await page.getByText('更多',{exact:true}).click();
   const card=page.locator('.experience-card'),details=card.getByRole('region',{name:'活動獎品說明',exact:true});
   await expectPrize(details,prize.name,true);
   await card.getByRole('button',{name:'編輯活動',exact:true}).click();
@@ -193,7 +193,7 @@ for(const width of [320,390])eventTest(`prize description survives create, reloa
   const renamed='合成入門書（更新版）';await editor.getByLabel('獎品名稱',{exact:true}).fill(renamed);
   const edited=await save(page,editor,id);
   expect(edited.prize_details).toEqual([{...prize,name:renamed,prize_id:stableId}]);
-  await page.reload();await page.getByText('其他設定',{exact:true}).click();await expectPrize(details,renamed,true);
+  await page.reload();await page.getByText('更多',{exact:true}).click();await expectPrize(details,renamed,true);
   const guest=await browser.newContext({viewport:{width,height:844}});
   try{
     const publicPage=await guest.newPage();
@@ -301,7 +301,7 @@ eventTest('no-prize minimal submission stays optional and reads back empty',asyn
   await expect(form.getByLabel('獎品名稱',{exact:true})).toHaveCount(0);
   const result=await save(page,form);expect(result.prize_details).toEqual([]);expect(result.state).toBe('published');
   const id=await legacyDraft(e2eAuthPool,result.event_id);
-  await page.goto(`/#events/${id}/manage`);await page.reload();await page.getByText('其他設定',{exact:true}).click();
+  await page.goto(`/#events/${id}/manage`);await page.reload();await page.getByText('更多',{exact:true}).click();
   await expect(page.getByRole('region',{name:'活動獎品說明',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'編輯活動',exact:true}).click();
   await expect(page.getByRole('button',{name:'加入獎品',exact:true})).toBeVisible();

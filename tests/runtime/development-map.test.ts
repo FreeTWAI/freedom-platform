@@ -82,7 +82,7 @@ test('public skill guidance survives a repository cache outage without substitut
  const response=await offline.request(origin+'/development/skills/security-scanner');assert.equal(response.status,200);
  const html=await response.text(),support=html.match(/<section class="public-github-social"[^>]*>[\s\S]*?<\/section>/)?.[0];
  assert.ok(support,'GitHub actions remain available when the public cache is unavailable');
- assert.equal(support.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),'☆ 加星 —');
+ assert.equal(support.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),'☆ 加星');
  assert.ok(html.includes('href="https://github.com/teddashh/ai-security-scanner"'));
  assert.ok(html.includes('從原作開始共創 ↗'));
 

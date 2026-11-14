@@ -58,7 +58,7 @@ function SettingsContent({client,session,registerLeave,onReturn,onView,embedded}
   if(!operation)return;
   const result=await mutate<Settings>('/me/profile-publication',operation.body,operation.version,value=>ProfilePublicationSettingsSchema.parse(value));
   if(!current())return;
-  if(result){pending.current=null;setSaved(result);setDraft(draftOf(result));setConfirmed(false);setNotice('個人頁與可見範圍已儲存。');}
+  if(result){pending.current=null;setSaved(result);setDraft(draftOf(result));setConfirmed(false);setNotice('個人頁與可見範圍已儲存。');window.dispatchEvent(new Event('freedom-profile-updated'));}
  }
  function refreshSettings(confirmDiscard=false){
   // Recheck synchronously: a command may have started before React renders its lock.

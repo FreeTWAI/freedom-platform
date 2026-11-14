@@ -113,7 +113,9 @@ export function CommunityRelations({ client, navigation }: { client: PortalClien
   const state = useContext(RelationsContext);
   const [tab, setTab] = useState<CommunityListTab>(() => navigation.read(window.history.state));
   const selectedTab = useRef(tab); selectedTab.current = tab;
-  const [bookmarkPage, setBookmarkPage] = useState(0);
+  const [bookmarkLimit, setBookmarkLimit] = useState(5);
+  const [followLimit, setFollowLimit] = useState(5);
+  const [updateLimit, setUpdateLimit] = useState(5);
   const [cursor, setCursor] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -121,7 +123,7 @@ export function CommunityRelations({ client, navigation }: { client: PortalClien
       if (!/^#community-search(?:\?|$)/.test(currentLegacyHash())) return;
       const next = navigation.read(window.history.state);
       if (next === selectedTab.current) return;
-      selectedTab.current = next; setTab(next); setCursor(null); setBookmarkPage(0);
+      selectedTab.current = next; setTab(next); setCursor(null); setBookmarkLimit(5); setFollowLimit(5); setUpdateLimit(5);
     };
     window.addEventListener('popstate', restore); window.addEventListener('hashchange', restore);
     return () => { window.removeEventListener('popstate', restore); window.removeEventListener('hashchange', restore); };
@@ -134,7 +136,7 @@ export function CommunityRelations({ client, navigation }: { client: PortalClien
     const controller = new AbortController();
     const generation = client.sessionGeneration;
     const live = () => !controller.signal.aborted && generation === client.sessionGeneration && currentKey.current === requestKey;
-    setUpdates(null); setFailure(null);
+    setUpdates(null); setFailure(null); setUpdateLimit(5);
     if (state?.loading) setCursor(null);
     if (tab === 'updates' && state?.follows && !state.loading && !state.error) {
       void client.get<unknown>(`/community-relations/updates${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, { signal: controller.signal, suppressConsole: true })
@@ -146,7 +148,10 @@ export function CommunityRelations({ client, navigation }: { client: PortalClien
   if (!state) return null;
   const page = updates?.key === requestKey ? updates.page : null;
   const updateError = failure?.key === requestKey ? failure.message : '';
-  const savedPage = Math.min(bookmarkPage, Math.max(0, Math.ceil((state.bookmarks?.length ?? 0) / 20) - 1));
+  const visibleBookmarks = state.bookmarks?.slice(0, bookmarkLimit) ?? [];
+  const visibleFollows = state.follows?.slice(0, followLimit) ?? [];
+  const visibleUpdates = page?.items.slice(0, updateLimit) ?? [];
+  const hasMoreUpdates = Boolean(page && page.items.length > visibleUpdates.length);
   function select(next: CommunityListTab) {
     if (!navigation.current()) return;
     if (/^#community-search(?:\?|$)/.test(currentLegacyHash())) {
@@ -156,18 +161,18 @@ export function CommunityRelations({ client, navigation }: { client: PortalClien
         try { window.history.replaceState(saved, ''); } catch { /* Navigation recovery is best effort. */ }
       }
     }
-    selectedTab.current = next; setTab(next); setCursor(null); setBookmarkPage(0);
+    selectedTab.current = next; setTab(next); setCursor(null); setBookmarkLimit(5); setFollowLimit(5); setUpdateLimit(5);
   }
   return <section className="card stack" aria-label="我的私人書籤與追蹤" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
     <h2>我的書籤與追蹤</h2>
     <p className="field-hint">只有你能查看。追蹤是自行選擇，不會發送通知，也不會增加內容存取權；取消追蹤不會移除書籤。</p>
-    <div className="actions" aria-label="選擇私人清單">{(['bookmarks', 'follows', 'updates'] as const).map(value => <button type="button" className="btn btn-secondary btn-small" key={value} aria-pressed={tab === value} onClick={() => select(value)}>{{ bookmarks: '私人書籤', follows: '追蹤清單', updates: '追蹤更新' }[value]}</button>)}<button type="button" className="btn btn-secondary btn-small" disabled={state.loading} onClick={() => { setCursor(null); setBookmarkPage(0); state.reload(); }}>重新載入清單</button></div>
+    <div className="actions" aria-label="選擇私人清單">{(['bookmarks', 'follows', 'updates'] as const).map(value => <button type="button" className="btn btn-secondary btn-small" key={value} aria-pressed={tab === value} onClick={() => select(value)}>{{ bookmarks: '私人書籤', follows: '追蹤清單', updates: '追蹤更新' }[value]}</button>)}<button type="button" className="btn btn-secondary btn-small" disabled={state.loading} onClick={() => { setCursor(null); setBookmarkLimit(5); setFollowLimit(5); setUpdateLimit(5); state.reload(); }}>重新載入清單</button></div>
     {state.loading && <p role="status">正在載入私人清單…</p>}
-    {state.error && <><p role="alert">{state.error}</p><button className="btn btn-secondary btn-small" onClick={state.reload}>重試載入私人清單</button></>}
+    {state.error && <><p role="alert">{state.error}</p><button type="button" className="btn btn-secondary btn-small" onClick={state.reload}>重試載入私人清單</button></>}
     {!state.loading && !state.error && <>
-      {tab === 'bookmarks' && <>{state.bookmarks?.length === 0 && <p role="status">尚未儲存書籤。可從搜尋結果儲存。</p>}{state.bookmarks?.slice(savedPage * 20, (savedPage + 1) * 20).map(item => <article className="stack" key={item.relation_id}>{item.content ? <ContentLink item={item.content} /> : <p>內容目前無法存取</p>}<CommunityBookmarkButton client={client} kind={item.kind} id={item.id} /></article>)}<div className="actions">{savedPage > 0 && <button className="btn btn-secondary btn-small" onClick={() => setBookmarkPage(savedPage - 1)}>上一頁書籤</button>}{(state.bookmarks?.length ?? 0) > (savedPage + 1) * 20 && <button className="btn btn-secondary btn-small" onClick={() => setBookmarkPage(savedPage + 1)}>下一頁書籤</button>}</div></>}
-      {tab === 'follows' && <><fieldset><legend>選擇要追蹤的主題</legend><div className="actions">{communitySearchTopics.map(topic => <RelationToggle client={client} key={topic} group="follows" kind="topic" id={topic} checkbox selected={!!state.follows?.some(item => item.kind === 'topic' && item.id === topic)} label={communitySearchTopicLabels[topic]} />)}</div></fieldset>{state.follows?.length === 0 && <p role="status">尚未追蹤作者或主題。可從搜尋結果追蹤作者。</p>}{state.follows?.map(item => <article className="stack" key={item.relation_id}><p>{item.available && item.label ? item.label : '追蹤對象目前無法存取'}</p><RelationToggle client={client} group="follows" kind={item.kind} id={item.id} selected label="取消追蹤" /></article>)}</>}
-      {tab === 'updates' && <>{!page && !updateError && <p role="status">正在載入追蹤更新…</p>}{updateError && <><p role="alert">{updateError}</p><button className="btn btn-secondary btn-small" onClick={() => setRetry(value => value + 1)}>重試追蹤更新</button></>}{page?.items.length === 0 && <p role="status">目前沒有可閱讀的追蹤更新。可先選擇作者或主題。</p>}{page?.items.map(item => <article className="stack" key={`${item.kind}:${item.id}`}><ContentLink item={item} /><CommunityBookmarkButton client={client} kind={item.kind} id={item.id} /></article>)}<div className="actions">{cursor && <button className="btn btn-secondary btn-small" onClick={() => setCursor(null)}>回更新第一頁</button>}{page?.next_cursor && <button className="btn btn-secondary btn-small" onClick={() => setCursor(page.next_cursor)}>下一頁更新</button>}</div></>}
+      {tab === 'bookmarks' && <>{state.bookmarks?.length === 0 && <p role="status">尚未儲存書籤。可從搜尋結果儲存。</p>}{visibleBookmarks.map(item => <article className="stack" key={item.relation_id}>{item.content ? <ContentLink item={item.content} /> : <p>內容目前無法存取</p>}<CommunityBookmarkButton client={client} kind={item.kind} id={item.id} /></article>)}{(state.bookmarks?.length ?? 0) > visibleBookmarks.length && <div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => setBookmarkLimit(n => n + 5)}>更多</button></div>}</>}
+      {tab === 'follows' && <><fieldset><legend>選擇要追蹤的主題</legend><div className="actions">{communitySearchTopics.map(topic => <RelationToggle client={client} key={topic} group="follows" kind="topic" id={topic} checkbox selected={!!state.follows?.some(item => item.kind === 'topic' && item.id === topic)} label={communitySearchTopicLabels[topic]} />)}</div></fieldset>{state.follows?.length === 0 && <p role="status">尚未追蹤作者或主題。可從搜尋結果追蹤作者。</p>}{visibleFollows.map(item => <article className="stack" key={item.relation_id}><p>{item.available && item.label ? item.label : '追蹤對象目前無法存取'}</p><RelationToggle client={client} group="follows" kind={item.kind} id={item.id} selected label="取消追蹤" /></article>)}{(state.follows?.length ?? 0) > visibleFollows.length && <div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => setFollowLimit(n => n + 5)}>更多</button></div>}</>}
+      {tab === 'updates' && <>{!page && !updateError && <p role="status">正在載入追蹤更新…</p>}{updateError && <><p role="alert">{updateError}</p><button type="button" className="btn btn-secondary btn-small" onClick={() => setRetry(value => value + 1)}>重試追蹤更新</button></>}{page?.items.length === 0 && <p role="status">目前沒有可閱讀的追蹤更新。可先選擇作者或主題。</p>}{visibleUpdates.map(item => <article className="stack" key={`${item.kind}:${item.id}`}><ContentLink item={item} /><CommunityBookmarkButton client={client} kind={item.kind} id={item.id} /></article>)}{(cursor || hasMoreUpdates || page?.next_cursor) && <div className="actions">{cursor && <button type="button" className="btn btn-secondary btn-small" onClick={() => setCursor(null)}>回更新第一頁</button>}{hasMoreUpdates && <button type="button" className="btn btn-secondary btn-small" onClick={() => setUpdateLimit(n => n + 5)}>更多</button>}{!hasMoreUpdates && page?.next_cursor && <button type="button" className="btn btn-secondary btn-small" onClick={() => setCursor(page.next_cursor)}>下一頁更新</button>}</div>}</>}
     </>}
   </section>;
 }

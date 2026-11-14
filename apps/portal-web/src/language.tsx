@@ -46,7 +46,7 @@ export function LanguageProvider({children}:{children:ReactNode}){
 export const useLanguage=()=>useContext(Context);
 export function LanguagePicker({className='',showScope=false}:{className?:string;showScope?:boolean}){
   const {preference,selectLanguage,t}=useLanguage();
-  return <div className={`language-picker ${className}`}><label><span lang="en">Language</span><select aria-label="Language" value={preference} onChange={event=>selectLanguage(event.target.value as LanguagePreference)}>
+  return <div className={`language-picker ${className}`}><label><span>語言</span><select aria-label="語言" value={preference} onChange={event=>selectLanguage(event.target.value as LanguagePreference)}>
     <option value="auto">{t('language.auto')}</option>{LANGUAGES.map(([id,name])=><option key={id} value={id} lang={id}>{name}</option>)}
   </select></label>{showScope&&<p className="field-hint">{t('language.scope')}</p>}</div>;
 }

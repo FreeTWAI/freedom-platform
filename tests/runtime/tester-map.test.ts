@@ -215,7 +215,7 @@ test('tester-map quest: five-place words appear in every language and match visi
     assert.ok(!step.title[index].includes(interfaceMessages['nav.search'][index]));
   }
   for (const [id, place, tab] of [
-    ['guild.shelf', 'explore', 'skills'], ['profile.content', 'me', 'my-content'],
+    ['guild.shelf', 'explore', 'skills'],
     ['profile.todos', 'me', 'todos'], ['social.people', 'explore', 'members'],
     ['market.orders', 'me', 'reservations'], ['market.orders', 'me', 'business'],
     ['builder.promotion', 'explore', 'services'], ['builder.promotion', 'me', 'promotion'],
@@ -226,6 +226,12 @@ test('tester-map quest: five-place words appear in every language and match visi
       assert.ok(task.includes(placeTitle), `${id}: ${placeTitle}`);
       assert.ok(task.includes(label), `${id}: ${label}`);
     }
+  }
+  const personalSpace = readFileSync('apps/portal-web/src/modules/PersonalSpace.tsx', 'utf8');
+  assert.ok(personalSpace.includes('<h2>我的內容</h2>'));
+  for (const task of steps.find(item => item.id === 'profile.content')!.task) {
+    assert.ok(task.includes(PORTAL_PLACES.find(place => place.id === 'me')!.title));
+    assert.ok(task.includes('我的內容'));
   }
   for (const [id, toolId] of [['builder.tasks', 'work'], ['builder.tasks', 'cocreation'], ['builder.opensource', 'marketing'], ['market.offer', 'supplier-kit'], ['market.offer', 'retail-kit']]) {
     const tool = GUILD_TOOLS.find(item => item.tool_id === toolId)!;

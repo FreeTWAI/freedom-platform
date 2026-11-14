@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {serve} from '@hono/node-server';
@@ -25,6 +26,7 @@ let created=false,roleCreated=false;
 before(async()=>{
  await admin.query(`CREATE SCHEMA ${schema}`);created=true;await migrate(pool);
  await admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOINHERIT`);roleCreated=true;
+ await setFixtureRolePasswords(admin, [role]);
  await admin.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role}`);
  for(const table of ['users','commerce_shops','commerce_shop_keys','commerce_orders','commerce_order_lines','commerce_items','principals','resource_scopes','scoped_command_receipts','scoped_transition_journal'])
   await admin.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ${schema}.${table} TO ${role}`);

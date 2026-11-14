@@ -40,6 +40,10 @@ async function search(page: Page, query: string) {
   await expect(page.getByRole('region', { name: '社群內容搜尋結果' })).toHaveAttribute('aria-busy', 'false');
 }
 const results = (page: Page) => page.getByRole('region', { name: '社群內容搜尋結果' });
+async function openFilters(page: Page) {
+  const filters = page.locator('details.explore-filters');
+  if (!await filters.evaluate(element => (element as HTMLDetailsElement).open)) await filters.locator(':scope > summary').click();
+}
 
 test('SEARCH-001 actual anonymous and member HTTP search keep public and same-community audiences separate', async ({ browser, page, baseURL, e2eAuthPool }) => {
   const token = `搜尋範圍${randomUUID().slice(0, 8)}`;
@@ -134,6 +138,7 @@ test('SEARCH-003 current full-guild maintainer saves topics through HTTP while a
   const logged = await signedIn(browser, baseURL!, maintainer.email), denied = await signedIn(browser, baseURL!, ordinary.email);
   try {
     await search(logged.page, book!.title);
+    await openFilters(logged.page);
     await logged.page.getByRole('button', { name: '編輯我的內容主題', exact: true }).click();
     const editor = logged.page.locator('.community-content-search h3').filter({ hasText: book!.title }).locator('..');
     await expect(editor).toHaveCount(1);
@@ -144,12 +149,14 @@ test('SEARCH-003 current full-guild maintainer saves topics through HTTP while a
     await expect(logged.page.getByText('主題已儲存。', { exact: true })).toBeVisible();
     expect((await e2eAuthPool.query("SELECT topics,aggregate_version FROM community_content_topic_sets WHERE content_kind='skill_book' AND content_id=$1", [book!.id])).rows[0]).toMatchObject({ topics: ['tools'], aggregate_version: '1' });
     await search(denied.page, book!.title);
+    await openFilters(denied.page);
     await denied.page.getByRole('button', { name: '編輯我的內容主題', exact: true }).click();
     await expect(denied.page.getByText('目前沒有可編輯主題的內容。', { exact: true })).toBeVisible();
     await expect(denied.page.locator('.community-content-search h3').filter({ hasText: book!.title })).toHaveCount(0);
     await post(denied.page, '/community-search/topics', { kind: 'skill_book', id: book!.id, topics: ['help'] }, 403);
     await e2eAuthPool.query("UPDATE positioning_profession_memberships SET member_tier='intern' WHERE user_id=$1 AND guild_key='guild_ai_vibe'", [maintainer.id]);
     await logged.page.reload();
+    await openFilters(logged.page);
     await logged.page.getByRole('button', { name: '編輯我的內容主題', exact: true }).click();
     await expect(logged.page.getByText('目前沒有可編輯主題的內容。', { exact: true })).toBeVisible();
     await post(logged.page, '/community-search/topics', { kind: 'skill_book', id: book!.id, topics: ['help'] }, 403);
@@ -218,6 +225,7 @@ test('SEARCH-005 only published showcases enter the topic editor and republishin
     const openEditor = async () => {
       await logged.page.reload();
       await search(logged.page, title);
+      await openFilters(logged.page);
       await logged.page.getByRole('button', { name: '編輯我的內容主題', exact: true }).click();
     };
     const transition = async (action: 'publish' | 'withdraw', version: number) => {
@@ -261,6 +269,7 @@ async function followedShowcase(browser: Browser, baseURL: string, db: Pool) {
     await post(logged.page, '/community-relations/follows', { kind: 'author', id: member.id, selected: true }, 200);
     await post(logged.page, '/community-search/topics', { kind: 'work', id: made.showcase_id, topics: ['tools'] }, 200);
     await search(logged.page, title);
+    await openFilters(logged.page);
     await expect(privateList(logged.page).getByRole('link', { name: title, exact: true })).toBeVisible();
     return { ...logged, member, title, id: made.showcase_id };
   } catch (error) { await logged.context.close(); throw error; }
@@ -292,6 +301,7 @@ for (const width of [390, 1440]) test(`SEARCH-006 private-list Back/Forward reco
     await privateList(page).getByRole('link', { name: logged.title, exact: true }).click();
     await expect(page.locator(`#showcase-${logged.id}`)).toBeVisible();
     await page.goBack();
+    await openFilters(page);
     await expect(updates).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toHaveValue(logged.title);
@@ -300,6 +310,7 @@ for (const width of [390, 1440]) test(`SEARCH-006 private-list Back/Forward reco
     expect(reads.length).toBe(before + 1);
     await page.goForward(); await expect(page.locator(`#showcase-${logged.id}`)).toBeVisible();
     await page.goBack();
+    await openFilters(page);
     await expect(updates).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     expect(reads.length).toBe(before + 2);
@@ -322,6 +333,7 @@ test('SEARCH-007 reload, another account and the same user signing in again reje
     await privateList(page).getByRole('button', { name: '追蹤更新', exact: true }).click();
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     await page.reload();
+    await openFilters(page);
     await expect(privateList(page).getByRole('button', { name: '私人書籤', exact: true })).toHaveAttribute('aria-pressed', 'true');
     const documentMarker = randomUUID();
     await page.evaluate(value => Object.defineProperty(window, 'searchHistoryDocumentMarker', { value }), documentMarker);
@@ -354,6 +366,7 @@ test('SEARCH-007 reload, another account and the same user signing in again reje
         history.replaceState(value, ''); window.dispatchEvent(new PopStateEvent('popstate', { state: value }));
         window.dispatchEvent(new HashChangeEvent('hashchange'));
       }, old);
+      await openFilters(page);
       await expect(privateList(page).getByRole('button', { name: '私人書籤', exact: true })).toHaveAttribute('aria-pressed', 'true');
       if (email === other.email) {
         await expect(privateList(page).getByText('尚未儲存書籤。可從搜尋結果儲存。', { exact: true })).toBeVisible();
@@ -373,6 +386,7 @@ test('SEARCH-008 returning to updates rechecks withdrawn content instead of rest
     const reread = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/community-relations/updates');
     await page.goBack();
     expect((await reread).status()).toBe(200);
+    await openFilters(page);
     await expect(privateList(page).getByRole('button', { name: '追蹤更新', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByText('目前沒有可閱讀的追蹤更新。可先選擇作者或主題。', { exact: true })).toBeVisible();
     await expect(privateList(page)).not.toContainText(logged.title);
@@ -496,6 +510,7 @@ test('SEARCH-GUILD-002 anonymous, empty query and disabled launchpad never read 
     await search(page, ''); await expect(guildResults(page)).toHaveCount(0); expect(reads).toEqual([]);
     await page.getByRole('searchbox', {name: '關鍵字', exact: true}).fill('資安');
     await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
+    await openFilters(page);
     for (const label of ['作品', '工具資源']) {
       const count = reads.length;
       await page.getByRole('checkbox', {name: label, exact: true}).check();

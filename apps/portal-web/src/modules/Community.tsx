@@ -51,7 +51,9 @@ export function SkillBookPurposeFilters({category,onCategory,use,onUse,categorie
 export function RepositoryLibrary({ client, ids, excludeIds, access, title = '社群技能書', compact = false, shelf, headingLevel }: { client: PortalClient; ids?: string[]; excludeIds?:string[]; access?:'unlocked'|'locked'; title?: string; compact?: boolean; shelf?: 'guild'; headingLevel?: 2|3|4 }) {
   const searchInput=useRef<HTMLInputElement>(null);
   const [catalog, setCatalog] = useState<CommunityCatalog | null>(null), [error, setError] = useState('');
-  const [search,setSearch]=useState(''),[category,setCategory]=useState(''),[use,setUse]=useState(''),[reload,setReload]=useState(0),[view,setView]=useState<SkillDiscoveryView>('all');
+  const [search,setSearch]=useState(''),[category,setCategory]=useState(''),[use,setUse]=useState(''),[reload,setReload]=useState(0),[view,setView]=useState<SkillDiscoveryView>('all'),[limit,setLimit]=useState(20);
+  const scopeKey=`${access??''}:${(ids??[]).join(',')}:${(excludeIds??[]).join(',')}`;
+  useEffect(()=>{setLimit(20);},[search,category,use,view,scopeKey]);
   const discovery=useSkillDiscovery();
   useEffect(() => {
     let active = true;
@@ -74,15 +76,16 @@ export function RepositoryLibrary({ client, ids, excludeIds, access, title = '�
   const books=discovered.filter(book=>matchesSkillBookUse(book.id,use)&&(!category||book.guide?.beginner?.category===category)&&matchesSkillSearch(search,[book.title,book.description,book.guide?.author_name,book.upstream_url,...Object.values(book.guide?.beginner??{})]));
   return <section className="stack community-library" aria-label={title}>
     {!compact && <header className="community-library-heading">
-      <div><p className="home-eyebrow">THE SHARED LIBRARY</p><h3>{title}</h3></div>
+      <div><p className="home-eyebrow">共享資源庫</p><h3>{title}</h3></div>
       <img src="/art/rpg/skill-codex.webp" alt="" width="360" height="240" loading="lazy"/>
     </header>}
     {error && <div role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={()=>setReload(value=>value+1)}>重新載入技能書</button></div>}
     {!catalog && !error && <p role="status">正在載入技能書…</p>}
     {catalog&&available.length===0&&<p className="muted">目前沒有可顯示的技能書。</p>}
-    {catalog&&available.length>0&&<><SkillDiscoveryFilters value={view} onChange={setView} official={shelf!=='guild'}/><div className="skill-library-filters"><label className="field">搜尋技能書<input ref={searchInput} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：貼文、商店、剪輯、找方向…"/></label><SkillBookPurposeFilters category={category} onCategory={setCategory} use={use} onUse={setUse} categories={categories}/>{(search||category||use||view!=='all')&&<button type="button" className="btn btn-ghost" onClick={()=>{setSearch('');setCategory('');setUse('');setView('all');searchInput.current?.focus();}}>清除篩選</button>}</div><p className="skill-library-count" role="status">顯示 {distinctOriginalRepoCount(books)} / {distinctOriginalRepoCount(available)} 個原作資源</p></>}
-    <div className="card-grid community-book-grid">{books.map(book=><SkillBookCard key={book.id} book={book} className="community-book" access={access} headingLevel={headingLevel}/>)}</div>
-    {catalog&&available.length>0&&!books.length&&<p className="muted">{view!=='all'&&discovery.error?'請重讀徽章與榜單，或先查看全部技能。':view!=='all'&&discovery.loading&&!discovery.data?'正在載入技能書…':(view==='week'||view==='month')&&!discovered.length?'目前還沒有上榜的技能書。連結 GitHub，Star 你喜歡的技能。':view==='today'&&!discovered.length?'今天尚未收錄新技能。':view==='official'&&!discovered.length?'目前尚未指定官方公會技能。':'沒有符合的技能書。試試另一個關鍵字或用途。'}</p>}
+    {catalog&&available.length>0&&<><div className="skill-library-filters"><label className="field">搜尋技能書<input ref={searchInput} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：貼文、商店、剪輯、找方向…"/></label><details className="skill-library-filter-drawer"><summary>篩選</summary><div className="stack skill-library-filter-body"><SkillDiscoveryFilters value={view} onChange={setView} official={shelf!=='guild'}/><SkillBookPurposeFilters category={category} onCategory={setCategory} use={use} onUse={setUse} categories={categories}/>{(search||category||use||view!=='all')&&<button type="button" className="btn btn-ghost" onClick={()=>{setSearch('');setCategory('');setUse('');setView('all');searchInput.current?.focus();}}>清除篩選</button>}</div></details></div><p className="skill-library-count" role="status">顯示 {distinctOriginalRepoCount(books)} / {distinctOriginalRepoCount(available)} 個原作資源</p></>}
+    <div className="card-grid community-book-grid">{books.slice(0,limit).map(book=><SkillBookCard key={book.id} book={book} className="community-book" access={access} headingLevel={headingLevel}/>)}</div>
+    {books.length>limit&&<div className="actions"><button type="button" className="btn btn-secondary" onClick={()=>setLimit(count=>count+20)}>更多</button></div>}
+    {catalog&&available.length>0&&!books.length&&<p className="muted">{view!=='all'&&discovery.error?'請重讀徽章與榜單，或先查看全部技能。':view!=='all'&&discovery.loading&&!discovery.data?'正在載入技能書…':(view==='week'||view==='month')&&!discovered.length?'目前還沒有上榜的技能書。連結 GitHub，為喜歡的技能加星。':view==='today'&&!discovered.length?'今天尚未收錄新技能。':view==='official'&&!discovered.length?'目前尚未指定官方公會技能。':'沒有符合的技能書。試試另一個關鍵字或用途。'}</p>}
   </section>;
 }
 
@@ -96,33 +99,26 @@ function CommunityTestWeek({ onOpen }: { onOpen: () => void }) {
 }
 export function CommunityPanel({ client, onNavigate }: { client: PortalClient; onNavigate: (id: TabId) => void }) {
   const {t}=useLanguage();
-  const [data, setData] = useState<CommunityCatalog | null>(null), [error, setError] = useState(''), [reload, setReload] = useState(0);
+  const [data, setData] = useState<CommunityCatalog | null>(null), [error, setError] = useState(''), [reload, setReload] = useState(0), [projectLimit, setProjectLimit] = useState(20);
   useEffect(() => {
     let active = true;
     setError('');
     void client.get<CommunityCatalog>('/community').then(value => { if (active) setData(value); }).catch(() => { if (active) setError('社群資料暫時無法載入。'); });
     return () => { active = false; };
   }, [client, reload]);
+  const visibleProjects = (data?.project_links ?? []).filter(project => { try { return new URL(project.url).protocol === 'https:'; } catch { return false; } });
   return <section className="module-panel freedom-community">
     <header className="community-entry-hero">
-      <div className="community-entry-copy"><h2>加入社群</h2><p>到 Discord 與 LINE 找夥伴、交流作品。</p></div>
+      <div className="community-entry-copy"><h2>加入社群</h2><p>Discord 與 LINE 找夥伴。</p></div>
       <BrandPoster compact/>
     </header>
     <CommunityLinks/>
     <section className="card stack" aria-labelledby="community-hub-card-title">
       <h3 id="community-hub-card-title">{t('nav.community-hub')}</h3>
-      <p>{t('communityHub.intro')}</p>
       <div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={()=>onNavigate('community-hub')}>{t('communityHub.open')}</button></div>
     </section>
-    <CommunityTestWeek onOpen={() => onNavigate('tester-map')}/>
-    <section className="card stack community-project" aria-labelledby="community-erp-demo-title">
-      <h3 id="community-erp-demo-title">ERP／CRM 產業範本試用</h3>
-      <p>mars-tw 的 MIT 個人開源專案，提供零售、批發、服務、餐飲、製造、電商、專案及一般企業八種範本。每位訪客建立自己的模擬工作區，只使用測試幣與虛構商品。</p>
-      <div className="actions"><a className="btn btn-ghost" href="https://freedom-erp-crm-demo.digimkt.workers.dev/" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">建立我的模擬測試系統 ↗</a><a className="btn btn-ghost" href="https://github.com/mars-tw/freedom-erp-crm" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">查看開源程式與一指令建立 ↗</a></div>
-      <p className="hint">開啟獨立站點，不轉送工坊會員資料。公開測試資料閒置 72 小時後清除；沒有接入真實財務。</p>
-    </section>
     <section className="community-footprint" aria-labelledby="community-footprint-title">
-      <header><p className="home-eyebrow">OUR FOOTPRINT</p><h3 id="community-footprint-title" data-guide-anchor="community:footprint">社群足跡</h3></header>
+      <header><p className="home-eyebrow">工作坊足跡</p><h3 id="community-footprint-title" data-guide-anchor="community:footprint">社群足跡</h3></header>
       {error && <div role="alert" className="banner banner-error"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={() => setReload(value => value + 1)}>重新載入社群足跡</button></div>}
       {!data && !error && <p role="status">正在載入社群足跡…</p>}
       <div className="community-metrics">{data?.metrics.map(metric => <div className="community-metric" key={metric.label}>
@@ -131,11 +127,22 @@ export function CommunityPanel({ client, onNavigate }: { client: PortalClient; o
       <div className="community-metric-source"><a href="https://github.com/Hao0321/freeworkshop-open-data" target="_blank" rel="noopener noreferrer">查看社群開放資料 ↗</a></div>
     </section>
     <button className="btn btn-ghost" onClick={() => onNavigate('skills')}>前往技能書架</button>
-    {Boolean(data?.project_links?.length) && <section className="stack community-projects" aria-labelledby="community-project-links">
-      <header className="home-section-heading"><div><p className="home-eyebrow">MADE IN THE WORKSHOP</p><h3 id="community-project-links">更多工坊作品</h3></div></header>
-      <div className="card-grid">{data?.project_links?.filter(project => { try { return new URL(project.url).protocol === 'https:'; } catch { return false; } }).map(project => <article className="card stack community-project" key={project.url}>
-        <span className="community-project-orbit" aria-hidden="true">↗</span><h4>{project.title}</h4><p className="muted">{project.description}</p><a className="btn btn-ghost" href={project.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">查看專案網站 ↗</a>
-      </article>)}</div>
-    </section>}
+    <details className="community-more"><summary>更多</summary><div className="stack community-more-body">
+      <p className="muted">{t('communityHub.intro')}</p>
+      <CommunityTestWeek onOpen={() => onNavigate('tester-map')}/>
+      <section className="card stack community-project" aria-labelledby="community-erp-demo-title">
+        <h3 id="community-erp-demo-title">ERP／CRM 產業範本試用</h3>
+        <p>mars-tw 的 MIT 個人開源專案，提供零售、批發、服務、餐飲、製造、電商、專案及一般企業八種範本。每位訪客建立自己的模擬工作區，只使用測試幣與虛構商品。</p>
+        <div className="actions"><a className="btn btn-ghost" href="https://freedom-erp-crm-demo.digimkt.workers.dev/" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">建立我的模擬測試系統 ↗</a><a className="btn btn-ghost" href="https://github.com/mars-tw/freedom-erp-crm" target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">查看開源程式與一指令建立 ↗</a></div>
+        <p className="hint">開啟獨立站點，不轉送工坊會員資料。公開測試資料閒置 72 小時後清除；沒有接入真實財務。</p>
+      </section>
+      {Boolean(visibleProjects.length) && <section className="stack community-projects" aria-labelledby="community-project-links">
+        <header className="home-section-heading"><div><p className="home-eyebrow">工坊實作成果</p><h3 id="community-project-links">更多工坊作品</h3></div></header>
+        <div className="card-grid">{visibleProjects.slice(0, projectLimit).map(project => <article className="card stack community-project" key={project.url}>
+          <span className="community-project-orbit" aria-hidden="true">↗</span><h4>{project.title}</h4><p className="muted">{project.description}</p><a className="btn btn-ghost" href={project.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">查看專案網站 ↗</a>
+        </article>)}</div>
+        {visibleProjects.length > projectLimit && <div className="actions"><button type="button" className="btn btn-secondary" onClick={() => setProjectLimit(count => count + 20)}>更多</button></div>}
+      </section>}
+    </div></details>
   </section>;
 }

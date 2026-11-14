@@ -1,3 +1,4 @@
+import { fixtureRoleConnection } from '../fixture-role-password.js';
 // Separate broker process: only this child imports AES vault and ciphertext pool.
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -8,11 +9,11 @@ import {profile,fileStore,listen,closeServer} from './shared.js';
 let config:any,internalServer:Server|undefined,setupServer:Server|undefined,origin='',captureReady=true,captureHook='',signHook='';
 const pools:Pool[]=[],sqlErrors:any[]=[],requests:any[]=[],reads:{path:string;cleared:boolean}[]=[];
 const buffers:Uint8Array[]=[],surfaceChecks:any[]=[];let transport:any,service:any,storePuts=0;
-function pool(url:string){const p=new Pool({connectionString:url,options:`-c search_path=${config.schema} -c statement_timeout=10000`,max:12});p.on('connect',client=>{const original=client.query;client.query=((...args:any[])=>{const result=Reflect.apply(original,client,args);if(result&&typeof result.catch==='function')return result.catch((error:any)=>{sqlErrors.push({code:error.code,message:error.message,statement:typeof args[0]==='string'?args[0].trim().split('\n')[0]:''});throw error;});return result;}) as typeof client.query;});pools.push(p);return p;}
+function pool(url:string,password?:string){const p=new Pool({...fixtureRoleConnection(url,password),options:`-c search_path=${config.schema} -c statement_timeout=10000`,max:12});p.on('connect',client=>{const original=client.query;client.query=((...args:any[])=>{const result=Reflect.apply(original,client,args);if(result&&typeof result.catch==='function')return result.catch((error:any)=>{sqlErrors.push({code:error.code,message:error.message,statement:typeof args[0]==='string'?args[0].trim().split('\n')[0]:''});throw error;});return result;}) as typeof client.query;});pools.push(p);return p;}
 process.on('message',async(message:any)=>{try{let value:any=null;
  if(message.kind==='init'){
   config=message.value;assert(!('secret'in config));
-  const cipher=pool(config.cipherUrl),executor=pool(config.executorUrl);
+  const cipher=pool(config.cipherUrl,config.cipherPassword),executor=pool(config.executorUrl,config.executorPassword);
   const {createSignedRecoverySource}=await import('../../../apps/credential-broker/src/recovery.js');
   const recover=createSignedRecoverySource({authority:'synthetic-external-recovery',environment:profile.environment,pinnedKeys:[{keyId:'recovery-1',key:await importJWK(config.recoveryPublicJwk,'EdDSA') as CryptoKey}],readSignedState:async()=>{const r=await fetch(config.recoveryOrigin+'/signed');if(!r.ok)throw Error('unavailable');return(await r.json() as any).signed;},readMonotonicFloor:async()=>{const r=await fetch(config.recoveryOrigin+'/floor');if(!r.ok)throw Error('unavailable');return await r.json();}}).recover;
   const {createCredentialVault}=await import('../../../apps/credential-broker/src/vault.js');

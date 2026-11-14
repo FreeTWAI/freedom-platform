@@ -74,7 +74,7 @@ export const TESTER_FLAGS = {
   store_categories_enabled: 'off',
   supply_material_media_enabled: 'off',
   supply_material_uploads_enabled: 'off',
-  FREEDOM_PRIVATE_AI_ENABLED: 'off',
+  private_ai_enabled: 'off',
 } as const satisfies Record<string, 'on' | 'off'>;
 export type TesterFlag = keyof typeof TESTER_FLAGS;
 // Site fields that describe the deployment rather than a feature someone can test.
@@ -250,7 +250,7 @@ export const TESTER_AREAS: readonly TesterArea[] = [
       { id: 'contrib.marketing', pages: ['marketing'], href: '#marketing', name: ['行銷工作室', 'Marketing studio', 'マーケティング', '마케팅 스튜디오', 'Estudio de marketing'] },
       { id: 'contrib.services', pages: ['services'], href: '#services', name: ['社員服務', 'Member services', 'メンバーのサービス', '회원 서비스', 'Servicios de miembros'] },
       { id: 'contrib.promotion', pages: ['promotion'], href: '#promotion', name: ['我的貢獻', 'My contributions', '自分の貢献', '내 기여', 'Mis contribuciones'] },
-      { id: 'contrib.private-ai', pages: ['private-ai'], flag: 'FREEDOM_PRIVATE_AI_ENABLED', name: ['私人工作與 AI', 'Private work and AI', '非公開の作業とAI', '비공개 작업과 AI', 'Trabajo privado e IA'] },
+      { id: 'contrib.private-ai', pages: ['private-ai'], flag: 'private_ai_enabled', name: ['私人工作與 AI', 'Private work and AI', '非公開の作業とAI', '비공개 작업과 AI', 'Trabajo privado e IA'] },
     ],
   },
   {

@@ -197,4 +197,15 @@ test('account composition preserves the state owner, leave guard and explicit qu
   assert.equal(second.type,first.type,'query changes retain the same lazy component identity');
   assert.equal(second.props.focusConnections,false);
   assert.equal(second.props.focusProfileExtras,true);
+  assert.equal(second.props.focusPublicPage,false);
+  for(const hash of ['#me/settings?view=page','#me?view=settings','#account?view=page','#me/settings?view=page&from=share']){
+    const pageView=element(identityFeatures.account.render({...context,locationHash:hash}));
+    assert.equal(pageView.props.focusPublicPage,true,hash);
+  }
+  assert.equal(element(identityFeatures.account.render({...context,locationHash:'#me/settings'})).props.focusPublicPage,false);
+  const visited:string[]=[];
+  const visitor=element(identityFeatures.profile.render({...context,locationHash:'#me?member=30000000-0000-4000-8000-000000000001',selectTab:(tab,hash)=>visited.push(`${tab}:${hash??''}`)}));
+  assert.equal(visitor.props.id,'30000000-0000-4000-8000-000000000001');
+  visitor.props.onEdit();
+  assert.deepEqual(visited,['account:#me/settings?view=page']);
 });

@@ -17,7 +17,7 @@ const serverUrl = new URL(process.env.TEST_DATABASE_URL ?? LOCAL_DATABASE_URL);
 const database = `fp_workerd_maintainer_${process.pid}_${Date.now()}`;
 const databaseUrl = Object.assign(new URL(serverUrl), { pathname: '/' + database }).href;
 
-// Required by Miniflare even when the database uses local trust auth.
+// Miniflare does not read PGPASSWORD; trust-only databases still need a placeholder.
 const workerDatabase = new URL(databaseUrl);
 workerDatabase.password ||= process.env.PGPASSWORD || 'synthetic-workerd-only';
 const compatibilityDate = '2026-09-21';

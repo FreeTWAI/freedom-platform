@@ -10,7 +10,7 @@ import {validEventPrizePhotos} from './event-prize-photo-client';
 import './PublicEventPage.css';
 
 const canonicalPublicEventId=(value:unknown)=>typeof value==='string'&&value.length===36&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)?value.toLowerCase():null;
-const publicEventSchema=z.object({prize_photos:z.array(z.object({prize_id:z.string(),photo_version:z.number().int().safe().min(2),url:z.string()}).strict()).max(5).optional(),prize_details:eventPrizeDetailsSchema.optional(),event_id:z.string().refine(value=>canonicalPublicEventId(value)!==null).transform(value=>value.toLowerCase()),title:z.string(),description:z.string(),starts_at:z.string(),ends_at:z.string(),mode:z.enum(['online','in_person','hybrid']),location:z.string(),online_url:z.string().nullable(),event_kind:z.string(),topic:z.string().nullable(),visibility:z.enum(['referral','open']),registration_policy:z.enum(['guest_allowed','community_member']).default('guest_allowed'),capacity:z.number().nullable(),attending_count:z.number(),organizer_name:z.string(),banner_url:z.string().nullable(),video_url:z.string().nullable(),video_mime:z.enum(['video/mp4','video/webm']).nullable()}).refine(value=>validEventPrizePhotos(value.prize_photos??[],value.event_id,value.prize_details??[],true));
+const publicEventSchema=z.object({prize_photos:z.array(z.object({prize_id:z.string(),photo_version:z.number().int().safe().min(2),url:z.string()}).strict()).max(5).optional(),prize_details:eventPrizeDetailsSchema.optional(),event_id:z.string().refine(value=>canonicalPublicEventId(value)!==null).transform(value=>value.toLowerCase()),title:z.string(),description:z.string(),starts_at:z.string(),ends_at:z.string(),mode:z.enum(['online','in_person','hybrid']),location:z.string(),online_url:z.string().nullable(),event_kind:z.string(),topic:z.string().nullable(),visibility:z.enum(['referral','open']),registration_policy:z.enum(['guest_allowed','community_member']).default('guest_allowed'),guest_registration_available:z.boolean().default(true),capacity:z.number().nullable(),attending_count:z.number(),organizer_name:z.string(),banner_url:z.string().nullable(),video_url:z.string().nullable(),video_mime:z.enum(['video/mp4','video/webm']).nullable()}).refine(value=>validEventPrizePhotos(value.prize_photos??[],value.event_id,value.prize_details??[],true));
 type PublicEvent=z.infer<typeof publicEventSchema>;
 const safeUrl=(value:string|null)=>{try{const url=new URL(value??'');return url.protocol==='https:'&&!url.username&&!url.password?url.href:null}catch{return null}};
 const savedCode=(id:string)=>{
@@ -56,9 +56,15 @@ function usePublicEventRegistration(client:PortalClient,id:string){
     }catch(cause){
       if(!live())return;
       // A later refusal describes that retry, not the outcome of the first send.
-      attempt.unknown ||= !(cause instanceof ApiError)||cause.network||cause.timedOut||cause.accessExpired||!cause.definitiveResponse||cause.status>=500||cause.status===0;
+      const httpAnswer=cause instanceof ApiError&&!cause.timedOut&&!cause.accessExpired&&typeof cause.status==='number'&&cause.status>=400&&cause.status<600;
+      attempt.unknown ||= !httpAnswer;
       if(!attempt.unknown)current.attempt=null;
-      setState({busy:false,unknown:attempt.unknown,confirmed:false,error:attempt.unknown?registrationUnknown:cause instanceof ApiError?cause.message:'報名未完成，請稍後再試。'});
+      const retryLine=cause instanceof ApiError&&typeof cause.status==='number'&&cause.status>=500
+        ?'目前無法完成報名，請再試一次。'
+        :cause instanceof ApiError&&cause.message.trim()
+          ?(cause.message.includes('再試一次')?cause.message.trim():`${cause.message.trim().replace(/，?請稍後重試[。.]?$/,'').replace(/[。.]$/,'')}，請再試一次。`)
+          :'報名未完成，請再試一次。';
+      setState({busy:false,unknown:attempt.unknown,confirmed:false,error:attempt.unknown?registrationUnknown:retryLine});
     }finally{if(live()){current.busy=false;current.controller=null;}}
   }
   return {...state,submit};
@@ -113,7 +119,7 @@ function PublicEventContent({client,id,onLogin,onJoin,revalidatePublic=false,par
     if(revalidatePublic){window.addEventListener('focus',refresh);window.addEventListener('pageshow',refresh);document.addEventListener('visibilitychange',visible)}
     return()=>{active=false;generation++;controller?.abort();window.removeEventListener('focus',refresh);window.removeEventListener('pageshow',refresh);document.removeEventListener('visibilitychange',visible)};
   },[client,id,revalidatePublic,privateManagement]);
-  async function register(e:FormEvent){e.preventDefault();if((!event||event.registration_policy==='community_member')&&!registration.unknown||saving)return;setError('');await registration.submit({name,email,referral_code:code});}
+  async function register(e:FormEvent){e.preventDefault();if((!event||event.registration_policy==='community_member'||!event.guest_registration_available)&&!registration.unknown||saving)return;setError('');await registration.submit({name,email,referral_code:code});}
   const started=Boolean(event&&Date.parse(event.starts_at)<=Date.now()),ended=Boolean(event&&Date.parse(event.ends_at)<=Date.now()),full=Boolean(event&&event.capacity!==null&&event.attending_count>=event.capacity);
   const locationLink=safeUrl(event?.location??null),onlineLink=safeUrl(event?.online_url??null);
   return <div className="public-event-page"><header><img src="/brand/freedom-workshop.webp" alt="自由工坊"/><button type="button" className="btn btn-ghost" onClick={onLogin}>會員登入</button></header><main className="public-event-content">
@@ -125,11 +131,12 @@ function PublicEventContent({client,id,onLogin,onJoin,revalidatePublic=false,par
       <p className="muted">{event.attending_count}{event.capacity===null?' 人已報名':` / ${event.capacity} 人已報名`}</p>
       {!started&&event.visibility==='referral'&&!code&&<p className="banner banner-info">這場活動須從會員分享的連結報名，請向分享者取得連結。</p>}
       {!started&&event.registration_policy==='community_member'&&<section className="stack" aria-label="會員報名"><h2>使用社群帳號參加</h2><p>這場活動只接受本社群帳號報名。登入後請再確認報名，不會自動加入活動。</p><div className="actions"><button type="button" className="btn btn-primary btn-small" style={{minHeight:44}} onClick={onLogin}>登入後報名</button>{onJoin&&<button type="button" className="btn btn-secondary btn-small" style={{minHeight:44}} onClick={onJoin}>建立帳號後報名</button>}</div></section>}
-      {(registration.unknown||saving||registration.confirmed||!started&&!full&&event.registration_policy!=='community_member')&&<form className="public-event-register" onSubmit={e=>void register(e)}><h2>報名活動</h2><label className="field">你的名字<input required maxLength={80} disabled={saving||registration.unknown||registration.confirmed} value={name} onChange={e=>setName(e.target.value)}/></label><label className="field">接收參與資料的 Email<input required type="email" maxLength={200} disabled={saving||registration.unknown||registration.confirmed} value={email} onChange={e=>setEmail(e.target.value)}/></label><p className="field-hint">活動參與資訊會寄到這個信箱。分享碼已包含在連結中，無須手動輸入。</p><button className="btn btn-primary" disabled={saving||registration.confirmed||!registration.unknown&&event.visibility==='referral'&&!code}>{saving?'寄送中…':registration.unknown?'重試原報名與寄信':'報名並寄送參與資料'}</button></form>}
+      {!started&&!full&&event.registration_policy!=='community_member'&&!event.guest_registration_available&&!registration.unknown&&!saving&&!registration.confirmed&&<section className="stack" aria-label="會員報名"><h2>使用社群帳號參加</h2><div className="actions"><button type="button" className="btn btn-primary btn-small" style={{minHeight:44}} onClick={onLogin}>登入後報名</button>{onJoin&&<button type="button" className="btn btn-secondary btn-small" style={{minHeight:44}} onClick={onJoin}>建立帳號後報名</button>}</div></section>}
+      {(registration.unknown||saving||registration.confirmed||!started&&!full&&event.registration_policy!=='community_member'&&event.guest_registration_available)&&<form className="public-event-register" onSubmit={e=>void register(e)}><h2>報名活動</h2><label className="field">你的名字<input required maxLength={80} disabled={saving||registration.unknown||registration.confirmed} value={name} onChange={e=>setName(e.target.value)}/></label><label className="field">接收參與資料的 Email<input required type="email" maxLength={200} disabled={saving||registration.unknown||registration.confirmed} value={email} onChange={e=>setEmail(e.target.value)}/></label><p className="field-hint">活動參與資訊會寄到這個信箱。分享碼已包含在連結中，無須手動輸入。</p><button className="btn btn-primary" disabled={saving||registration.confirmed||!registration.unknown&&event.visibility==='referral'&&!code}>{saving?'寄送中…':registration.unknown?'重試原報名與寄信':'報名並寄送參與資料'}</button></form>}
       {full&&!started&&<p className="banner banner-info">活動名額已滿。</p>}{started&&!ended&&<p className="banner banner-info">活動已開始，報名已結束。</p>}{notice&&<p role="status" className="banner banner-info">{notice}</p>}{(registration.error||error)&&<p role="alert" className="banner banner-error">{registration.error||error}</p>}
     </article>}
     {!event&&registration.unknown&&<section className="card stack" aria-label="待確認的報名"><p role="alert" className="banner banner-error">{registrationUnknown}</p><button type="button" className="btn btn-ghost btn-small" disabled={saving} onClick={()=>void registration.submit({name,email,referral_code:code})}>{saving?'寄送中…':'重試原報名與寄信'}</button></section>}
     {!event&&notice&&<p role="status" className="banner banner-info">{notice}</p>}
-    {participationEnabled&&(privateManagement||event&&event.registration_policy!=='community_member')&&<div className="card stack">{privateManagement&&<h1>活動參與管理</h1>}<GuestEventParticipation client={client} id={id} referralCode={code}/></div>}
+    {participationEnabled&&(privateManagement||event&&event.registration_policy!=='community_member'&&event.guest_registration_available)&&<div className="card stack">{privateManagement&&<h1>活動參與管理</h1>}<GuestEventParticipation client={client} id={id} referralCode={code}/></div>}
   </main></div>;
 }
