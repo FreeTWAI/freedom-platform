@@ -189,7 +189,7 @@ test('an unavailable share page reports failure, keeps retry and does not create
   await choose(page,'分享作品');await expect(page.getByRole('status').filter({hasText:'分享入口暫時無法載入'})).toBeVisible();
   await expect(page.getByRole('button',{name:'重新載入',exact:true})).toBeEnabled();
   unavailable=false;await page.getByRole('button',{name:'重新載入',exact:true}).click();
-  await expect(page.getByLabel('作品標題',{exact:true})).toBeVisible();await choose(page,'分享作品');
+  await expect(page.getByRole('button',{name:'發布作品',exact:true})).toBeVisible();await choose(page,'分享作品');
   await expect(page.getByLabel('作品標題',{exact:true})).toBeFocused();
 });
 

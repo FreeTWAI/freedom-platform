@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { test, expect, type Page } from './fixtures.js';
 import { navigate, signOut } from './navigation.js';
+import { openWorkForm } from './sharing-authoring-fixture.js';
 
 async function login(page: Page, email = 'maker@local.test') {
   await page.goto('/');
@@ -57,6 +58,7 @@ for (const width of [1280, 320]) test(`${width}px member shares a real work link
   page.on('request', request => { if (request.method() === 'GET' && new URL(request.url()).pathname === '/api/v1/showcases') galleryReads++; });
   await login(page);
   await navigate(page, '作品與合作');
+  await openWorkForm(page);
   const title = `共同創作範例 ${width}`;
   await expect(page.getByLabel('成果引用（例如 artifact:template-v1）')).toBeHidden();
   await page.getByLabel('作品標題', { exact: true }).fill(title);

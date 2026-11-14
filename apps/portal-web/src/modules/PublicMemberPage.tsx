@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import type {SessionPayload} from '../types';
-import {BrandPoster} from './Community';
+import {BrandPoster} from './CommunityBrand';
 import {MemberCardDownload} from './MemberCardDownload';
 import {MemberECard,type CardDesign,type CardLink,type CardProfileLink} from './MemberECard';
 import {MemberCard,loadLabels,type MemberCardData} from './Membership';

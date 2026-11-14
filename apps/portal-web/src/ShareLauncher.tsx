@@ -5,7 +5,7 @@ import './ShareLauncher.css';
 export type ShareTarget='post'|'work'|'resource'|'product'|'product-start'|'product-store'|'product-supply'|'collaborate'|'cocreate';
 export const SHARE_TARGETS:Record<ShareTarget,{tab:TabId;selector:string;label:string;activate?:boolean;hash?:string}>={
   post:{tab:'social',selector:'[data-guide-anchor="social:composer"] .social-write-trigger',label:'發文',activate:true},
-  work:{tab:'showcase',selector:'[data-guide-anchor="showcase:title"]',label:'分享作品'},
+  work:{tab:'showcase',selector:'[data-guide-anchor="showcase:create"]',label:'分享作品',activate:true},
   resource:{tab:'opensource',selector:'[data-guide-anchor="opensource:repository"]',label:'分享開源資源'},
   product:{tab:'supplier',selector:'[data-guide-anchor="supplier:import-results"] input[type="file"]',label:'上傳商品成果'},
   'product-start':{tab:'supplier',selector:'[data-guide-anchor="supplier:download-kit"] button',label:'準備商品'},

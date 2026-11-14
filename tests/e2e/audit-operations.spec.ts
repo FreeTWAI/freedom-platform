@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { navigate, navigateAdmin, openAdminNavigation, signOut } from './navigation.js';
+import { openWorkForm } from './sharing-authoring-fixture.js';
 import { test, expect, type Page } from './fixtures.js';
 
 // Screenshots are audit evidence only; they never replace the assertions below.
@@ -110,6 +111,7 @@ test('cooperation cards say who acts next and link between showcase and records'
   const title = '稽核・合作提示範例';
   await login(page, 'client@local.test');
   await navigate(page, '作品與合作');
+  await openWorkForm(page);
   await expect(page.getByLabel('作品連結（選填）', { exact: true })).toBeVisible();
   await expect(page.getByLabel('成果引用（例如 artifact:template-v1）', { exact: true })).toBeHidden();
   await page.getByLabel('作品標題', { exact: true }).fill(title);

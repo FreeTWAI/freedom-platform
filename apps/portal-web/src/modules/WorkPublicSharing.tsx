@@ -153,8 +153,8 @@ export function WorkPublicSharing({
       </label>
       {reviewed && state?.enabled && state.available && (
         <div className="work-public-link-row">
-          <a className="work-public-link" href={publicPath} target="_blank" rel="noopener noreferrer">
-            {publicUrl}
+          <a className="work-public-link" href={publicPath} target="_blank" rel="noopener noreferrer" title={publicUrl}>
+            開啟公開頁 ↗
           </a>
           <ShareButton
             key={generation}

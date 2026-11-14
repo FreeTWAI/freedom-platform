@@ -308,8 +308,8 @@ export const PAGE_GUIDES: Record<string, Record<string, GuideDefinition>> = {
       "label": "找到作品分享表單",
       "steps": [
         {
-          "selector": "[data-guide-anchor=\"showcase:title\"]",
-          "instruction": "這是作品標題欄位，可自行填名稱與用途。"
+          "selector": "[data-guide-anchor=\"showcase:create\"]",
+          "instruction": "按「發布作品」打開作品表單，再填作品標題。"
         }
       ]
     },

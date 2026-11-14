@@ -127,7 +127,7 @@ function harness(t: TestContext) {
     if (cache.has(file)) return cache.get(file);
     const mod = {exports: {} as any}; cache.set(file, mod.exports);
     const raw = readFileSync(file, 'utf8');
-    runInNewContext(transformSync(raw, {loader: relative.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic'}).code, {
+    runInNewContext(transformSync(raw, {loader: relative.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic', supported: {'dynamic-import': false}}).code, {
       module: mod, exports: mod.exports, crypto: webcrypto, Intl, URL, AbortController, console,
       window: windowObj, document, navigator: navigatorState, HTMLDetailsElement: HostDetailsElement,
       setTimeout: timersOf.setTimeout, clearTimeout: timersOf.clearTimeout,
@@ -518,7 +518,7 @@ function shareButtonHarness(t: TestContext, initial: Record<string, any> = {}) {
     if (cache.has(file)) return cache.get(file);
     const mod = {exports: {} as any}; cache.set(file, mod.exports);
     const raw = readFileSync(file, 'utf8');
-    runInNewContext(transformSync(raw, {loader: relative.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic'}).code, {
+    runInNewContext(transformSync(raw, {loader: relative.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic', supported: {'dynamic-import': false}}).code, {
       module: mod, exports: mod.exports, crypto: webcrypto, Intl, URL, AbortController, console,
       window: windowObj, document, navigator: navigatorState, HTMLDetailsElement: HostDetailsElement,
       setTimeout, clearTimeout,

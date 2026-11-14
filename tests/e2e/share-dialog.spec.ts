@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { test as base, expect, type BrowserContext, type Locator, type Page } from './fixtures.js';
 import { navigate, expandHomeSections } from './navigation.js';
+import { openWorkForm } from './sharing-authoring-fixture.js';
 import { DEMO_COMMUNITY, DEMO_PASSWORD, DEMO_USERS } from '../../packages/testing/seed.js';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
 
@@ -160,6 +161,7 @@ test('share dialog works across all 6 targets, skill intros, note public toggle 
 
     // 6. Owner's public work
     await navigate(page, '作品與合作');
+    await openWorkForm(page);
     const workTitle = `統一分享作品 ${id.slice(0, 6)}`;
     await page.getByLabel('作品標題', { exact: true }).fill(workTitle);
     await page.getByLabel('一句話介紹', { exact: true }).fill('用於驗證公開作品分享對話。');
