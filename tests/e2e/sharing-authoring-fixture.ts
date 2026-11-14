@@ -404,7 +404,8 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await fixture(page,f=>f.reject(0));await expect(page.getByRole('heading',{name:'Local resumed edit'})).toBeVisible();
   },
   'community relations flag restores private controls only for enabled member':async page=>{
-    await mountSharingFixture(page,'relations');await expect(page.getByRole('heading',{name:'我的書籤與追蹤'})).toBeVisible();
+    // UX-M-04: bookmarks and follows sit behind the closed 篩選 in 探索.
+    await mountSharingFixture(page,'relations');await page.locator('details.explore-filters > summary').click();await expect(page.getByRole('heading',{name:'我的書籤與追蹤'})).toBeVisible();
     await fixture(page,f=>f.enabled(false));await expect(page.getByRole('heading',{name:'我的書籤與追蹤'})).toHaveCount(0);
   },
   'stable mutation error setter does not loop a dependent Guilds-style load effect':async page=>{
