@@ -64,15 +64,17 @@ export function PromotionBoards({client,resultsOnly=false}: {client: PortalClien
   return <section className="promotion-page stack" aria-label="推廣排行榜">
     {resultsOnly?<h2>分享成效</h2>:<section className="card promotion-start" aria-label="選擇分享內容">
       <h2>把用得上的內容分享給需要的人</h2>
-      <p>看到適合朋友的內容再分享；分享完全自願，不需要為了排名大量傳送。</p>
       <div className="promotion-destinations">
         <a className="btn btn-ghost" href="#skills">找一本技能書</a>
         <a className="btn btn-ghost" href="#services">查看社員服務</a>
         <a className="btn btn-ghost" href="#events">找一場活動</a>
         <a className="btn btn-ghost" href="#social">閱讀社群分享</a>
       </div>
-      <p className="promotion-howto">在支援的內容旁選擇「分享」或「推廣原文」，先查看介紹與連結，再由你選擇對象送出。社員服務是找服務的目錄，不是推廣任務。</p>
       <ShareButton title="自由工坊" fallbackUrl="/" makeLink={promotionLink(client, 'platform', 'workshop')} text={WORKSHOP_TEXT} label="分享自由工坊"/>
+      <details className="promotion-help"><summary>說明</summary>
+        <p>看到適合朋友的內容再分享；分享完全自願，不需要為了排名大量傳送。</p>
+        <p className="promotion-howto">在支援的內容旁選擇「分享」或「推廣原文」，先查看介紹與連結，再由你選擇對象送出。社員服務是找服務的目錄，不是推廣任務。</p>
+      </details>
     </section>}
     <header className="promotion-head">
       <div className="promotion-periods" data-guide-anchor="promotion:period" role="group" aria-label="統計期間">
@@ -86,7 +88,7 @@ export function PromotionBoards({client,resultsOnly=false}: {client: PortalClien
     <section className="card promotion-mine" aria-label="我的推廣連結">
       <h2>我的推廣連結</h2>
       <p className="promotion-howto">右側數字是{PERIODS.find(item => item.id === range.period)!.label}的點擊分數。</p>
-      {loading ? <p className="promotion-empty">正在讀取你的連結…</p> : error ? <p className="promotion-empty">尚未取得連結紀錄，請重新載入。</p> : shown.length === 0 ? <p className="promotion-empty">還沒有建立分享連結。可以先從上方選一項你覺得有用的內容。</p> : <ul>
+      {loading ? <p className="promotion-empty">正在讀取你的連結…</p> : error ? <p className="promotion-empty">尚未取得連結紀錄，請重新載入。</p> : shown.length === 0 ? <p className="promotion-empty">還沒有建立分享連結。</p> : <ul>
         {shown.map(item => <li key={item.code} className={item.available ? undefined : 'is-unavailable'}><span className="promotion-kind">{COPY[item.kind].label}</span><span className="promotion-link-title">{item.available ? item.title : '已無法開啟'}</span>{item.available && <button type="button" className="btn btn-ghost" disabled={copyAction.pending !== null} aria-busy={copyAction.pending === item.path} onClick={() => void copy(item.path)}>複製</button>}<strong>{item.period_points}</strong></li>)}
       </ul>}
       {mine.length > 10 && <button type="button" className="btn btn-ghost" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '收合' : '顯示全部'}</button>}

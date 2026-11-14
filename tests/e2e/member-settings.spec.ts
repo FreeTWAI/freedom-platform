@@ -171,10 +171,9 @@ test('GitHub todo follows the real connection state and never completes by hand'
   await expect(page.getByRole('checkbox')).toHaveCount(0);
   fail=false;state={configured:false,connected:false};
   await task.getByRole('button',{name:'重新讀取 GitHub 連結',exact:true}).click();
-  await expect(task.getByRole('status')).toHaveText('尚未啟用');await expect(task).toContainText('尚未啟用');
-  await expect(task.getByRole('button',{name:'連結 GitHub',exact:true})).toHaveCount(0);
+  await expect(task).toHaveCount(0);await expect(page.getByText('尚未啟用')).toHaveCount(0);
   state={configured:true,connected:false};
-  await task.getByRole('button',{name:'重新讀取 GitHub 連結',exact:true}).click();
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   await expect(task.getByRole('status')).toHaveText('待完成');
   // Visiting the page never starts OAuth by itself.
   expect(connects).toEqual([]);

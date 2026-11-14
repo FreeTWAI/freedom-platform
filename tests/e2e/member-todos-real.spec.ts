@@ -74,7 +74,7 @@ async function expectStates(page:Page,states:Partial<Record<typeof TASKS[number]
 }
 async function openTodos(page:Page){
   await navigate(page,'入門指南');await expect(page).toHaveURL(/#me\/start$/);
-  for(const key of TASKS)await expect(task(page,key)).toBeVisible();
+  for(const key of TASKS)if(key!=='github')await expect(task(page,key)).toBeVisible();
   // Nothing on this page can be ticked by hand.
   await expect(page.locator('article[data-task] input')).toHaveCount(0);await expect(page.locator('article[data-task]').getByRole('checkbox')).toHaveCount(0);
 }
@@ -87,7 +87,8 @@ async function getJson(page:Page,path:string){const response=await page.request.
 /** The GitHub card mirrors whatever the local server really reports; OAuth is never started here. */
 async function expectGithub(page:Page){
   const github=await getJson(page,'/me/github') as {configured:boolean;connected:boolean};
-  await expectStates(page,{github:github.connected?'done':github.configured?'todo':'unavailable'});
+  if(!github.configured&&!github.connected)await expect(task(page,'github')).toHaveCount(0);
+  else await expectStates(page,{github:github.connected?'done':'todo'});
 }
 async function answerPreferences(page:Page){
   await expect(page.getByRole('heading',{name:'你喜歡怎麼做事？',exact:true})).toBeVisible();
@@ -239,7 +240,8 @@ test('a legacy member completes profile and positioning todos through the real U
 
     await page.setViewportSize({width:320,height:844});
     await expectStates(page,{onboarding:'done','primary-guild':'done',avatar:'done','social-link':'done','skill-book':'done'});
-    for(const key of TASKS){await task(page,key).scrollIntoViewIfNeeded();await expect(task(page,key)).toBeVisible();}
+    for(const key of TASKS)if(key!=='github'){await task(page,key).scrollIntoViewIfNeeded();await expect(task(page,key)).toBeVisible();}
+    await expectGithub(page);
     await noOverflow(page);
     const buttons=page.locator('article[data-task] .member-task-actions button');
     expect(await buttons.count()).toBeGreaterThanOrEqual(5);

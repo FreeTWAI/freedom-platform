@@ -55,7 +55,7 @@ export function PersonalSpace({client,session,contentEnabled}:{client:PortalClie
           {current.hero.positioning_title&&<p>{current.hero.positioning_title}</p>}
         </div>
       </> : <div className="personal-space-identity"><h2>{t('nav.profile')}</h2><p role="status">{current?.profileError?t('space.profileError'):t('space.profileLoading')}</p></div>}
-      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#me/settings">編輯個人頁</a></div>
+      <div className="personal-space-hero-actions"><a className={`btn ${contentEnabled?'btn-secondary':'btn-primary'} btn-small`} href="#me/settings">編輯個人頁</a></div>
       {!!current?.hero?.guilds.length&&<details className="personal-space-memberships">
         <summary>{t('space.guilds')} <span>({current.hero.guilds.length})</span></summary>
         <ul className="personal-space-guilds" aria-label={t('space.guilds')}>{current.hero.guilds.map(guild=><li key={guild.guild_key}>{guild.name}</li>)}</ul>
@@ -64,9 +64,9 @@ export function PersonalSpace({client,session,contentEnabled}:{client:PortalClie
     <p className="hint personal-space-private">{t('space.privacy')}</p>
 
     <section className="personal-space-content stack" aria-label={t('space.content')}>
-      <div className="section-head"><h2>我的內容</h2>{contentEnabled&&<a href="#me/content/showcases/new" className="btn btn-secondary btn-small">新增作品草稿</a>}</div>
+      <div className="section-head"><h2>我的內容</h2>{contentEnabled&&<a href="#me/content/showcases/new" className="btn btn-primary btn-small">新增作品草稿</a>}</div>
       {!contentEnabled?<p className="empty">{t('space.disabled')}</p>:<>
-        <div className="personal-space-filters"><div role="group" aria-label="內容狀態">{[['all','全部'],['draft','草稿'],['published','已發布']].map(([id,label])=><button key={id} type="button" className="btn btn-secondary btn-small" aria-pressed={status===id} onClick={()=>{setStatus(id);setPage(0);}}>{label}</button>)}</div><select aria-label="內容類型" value={filter} onChange={event=>{setFilter(event.target.value as keyof typeof kinds);setPage(0);}}>{Object.entries(kinds).map(([id,label])=><option key={id} value={id}>{id==='all'?'全部類型':t(label)}</option>)}</select></div>
+        <details className="personal-space-filters-disclosure"><summary>篩選</summary><div className="personal-space-filters"><div role="group" aria-label="內容狀態">{[['all','全部'],['draft','草稿'],['published','已發布']].map(([id,label])=><button key={id} type="button" className="btn btn-secondary btn-small" aria-pressed={status===id} onClick={()=>{setStatus(id);setPage(0);}}>{label}</button>)}</div><select aria-label="內容類型" value={filter} onChange={event=>{setFilter(event.target.value as keyof typeof kinds);setPage(0);}}>{Object.entries(kinds).map(([id,label])=><option key={id} value={id}>{id==='all'?'全部類型':t(label)}</option>)}</select></div></details>
         {(loading||!current)&&<p role="status">{t('space.loading')}</p>}
         {current?.contentError&&<div className="banner banner-error" role="alert">{t('space.error')}<button type="button" className="btn btn-secondary btn-small" onClick={retry}>重新載入</button></div>}
         {current&&!current.contentError&&filtered.length===0&&<div className="card stack"><h3>{t('space.empty',{kind:t(filter==='all'?'space.emptyAll':kinds[filter])})}</h3><p>{t('space.emptyHint')}</p><div className="actions"><a className="btn btn-secondary btn-small" href="#social">{t('space.post')}</a></div></div>}

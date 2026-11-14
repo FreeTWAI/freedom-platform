@@ -46,7 +46,7 @@ const readers:{[K in SourceId]:[string,(value:unknown)=>Sources[K]]}={
   }],
 };
 
-type Card={key:string;required:boolean;title:string;state:TaskState;body:ReactNode;action?:ReactNode;error?:string;retry?:{label:string;busy:boolean;run:()=>void}};
+type Card={key:string;required:boolean;title:string;state:TaskState;body:ReactNode;action?:ReactNode|((primary:boolean)=>ReactNode);error?:string;retry?:{label:string;busy:boolean;run:()=>void}};
 const loadingCard=(text:string)=>({state:'loading' as const,body:<p>{text}</p>});
 const rank=(state:TaskState)=>state==='done'?1:0;
 
@@ -112,7 +112,7 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
       if(mounted.current&&sequence===guideCopySequence.current)setGuideCopyFailed(true);
     }
   }
-  const go=(tab:TabId,label:string,primary:boolean)=><button className={`btn ${primary?'btn-primary':'btn-ghost'}`} type="button" onClick={()=>onNavigate(tab)}>{label}</button>;
+  const go=(tab:TabId,label:string,tier:'primary'|'secondary'|'ghost')=><button className={`btn btn-${tier}`} type="button" onClick={()=>onNavigate(tab)}>{label}</button>;
   const retrying=(ids:SourceId[],label:string)=>{
     const failed=ids.filter(id=>sources[id].error);
     return {label,busy:ids.some(id=>sources[id].loading),run:()=>failed.forEach(load)};
@@ -126,9 +126,9 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
   cards.push({key:'onboarding',required:!quickAssessment,title:quickAssessment?'補做定位測驗':'完成定位',
     ...(onboarding.error?{state:'error',body:null,error:onboarding.error,retry:retrying(['onboarding'],'重新讀取定位狀態')}
       :!onboarding.value?loadingCard('正在確認定位進度…')
-      :onboarding.value.assessmentCompleted||(onboarding.value.completed&&onboarding.value.entryMode!=='quick')?{state:'done',body:<p>定位已完成，可隨時重新探索。</p>,action:go('positioning','查看我的定位',false)}
-      :quickAssessment?{state:'todo',body:<p>完成定位後，名片會顯示擅長能力，也更容易遇到合適的夥伴。</p>,action:go('positioning','前往我的定位',true)}
-      :{state:'todo',body:<p>完成定位問答，找到適合你的公會方向。</p>,action:go('positioning','前往我的定位',true)})});
+      :onboarding.value.assessmentCompleted||(onboarding.value.completed&&onboarding.value.entryMode!=='quick')?{state:'done',body:<p>定位已完成，可隨時重新探索。</p>,action:go('positioning','查看我的定位','ghost')}
+      :quickAssessment?{state:'todo',body:<p>完成定位後，名片會顯示擅長能力，也更容易遇到合適的夥伴。</p>,action:primary=>go('positioning','前往我的定位',primary?'primary':'secondary')}
+      :{state:'todo',body:<p>完成定位問答，找到適合你的公會方向。</p>,action:primary=>go('positioning','前往我的定位',primary?'primary':'secondary')})});
 
   // Primary guild: the chosen key must be a guild the member is actively in right now.
   const primaryKey=onboarding.value?.primaryGuildKey,primary=primaryKey?directory.value?.find(guild=>guild.key===primaryKey):undefined;
@@ -137,49 +137,52 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
   cards.push({key:'primary-guild',required:true,title:'設定主要公會',
     ...(primaryError?{state:'error',body:null,error:primaryError,retry:retrying(primaryDeps,'重新讀取主要公會狀態')}
       :!onboarding.value||primaryKey&&!directory.value?loadingCard('正在確認主要公會…')
-      :primary?.active?{state:'done',body:<p>主要公會：<strong>{primary.name}</strong>。</p>,action:go('guilds','查看職業公會',false)}
-      :{state:'todo',body:<p>{primaryKey?'目前的主要公會不在已加入狀態，請重新選一個已加入的公會。':'加入公會後，選一個作為主要公會。'}</p>,action:go('guilds','前往職業公會',true)})});
+      :primary?.active?{state:'done',body:<p>主要公會：<strong>{primary.name}</strong>。</p>,action:go('guilds','查看職業公會','ghost')}
+      :{state:'todo',body:<p>{primaryKey?'目前的主要公會不在已加入狀態，請重新選一個已加入的公會。':'加入公會後，選一個作為主要公會。'}</p>,action:primary=>go('guilds','前往職業公會',primary?'primary':'secondary')})});
 
   // GitHub keeps its original wording and flow; OAuth only starts from the member's own click.
   const github=store.account;
   const githubState:TaskState=github.error?'error':!github.value?'loading':github.value.connected?'done':github.value.configured?'todo':'unavailable';
   const githubRetry={label:'重新讀取 GitHub 連結',busy:github.loading||busy,run:()=>{setConnectError('');void store.refreshConnection();}};
-  cards.push({key:'github',required:true,title:'連結 GitHub',state:githubState,
+  if(githubState!=='unavailable')cards.push({key:'github',required:true,title:'連結 GitHub',state:githubState,
     ...(githubState==='loading'?{body:<p>正在確認 GitHub 連結…</p>}
       :githubState==='error'?{body:null,error:github.error,retry:githubRetry}
-      :githubState==='unavailable'?{body:<p>站內 GitHub 連結尚未啟用；仍可到 GitHub 網頁提出 Issue。啟用後再回來完成連結。</p>,retry:githubRetry}
-      :githubState==='todo'?{body:<p>站內提出 Issue 需要先連結自己的 GitHub 帳號。按「連結 GitHub」後，在 github.com 親自確認授權，回來再發布想法。沒有帳號可先<a href="https://github.com/signup" target="_blank" rel="noopener noreferrer">申請 GitHub ↗</a>。</p>,action:<><button className="btn btn-primary" type="button" disabled={busy||github.loading} onClick={()=>void connect()}>{busy?'前往 GitHub…':'連結 GitHub'}</button><button className="btn btn-ghost" type="button" onClick={()=>void copyGuide()}>{guideCopied?'已複製 AI 指引':'複製 AI 連結指引'}</button></>}
-      :{body:<p>已連結 <strong>@{github.value?.github_user?.login??'GitHub'}</strong>。</p>,action:go('account','到我的名片管理 GitHub 連結',false)})});
+      :githubState==='todo'?{body:<p>站內提出問題回報需要先連結自己的 GitHub 帳號。按「連結 GitHub」後，在 github.com 親自確認授權，回來再發布想法。沒有帳號可先<a href="https://github.com/signup" target="_blank" rel="noopener noreferrer">申請 GitHub ↗</a>。</p>,action:primary=><><button className={`btn ${primary?'btn-primary':'btn-secondary'}`} type="button" disabled={busy||github.loading} onClick={()=>void connect()}>{busy?'前往 GitHub…':'連結 GitHub'}</button><button className="btn btn-ghost" type="button" onClick={()=>void copyGuide()}>{guideCopied?'已複製 AI 指引':'複製 AI 連結指引'}</button></>}
+      :{body:<p>已連結 <strong>@{github.value?.github_user?.login??'GitHub'}</strong>。</p>,action:go('account','到我的名片管理 GitHub 連結','ghost')})});
 
   cards.push({key:'avatar',required:false,title:'上傳頭像',
     ...(avatar.error?{state:'error',body:null,error:avatar.error,retry:retrying(['avatar'],'重新讀取頭像狀態')}
       :avatar.value===undefined?loadingCard('正在確認頭像…')
-      :avatar.value?{state:'done',body:<p>已上傳頭像。</p>,action:go('account','到我的名片管理頭像',false)}
-      :{state:'todo',body:<p>上傳一張頭像，讓夥伴更容易認出你。</p>,action:go('account','前往我的名片上傳頭像',true)})});
+      :avatar.value?{state:'done',body:<p>已上傳頭像。</p>,action:go('account','到我的名片管理頭像','ghost')}
+      :{state:'todo',body:<p>上傳一張頭像，讓夥伴更容易認出你。</p>,action:primary=>go('account','前往我的名片上傳頭像',primary?'primary':'secondary')})});
 
   cards.push({key:'social-link',required:false,title:'新增社群連結',
     ...(social.error?{state:'error',body:null,error:social.error,retry:retrying(['social'],'重新讀取社群連結狀態')}
       :social.value===undefined?loadingCard('正在確認社群連結…')
-      :social.value?{state:'done',body:<p>已新增社群連結。</p>,action:go('account','到我的名片管理社群連結',false)}
-      :{state:'todo',body:<p>在名片加上一個社群連結，每筆可各自設定公開範圍。</p>,action:go('account','前往我的名片新增連結',true)})});
+      :social.value?{state:'done',body:<p>已新增社群連結。</p>,action:go('account','到我的名片管理社群連結','ghost')}
+      :{state:'todo',body:<p>在名片加上一個社群連結，每筆可各自設定公開範圍。</p>,action:primary=>go('account','前往我的名片新增連結',primary?'primary':'secondary')})});
 
   cards.push({key:'skill-book',required:false,title:'領取第一本技能書',
     ...(onboarding.error?{state:'error',body:null,error:onboarding.error,retry:retrying(['onboarding'],'重新讀取技能書狀態')}
       :!onboarding.value?loadingCard('正在確認技能書…')
-      :onboarding.value.bookCount>0?{state:'done',body:<><p>已領取 {onboarding.value.bookCount} 本技能書。</p><p className="field-hint">會員領取資格數 · 對應 {onboarding.value.repoCount} 個原作資源</p></>,action:go('skills','查看技能書架',false)}
-      :{state:'todo',body:<p>到技能書架免費領取第一本技能書。</p>,action:go('skills','前往技能書架',true)})});
+      :onboarding.value.bookCount>0?{state:'done',body:<><p>已領取 {onboarding.value.bookCount} 本技能書。</p><p className="field-hint">會員領取資格數 · 對應 {onboarding.value.repoCount} 個原作資源</p></>,action:go('skills','查看技能書架','ghost')}
+      :{state:'todo',body:<p>到技能書架免費領取第一本技能書。</p>,action:primary=>go('skills','前往技能書架',primary?'primary':'secondary')})});
 
-  const group=(required:boolean,id:string,title:string)=><section className="member-tasks-group" aria-labelledby={id} data-guide-anchor={required?'todos:required':'todos:suggested'}>
+  const ordered=(required:boolean)=>cards.filter(card=>card.required===required).sort((a,b)=>rank(a.state)-rank(b.state));
+  const requiredCards=ordered(true),suggestedCards=ordered(false);
+  const primaryTodoKey=[...requiredCards,...suggestedCards].find(card=>card.state==='todo')?.key;
+  const group=(required:boolean,list:Card[],id:string,title:string)=><section className="member-tasks-group" aria-labelledby={id} data-guide-anchor={required?'todos:required':'todos:suggested'}>
     <h2 id={id} className="member-section-title">{title}</h2>
     <ul className="messages-list">
-      {cards.filter(card=>card.required===required).sort((a,b)=>rank(a.state)-rank(b.state)).map(card=>{
+      {list.map(card=>{
         const retry=card.retry;
+        const action=typeof card.action==='function'?card.action(card.key===primaryTodoKey):card.action;
         return <li key={card.key}><article className="member-task" tabIndex={-1} aria-labelledby={`task-${card.key}-title`} data-task={card.key} data-task-state={card.state}>
           <div className="member-task-heading"><h3 id={`task-${card.key}-title`}>{card.title}</h3>
             <span className={`task-state task-state-${card.state}`} role="status">{stateLabels[card.state]}</span></div>
           {card.error&&<p role="alert">{card.error}</p>}
           {card.body}
-          {(card.action||retry)&&<div className="member-task-actions">{card.action}
+          {(action||retry)&&<div className="member-task-actions">{action}
             {retry&&<button className="btn btn-ghost" type="button" disabled={retry.busy} onClick={retry.run}>{retry.label}</button>}</div>}
           {card.key==='github'&&connectError&&<p role="alert">{connectError}</p>}
           {card.key==='github'&&card.state==='todo'&&guideCopyFailed&&<>
@@ -192,7 +195,7 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
   </section>;
 
   return <div className="member-tasks" ref={sectionRef} onFocus={tracked} onBlur={left}>
-    {group(true,'member-tasks-required','必做待辦')}
-    {group(false,'member-tasks-suggested','建議待辦')}
+    {group(true,requiredCards,'member-tasks-required','必做待辦')}
+    {group(false,suggestedCards,'member-tasks-suggested','建議待辦')}
   </div>;
 }

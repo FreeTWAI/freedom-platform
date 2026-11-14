@@ -12,9 +12,10 @@ export interface CheckoutOrdersProps {
   userId:string;
   csrfToken:string;
   onSessionExpired:()=>void;
+  onRefresh?:()=>void;
 }
 /** No private persistence. The owning page keys this by member/session generation. */
-export function CheckoutOrders({client,userId,csrfToken,onSessionExpired}:CheckoutOrdersProps) {
+export function CheckoutOrders({client,userId,csrfToken,onSessionExpired,onRefresh}:CheckoutOrdersProps) {
   const [page,setPage]=useState<MemberOrderPage|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(false);
   const lifetime=useRef(new AbortController()),generation=useRef(client.sessionGeneration),reads=useRef(0),checks=useRef(0);
   const requestedCursor=useRef<string|undefined>(undefined),ended=useRef(false),expired=useRef(onSessionExpired);
@@ -65,7 +66,7 @@ export function CheckoutOrders({client,userId,csrfToken,onSessionExpired}:Checko
       <p>訂單狀態：{formatOrderLifecycle(order.status)} · {formatMinor(order.total_minor,order.currency)}</p>
       <div className="actions"><a className="btn btn-small btn-ghost" href={order.order_path}>開啟訂單</a></div>
     </article>)}
-    {!error&&<div className="actions"><button className="btn btn-small btn-ghost" disabled={loading} onClick={()=>void load()}>重新整理／第一頁</button>
+    {!error&&<div className="actions"><button className="btn btn-small btn-ghost" disabled={loading} onClick={()=>{void load();onRefresh?.();}}>重新整理／第一頁</button>
       {page?.next_cursor&&<button className="btn btn-small btn-ghost" disabled={loading} onClick={()=>void load(page.next_cursor!)}>下一頁</button>}</div>}
   </section>;
 }

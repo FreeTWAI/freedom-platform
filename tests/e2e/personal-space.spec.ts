@@ -25,6 +25,7 @@ test('PERSONAL-SPACE-UI-01: compact owner hero, genuine post body, bounded page 
  const hero=(await page.locator('.personal-space-hero').boundingBox())!,first=(await page.locator('.personal-space-entry').first().boundingBox())!;
  expect(hero.height).toBeLessThan(260);expect(first.y).toBeLessThan(844);
  await page.getByRole('button',{name:'下一頁',exact:true}).click();await expect(page.locator('.personal-space-entry')).toHaveCount(2);await expect(page.getByText('本人貼文正文 7',{exact:false})).toBeVisible();expect(reads).toHaveLength(8);
+ await page.locator('.personal-space-filters-disclosure summary').click();
  await page.getByLabel('內容類型',{exact:true}).selectOption('showcase');await expect(page.getByRole('heading',{name:'這裡還沒有作品'})).toBeVisible();expect(reads).toHaveLength(8);
  await page.getByLabel('內容類型',{exact:true}).selectOption('social_post');await expect(page.getByText('本人貼文正文 1',{exact:false})).toBeVisible();expect(reads).toHaveLength(14);
  await page.screenshot({path:'test-results/personal-space-owner-390.png',fullPage:true});

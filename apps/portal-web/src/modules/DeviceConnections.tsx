@@ -162,8 +162,8 @@ export function DeviceConnections({ client, onChanged }: { client: PortalClient;
         ? { code: previous.code, data: { ...previous.data, state: result.state } } : previous);
       const prefix = confirming ? '已確認原裝置操作。' : '';
       setPairNotice(approve
-        ? `${prefix}已核准此裝置讀取 bootstrap 狀態。裝置完成配對後，連線會出現在下方列表；這不代表模型執行授權或供應商登入。`
-        : `${prefix}已拒絕這次配對請求，裝置不會取得 bootstrap 狀態讀取權。`);
+        ? `${prefix}已核准此裝置讀取初始連線狀態。裝置完成配對後，連線會出現在下方列表；這不代表模型執行授權或供應商登入。`
+        : `${prefix}已拒絕這次配對請求，裝置不會取得初始連線狀態讀取權。`);
       changed.current?.();
       void loadList();
     } catch (failure) {
@@ -224,7 +224,7 @@ export function DeviceConnections({ client, onChanged }: { client: PortalClient;
       readSeq.current++;
       setPendingRevoke(null); setSelectedId(result.connectionId); setSelected(result); setReadState('ready');
       setConnections(previous => previous && previous.map(item => item.connectionId === result.connectionId ? result : item));
-      setConnNotice(`${confirming ? '已確認原撤銷操作。' : ''}已撤銷這個裝置連線。此連線的 bootstrap 狀態讀取與刷新已失效；已送出的供應商請求不會撤回，裝置上的金鑰也不會被刪除。`);
+      setConnNotice(`${confirming ? '已確認原撤銷操作。' : ''}已撤銷這個裝置連線。此連線的初始連線狀態讀取與刷新已失效；已送出的供應商請求不會撤回，裝置上的金鑰也不會被刪除。`);
       changed.current?.();
       void loadList();
     } catch (failure) {
@@ -283,7 +283,7 @@ export function DeviceConnections({ client, onChanged }: { client: PortalClient;
 
   return <section className='card stack device-connections' aria-label='裝置與連線' aria-busy={busy || inspecting || listState === 'loading' || readState === 'loading'}>
     <div className='device-connections-head'>
-      <div><h2>裝置與連線</h2><p className='field-hint'>核准配對只允許裝置讀取 bootstrap 狀態；不代表模型執行授權、供應商登入或私人內容存取。</p></div>
+      <div><h2>裝置與連線</h2><p className='field-hint'>核准配對只允許裝置讀取初始連線狀態；不代表模型執行授權、供應商登入或私人內容存取。</p></div>
       <button type='button' className='btn btn-ghost' disabled={busy} onClick={refreshAll}>重新讀取裝置與連線</button>
     </div>
 
@@ -315,13 +315,13 @@ export function DeviceConnections({ client, onChanged }: { client: PortalClient;
           <dt>執行類型</dt><dd>{reviewed.runtimeKind}</dd>
           <dt>環境</dt><dd>{reviewed.environment}</dd>
           <dt>金鑰指紋</dt><dd className='device-connections-id'>{reviewed.keyThumbprint}</dd>
-          <dt>請求權限</dt><dd>只讀取 bootstrap 狀態（{reviewed.scope}）</dd>
+          <dt>請求權限</dt><dd>只讀取初始連線狀態（{reviewed.scope}）</dd>
           <dt>到期</dt><dd>{time(reviewed.expiresAt)}{reviewExpired ? ' · 已到期' : ''}</dd>
           <dt>狀態</dt><dd>{REVIEW_LABELS[reviewed.state]}</dd>
         </dl>
-        <p className='field-hint'>請比對裝置畫面上的名稱與金鑰指紋。核准只允許讀取 bootstrap 狀態，不包含模型執行、供應商登入或私人內容存取。</p>
+        <p className='field-hint'>請比對裝置畫面上的名稱與金鑰指紋。核准只允許讀取初始連線狀態，不包含模型執行、供應商登入或私人內容存取。</p>
         {closedReview ? <p className='muted'>{closedReview}</p> : <>
-          <label className='device-connections-consent'><input type='checkbox' checked={consent} disabled={!decisionOpen} onChange={event => setConsent(event.target.checked)}/><span>我確認這是我正在配對的裝置，並核准讀取 bootstrap 狀態。</span></label>
+          <label className='device-connections-consent'><input type='checkbox' checked={consent} disabled={!decisionOpen} onChange={event => setConsent(event.target.checked)}/><span>我確認這是我正在配對的裝置，並核准讀取初始連線狀態。</span></label>
           <div className='actions'>
             <button type='button' className='btn btn-primary' disabled={!decisionOpen || !consent} onClick={() => startDecision('approve')}>核准裝置</button>
             <button type='button' className='btn btn-ghost' disabled={!decisionOpen} onClick={() => startDecision('deny')}>拒絕配對</button>
@@ -366,10 +366,10 @@ export function DeviceConnections({ client, onChanged }: { client: PortalClient;
             <dt>到期</dt><dd>{time(selected.expiresAt)}</dd>
           </dl>
           {selected.state === 'active' ? <div className='stack device-connections-revoke'>
-            <p className='field-hint'>撤銷後，此連線的 bootstrap 狀態讀取與刷新會失效；已送出的供應商請求不會因此撤回。這個操作不會刪除裝置上的金鑰。</p>
+            <p className='field-hint'>撤銷後，此連線的初始連線狀態讀取與刷新會失效；已送出的供應商請求不會因此撤回。這個操作不會刪除裝置上的金鑰。</p>
             <label className='device-connections-consent'><input type='checkbox' checked={revokeConsent} disabled={!writable} onChange={event => setRevokeConsent(event.target.checked)}/><span>我確認撤銷目前選取的裝置連線。</span></label>
             <div className='actions'><button type='button' className='btn btn-ghost' disabled={!canRevoke} onClick={startRevoke}>撤銷裝置連線</button></div>
-          </div> : <p className='field-hint'>此連線已撤銷，不能再讀取或刷新 bootstrap 狀態。撤銷不會刪除裝置上的金鑰。</p>}
+          </div> : <p className='field-hint'>此連線已撤銷，不能再讀取或刷新初始連線狀態。撤銷不會刪除裝置上的金鑰。</p>}
         </>}
       </>}
     </div>

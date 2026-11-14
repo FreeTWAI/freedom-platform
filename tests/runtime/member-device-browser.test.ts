@@ -196,7 +196,7 @@ async function uiPair() {
   await panel.getByLabel('裝置配對代碼',{exact:true}).fill(f.authorization.userCode);
   const read=page.waitForResponse(response=>response.url()===origin+paths.inspect&&response.request().method()==='POST');
   await panel.getByRole('button',{name:'讀取配對請求',exact:true}).click();assert.equal((await read).status(),200);
-  await panel.getByRole('checkbox',{name:'我確認這是我正在配對的裝置，並核准讀取 bootstrap 狀態。',exact:true}).check();
+  await panel.getByRole('checkbox',{name:'我確認這是我正在配對的裝置，並核准讀取初始連線狀態。',exact:true}).check();
   const approve=page.waitForResponse(response=>response.url()===origin+paths.decide&&response.request().method()==='POST');
   await panel.getByRole('button',{name:'核准裝置',exact:true}).click();assert.equal((await approve).status(),200);
   const first=DeviceAuthorizationPollResultSchema.parse(await(await poll(f)).json());

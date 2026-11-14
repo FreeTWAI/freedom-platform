@@ -19,9 +19,12 @@
 
 .share-result-card{display:flex;flex-direction:column;gap:8px}
 .share-result-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.share-result-row > .skill-share{flex:none;width:auto}
+.share-result-row > .skill-share > .btn{width:auto}
 .share-result-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;flex:1}
 .share-result-title{overflow-wrap:anywhere}
+a.share-result-title{display:inline-flex;align-items:center;min-height:44px}
 .share-result-counts{margin:0;color:var(--muted);font-size:.92rem}
 .share-results-error{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 .legacy-promotion{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
-.legacy-promotion > summary{cursor:pointer;color:var(--muted);font-weight:600}
+.legacy-promotion > summary{cursor:pointer;color:var(--muted);font-weight:600;min-height:44px;padding:.65rem 0;box-sizing:border-box}
