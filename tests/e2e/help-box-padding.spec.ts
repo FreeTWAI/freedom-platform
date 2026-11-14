@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { navigate } from './navigation.js';
+import { navigate, openLoginMore } from './navigation.js';
 import { expect, test, type Locator, type Page } from './fixtures.js';
 import { DEMO_COMMUNITY, DEMO_USERS } from '../../packages/testing/seed.js';
 
@@ -79,6 +79,7 @@ test('help boxes pad their text in light and dark, and the login demo box stays 
   const sha = 'a'.repeat(64);
   try {
     await page.goto('/');
+    await openLoginMore(page);
     const demo = page.getByRole('complementary', { name: '示範帳號' });
     await expect(demo).toBeVisible();
     const loginBox = await demo.evaluate(element => {
