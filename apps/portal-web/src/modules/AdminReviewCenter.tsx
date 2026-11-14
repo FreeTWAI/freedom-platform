@@ -79,16 +79,15 @@ export function AdminReviewCenter({ client, busy, onMutate, selectedId }: {
       const params = new URLSearchParams({ queue, limit: '25', offset: String(offset) });
       if (repository) params.set('repository_id', repository);
       if (guild) params.set('guild_key', guild);
-      const page = await client.request<Page>(`/review-center/pulls?${params.toString()}`);
+      const [page, nextSummary, people] = await Promise.all([
+        client.request<Page>(`/review-center/pulls?${params.toString()}`),
+        offset === 0 ? client.request<Summary>('/review-center/summary') : Promise.resolve(null),
+        offset === 0 ? client.request<Directory>('/review-center/reviewers') : Promise.resolve(null),
+      ]);
       if (ticket !== listSeq.current) return;
       if (offset === 0) {
-        const [nextSummary, people] = await Promise.all([
-          client.request<Summary>('/review-center/summary'),
-          client.request<Directory>('/review-center/reviewers'),
-        ]);
-        if (ticket !== listSeq.current) return;
-        setSummary(nextSummary);
-        setDirectory(people);
+        if (nextSummary) setSummary(nextSummary);
+        if (people) setDirectory(people);
         setItems(page.items);
       } else {
         setItems(current => [...current, ...page.items]);
@@ -176,10 +175,11 @@ export function AdminReviewCenter({ client, busy, onMutate, selectedId }: {
       <label className="field">儲存庫<select aria-label="儲存庫" value={repositoryId} onChange={event => { setItems([]); setOpenId(null); setDetail(null); setRepositoryId(event.target.value); }}><option value="">全部</option>{(summary?.repositories ?? []).map(repo => <option key={repo.repository_id} value={repo.repository_id}>{repo.full_name}</option>)}</select></label>
       <label className="field">歸屬<select aria-label="歸屬篩選" value={guildFilter} onChange={event => { setItems([]); setOpenId(null); setDetail(null); setGuildFilter(event.target.value); }}><option value="">全部</option><option value="none">無歸屬</option>{guildChoices.map(guild => <option key={guild.guild_key} value={guild.guild_key}>{guild.name}</option>)}</select></label>
     </div>
-    <div className="actions" role="tablist" aria-label="審核佇列">
+    </details>
+    {!selectedId && <div className="actions" role="tablist" aria-label="審核佇列">
       {TABS.map(([key, label]) => <button type="button" role="tab" aria-selected={tab === key} key={key} className="btn btn-ghost" onClick={() => { if (tab !== key) { setItems([]); setOpenId(null); setDetail(null); setTab(key); } }}>{label}</button>)}
-    </div>
-    </details>{error && <p className="banner banner-error" role="alert">{error}</p>}
+    </div>}
+    {error && <p className="banner banner-error" role="alert">{error}</p>}
     {loading && <p role="status">正在載入審核佇列…</p>}
     <ul className="review-list" aria-label="拉取請求">
       {rows.map(row => <ReviewQueueRow key={row.pull_id} row={row} open={openId === row.pull_id} onToggle={() => void choose(row.pull_id)}>

@@ -45,10 +45,16 @@ export function GuildRepositoryFrame({repository, onNavigate, actions}: {
     return () => {active = false; window.clearTimeout(timer); observer.disconnect(); window.removeEventListener('message', receive); sendInit.current = () => undefined;};
   }, [repository.guild_key, actionKey, attempt]);
 
+  const fallbackAction = actions.includes('information') ? 'information' : actions[0];
+  const fallbackHash = fallbackAction ? `#guilds/${repository.guild_key}/${fallbackAction}` : '#guilds';
+
   return <section className="guild-repository" aria-label={`${repository.name}啟動台`}>
     {state !== 'ready' && <div className="guild-repository-status" role="status">
       <p>{state === 'loading' ? '正在開啟公會啟動台…' : '啟動台暫時無法開啟，你仍可直接使用下方工作與資源。'}</p>
-      {state === 'failed' && <button type="button" className="btn btn-ghost btn-small" onClick={() => setAttempt(value => value + 1)}>重新開啟啟動台</button>}
+      {state === 'failed' && <div className="actions">
+        <button type="button" className="btn btn-secondary btn-small" onClick={() => setAttempt(value => value + 1)}>重試</button>
+        <a className="btn btn-secondary btn-small" href={fallbackHash} onClick={e => {e.preventDefault(); if (fallbackAction) onNavigate(fallbackAction); else window.location.hash = fallbackHash;}}>返回公會</a>
+      </div>}
     </div>}
     <iframe key={attempt} ref={frame} title={`${repository.name}獨立啟動台`} src={guildRepositorySite(repository)}
       sandbox="allow-scripts" referrerPolicy="no-referrer" loading="eager" height={height}

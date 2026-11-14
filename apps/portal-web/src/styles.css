@@ -812,3 +812,5 @@ input,textarea,select{background:#0c1017;border-color:#404959;color:var(--ink)}i
 .work-public-link { font-size: 0.85rem; overflow-wrap: anywhere; word-break: break-word; }
 .work-public-sharing .btn-small { width: fit-content; max-width: 100%; min-height: 44px; padding: 8px 14px; background: var(--bg-elev); color: var(--ink); border: 1px solid var(--line); }
 .work-public-sharing .btn-small:hover:not(:disabled), .work-public-sharing .btn-small:focus-visible { border-color: var(--focus); }
+.tool-registration summary { min-height: 44px; padding: 10px 0; box-sizing: border-box; cursor: pointer; }
+.tool-registration fieldset label { display: inline-flex; align-items: center; gap: 0.45rem; min-height: 44px; margin-right: 0.75rem; }

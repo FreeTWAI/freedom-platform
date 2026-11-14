@@ -558,3 +558,48 @@ test('an admin hands a pull and an issue to a local AI', async ({ page, e2eAuthP
     await wipe(e2eAuthPool);
   }
 });
+test('UX-G-12: review center fetches pulls, summary, and reviewers in parallel, shows queue tabs visibly, and keeps 44px summaries', async ({ page }) => {
+  const seenAtPulls: string[] = [];
+  const requested = new Set<string>();
+  let releasePulls: (() => void) | null = null;
+  await page.route('**/admin/api/**', async route => {
+    const path = new URL(route.request().url()).pathname.replace('/admin/api', '');
+    if (path === '/bootstrap') return route.fulfill({ json: { admin: { admin_id: randomUUID(), community_id: DEMO_COMMUNITY, email: 'admin@example.test', display_name: '合成管理員', role: 'super_admin' }, csrf_token: 'synthetic-csrf', available_skill_books: [], summary: { members: 1, active_members: 1, pending_guild_applications: 0, guilds: 1, admins: 1 } } });
+    if (path === '/credentials') return route.fulfill({ json: { items: [] } });
+    if (path === '/review-center/summary') {
+      requested.add('summary');
+      if (requested.has('reviewers')) releasePulls?.();
+      return route.fulfill({ json: { viewer: { status: 'ready', github_login: 'synthetic-reviewer' }, counts: { awaiting_review: 1, in_review: 0, waiting_ci: 0, needs_author: 0, ci_not_run: 0, needs_decision: 0, ready: 0 }, repositories: [] } });
+    }
+    if (path === '/review-center/reviewers') {
+      requested.add('reviewers');
+      if (requested.has('summary')) releasePulls?.();
+      return route.fulfill({ json: { admins: [], guilds: [], open_repositories: [], admin_only_repositories: [], guild_choices: [], skill_book_choices: [] } });
+    }
+    if (path === '/review-center/pulls') {
+      requested.add('pulls');
+      await new Promise<void>(resolve => {
+        if (requested.has('summary') && requested.has('reviewers')) resolve();
+        else {
+          releasePulls = resolve;
+          setTimeout(resolve, 400);
+        }
+      });
+      seenAtPulls.splice(0, seenAtPulls.length, ...requested);
+      return route.fulfill({ json: { items: [], next_offset: null } });
+    }
+    return route.fulfill({ json: { items: [] } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/admin?view=review-center&manage=1');
+  const waitingTab = page.getByRole('tab', { name: '待審', exact: true });
+  await expect(waitingTab).toBeVisible();
+  await expect(waitingTab).toHaveAttribute('aria-selected', 'true');
+  expect(seenAtPulls.sort()).toEqual(['pulls', 'reviewers', 'summary']);
+  expect((await waitingTab.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  for (const label of ['紀錄與設定', '維護設定']) {
+    const summary = page.locator('summary', { hasText: label });
+    await expect(summary).toBeVisible();
+    expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+});

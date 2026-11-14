@@ -67,6 +67,10 @@
 .admin-workspace > .stack > h2 { font-size: 1.2rem; }
 .admin-workspace .admin-test-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-size: .875rem; }
 .admin-workspace .admin-test-toggle input:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+:where(.admin-workspace) details > summary { min-height: 44px; align-content: center; cursor: pointer; }
+:where(.admin-workspace) .checkbox-row { min-height: 44px; align-items: center; }
+:where(.admin-workspace) .admin-held-link { display: inline-flex; align-items: center; min-height: 44px; }
+:where(.admin-workspace) .btn-small { min-height: 44px; }
 .admin-workspace .guild-review-form > .btn { align-self: flex-start; width: auto; }
 @media (max-width: 900px) {
   .admin-workspace .admin-tabs { grid-template-columns: minmax(0, 1fr); gap: 8px; }
@@ -196,6 +200,7 @@
 .admin-navigation-dialog::backdrop { background: rgb(0 0 0 / .48); }
 .admin-workspace .admin-navigation-dialog .admin-tabs { border: 0; padding: 18px; }
 .admin-navigation-dialog .admin-nav-heading { position: sticky; top: 0; z-index: 1; background: var(--bg-elev); padding-bottom: 6px; }
+.admin-workspace .admin-navigation-dialog .admin-nav-close { min-width: 44px; min-height: 44px; width: auto; justify-self: start; }
 .admin-workspace .admin-mobile-navigation { display: flex; align-items: center; justify-content: start; width: 100%; gap: 10px; min-height: 48px; background: var(--bg-elev); border-radius: 12px; }
 .admin-mobile-navigation-hint { margin-left: auto; color: var(--muted); font-size: .8125rem; font-weight: 400; }
 @media (max-width: 960px) {

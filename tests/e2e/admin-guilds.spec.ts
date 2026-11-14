@@ -17,7 +17,7 @@ async function setup(page:Page,options:Fixture){
     if(path==='/skill-maintainers'||path==='/admins')return route.fulfill({json:{items:[]}});
     return route.fulfill({status:404,json:{detail:'Unexpected synthetic request'}});
   });
-  await page.goto('/admin?view=people');await page.getByRole('button',{name:'測試活動公會 公會',exact:true}).click();await page.getByRole('button',{name:'設定公會長',exact:true}).click();
+  await page.goto('/admin?view=people');await page.getByRole('button',{name:'測試活動公會 公會',exact:true}).click();await page.locator('.admin-guild-manage summary').click();await page.getByRole('button',{name:'設定公會長',exact:true}).click();
   return {panel:page.getByRole('region',{name:'測試活動公會公會長人選',exact:true}),reads:()=>generalReads,setExperts:(value:any[])=>{experts=value;},setGuild:(nextVersion:number,nextCurrent:{user_id:string;display_name:string}|null)=>{version=nextVersion;current=nextCurrent;}};
 }
 

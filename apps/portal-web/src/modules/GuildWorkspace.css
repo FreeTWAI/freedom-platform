@@ -30,5 +30,8 @@
 }
 
 .guild-workspace-purpose { margin: 0; line-height: 1.6; overflow-wrap: anywhere; }
+.guild-workspace-help summary { cursor: pointer; min-height: 44px; padding: 10px 0; box-sizing: border-box; color: var(--muted); }
 .guild-council-list-only { grid-template-columns: minmax(0,1fr); }
 .guild-council .actions .btn { min-height: 44px; white-space: normal; }
+.guild-workspace .card-head { align-items: center; flex-wrap: wrap; }
+.guild-workspace .card-head .btn { min-height: 44px; }

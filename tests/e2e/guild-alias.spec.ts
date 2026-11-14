@@ -129,6 +129,7 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
     const management=admin.locator('.admin-guild-management');
     await management.getByLabel('搜尋公會',{exact:true}).fill('成長與行銷');
     const marketing=management.getByRole('article',{name:'成長與行銷公會',exact:true});
+    await marketing.locator('.admin-guild-manage summary').click();
     await marketing.getByRole('button',{name:'編輯名稱與別名',exact:true}).click();
     await expect(marketing.getByText('內建公會的名稱與職業稱號由平台維護。')).toBeVisible();
     await expect(marketing.getByLabel('公會名稱',{exact:true})).toHaveCount(0);
@@ -163,6 +164,7 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
     await navigateAdmin(admin,'公會管理');
     await management.getByLabel('搜尋公會',{exact:true}).fill(approveName);
     const custom=management.getByRole('article',{name:approveName,exact:true});
+    await custom.locator('.admin-guild-manage summary').click();
     await custom.getByRole('button',{name:'編輯名稱與別名',exact:true}).click();
     const renamed=`${approveName}改`;
     await custom.getByLabel('公會名稱',{exact:true}).fill(renamed);
