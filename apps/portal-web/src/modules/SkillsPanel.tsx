@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { RepositoryLibrary } from './Community';
 import type { ModulePanelProps } from './shared';
-import { SkillUpload, type SkillOpenRequest } from './SkillUpload';
 import { CommunitySkillBooks } from './CommunitySkillBooks';
 import { GitHubConnectionSummary } from './GitHubSocial';
 
@@ -11,10 +10,7 @@ export function SkillsPanel({ client, onNavigate, onManageGitHub }: ModulePanelP
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [reload, setReload] = useState(0);
-  const [submissionsRevision,setSubmissionsRevision]=useState(0);
-  const [draftTick,setDraftTick]=useState(0);
-  const [openRequest,setOpenRequest]=useState<SkillOpenRequest | null>(null);
-  const openNonce = useRef(0);
+  const [submissionsRevision] = useState(0);
   const shown = useRef<string[] | null>(null), pending = useRef<string[] | null>(null), refocus = useRef(false), unlockedTab = useRef<HTMLButtonElement>(null);
   const guildHeading = useId(), communityHeading = useId();
   useEffect(() => {
@@ -65,9 +61,9 @@ export function SkillsPanel({ client, onNavigate, onManageGitHub }: ModulePanelP
       <section className="skill-shelf" aria-labelledby={communityHeading}>
         <header className="page-toolbar skill-shelf-heading">
           <div><h2 id={communityHeading} tabIndex={-1}>社群技能書</h2></div>
-          <div className="actions"><button className="btn btn-ghost" onClick={() => onNavigate?.('opensource')}>投稿開源工具</button><SkillUpload client={client} openRequest={openRequest} onChanged={()=>setDraftTick(value=>value+1)} onPublished={()=>setSubmissionsRevision(value=>value+1)} secondary/></div>
+          <div className="actions"><button className="btn btn-ghost" onClick={() => onNavigate?.('opensource')}>投稿開源工具</button></div>
         </header>
-        <SkillDraftCallout client={client} revision={submissionsRevision+draftTick} onOpen={(submissionId, mode) => { openNonce.current += 1; setOpenRequest({ submissionId, mode, nonce: openNonce.current }); }}/>
+        <SkillDraftCallout client={client} revision={submissionsRevision} onOpen={(submissionId) => { const nextHash = `#opensource?submission=${encodeURIComponent(submissionId)}`; if (onNavigate) onNavigate('opensource', nextHash); else window.location.hash = nextHash; }}/>
         <CommunitySkillBooks client={client} revision={submissionsRevision} guildIds={ids ?? []}/>
       </section>
       <section className="skill-shelf" aria-labelledby={guildHeading}>

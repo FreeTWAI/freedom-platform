@@ -31,9 +31,12 @@ test('navigation separates collaboration, commerce and management without granti
   await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
   await expect(page.locator('.community-library')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: '投稿你的開源工具', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toBeHidden();
-  await page.getByText('使用 Agent 或聊天 AI 協助整理（進階）', { exact: true }).click();
-  await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '交給我的 agent', exact: true })).toHaveCount(0);
+  await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/example/nav-check');
+  await page.getByRole('button', { name: '下一步', exact: true }).click();
+  await expect(page.getByRole('button', { name: '我自己填', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '交給我的 agent', exact: true })).toBeVisible();
   // Platform catalogs, orders and the two AI tools now have distinct visible
   // place/view/tool entries instead of aliases in the removed feature search.
   for (const [label, hash, heading] of [

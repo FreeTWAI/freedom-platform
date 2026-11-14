@@ -6,7 +6,7 @@ import { sharingMutationState, type SharingMutationScope, type SharingMutationSt
 export type ModulePanelProps = {
   client: PortalClient;
   session: SessionPayload;
-  onNavigate?: (tab: TabId) => void;
+  onNavigate?: (tab: TabId, destinationHash?: string) => void;
 };
 
 // Decoder-enabled commands additionally retain each tuple's ambiguous history.

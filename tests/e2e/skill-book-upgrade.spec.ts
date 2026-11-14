@@ -31,6 +31,21 @@ const seed = {
   use_notes: '先閱讀 README。', demo_url: null, relationship: 'curator',
 };
 
+async function openAgentUpload(page: Page, repo = 'https://github.com/example/skill-demo') {
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  const backToUrl = panel.getByRole('button', { name: '返回', exact: true });
+  if (await backToUrl.isVisible().catch(() => false)) await backToUrl.click();
+  const backToChoice = panel.getByRole('button', { name: '返回選擇方式', exact: true });
+  if (await backToChoice.isVisible().catch(() => false)) await backToChoice.click();
+  const agentBtn = panel.getByRole('button', { name: '交給我的 agent', exact: true });
+  if (await agentBtn.isVisible().catch(() => false)) {
+    await panel.getByRole('button', { name: '修改網址', exact: true }).click();
+  }
+  await panel.getByLabel('GitHub 專案網址', { exact: true }).fill(repo);
+  await panel.getByRole('button', { name: '下一步', exact: true }).click();
+  await agentBtn.click();
+}
+
 async function login(page: Page) {
   await page.goto('/');
   await page.getByLabel('電子郵件', { exact: true }).fill(DEMO_USERS[0].email);
@@ -39,8 +54,8 @@ async function login(page: Page) {
   await expect(page.getByRole('heading', { name: '動態', exact: true })).toBeVisible({ timeout: 20_000 });
 }
 
-async function settleIllustration(dialog: Locator) {
-  const image = dialog.locator('.skill-upload-illustration');
+async function settleIllustration(container: Locator) {
+  const image = container.locator('.skill-upload-illustration');
   if (await image.count() === 0) return;
   await image.evaluate(element => element instanceof HTMLImageElement && element.complete ? undefined : new Promise<void>(resolve => {
     element.addEventListener('load', () => resolve(), { once: true });
@@ -48,39 +63,13 @@ async function settleIllustration(dialog: Locator) {
   }));
 }
 
-async function expectInsideDialog(locator: Locator) {
+async function expectInView(locator: Locator) {
   await expect(locator).toBeVisible();
   await expect.poll(() => locator.evaluate(element => {
     if (!element.isConnected) return false;
-    const dialog = element.closest('dialog') as HTMLElement | null;
-    if (!dialog) return false;
     const box = element.getBoundingClientRect();
-    const dialogBox = dialog.getBoundingClientRect();
-    const header = dialog.querySelector('.skill-upload-header')?.getBoundingClientRect();
-    const style = getComputedStyle(dialog);
-    const top = Math.max(dialogBox.top + (Number.parseFloat(style.borderTopWidth) || 0), header?.bottom ?? dialogBox.top);
-    const bottom = dialogBox.bottom - (Number.parseFloat(style.borderBottomWidth) || 0);
-    const left = dialogBox.left + (Number.parseFloat(style.borderLeftWidth) || 0);
-    const right = dialogBox.right - (Number.parseFloat(style.borderRightWidth) || 0);
-    return box.height > 0 && box.top >= top - 1 && box.bottom <= bottom + 1 && box.left >= left - 1 && box.right <= right + 1 && box.top >= -1 && box.bottom <= window.innerHeight + 1;
-  }), 'element was not inside the dialog\'s visible area').toBe(true);
-}
-
-async function expectFullyInView(locator: Locator) {
-  await expect(locator).toBeVisible();
-  const placed = await locator.evaluate(element => {
-    const button = element.getBoundingClientRect();
-    const dialog = element.closest('dialog')!.getBoundingClientRect();
-    const inside = (left: number, top: number, right: number, bottom: number) => button.left >= left - 1 && button.top >= top - 1 && button.right <= right + 1 && button.bottom <= bottom + 1;
-    return {
-      inDialog: inside(dialog.left, dialog.top, dialog.right, dialog.bottom),
-      inView: inside(0, 0, window.innerWidth, window.innerHeight),
-      height: button.height,
-    };
-  });
-  expect(placed.inDialog).toBe(true);
-  expect(placed.inView).toBe(true);
-  expect(placed.height).toBeGreaterThanOrEqual(44);
+    return box.height > 0 && box.top >= -1 && box.bottom <= window.innerHeight + 1 && box.left >= -1 && box.right <= window.innerWidth + 1;
+  }), 'element was not inside the viewport').toBe(true);
 }
 
 function contrastOf(element: Element) {
@@ -107,23 +96,18 @@ test('a ready draft callout opens the preview with 送出技能 already in view'
     return route.fulfill({ json: ready });
   });
   await login(page);
-  await navigate(page, '技能書架');
-  const callout = page.locator('.skill-draft-callout');
-  await expect(callout).toContainText('1 份技能草稿待你送出：流程整理技能');
   for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
+    await navigate(page, '技能書架');
+    const callout = page.locator('.skill-draft-callout');
+    await expect(callout).toContainText('1 份技能草稿待你送出：流程整理技能');
     await callout.getByRole('button', { name: '預覽並送出', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-    const order = await dialog.evaluate(element => {
-      const headings = [...element.querySelectorAll('h3')].map(node => node.textContent);
-      return headings.indexOf('我的技能投稿') >= 0 && headings.indexOf('我的技能投稿') < headings.indexOf('交給 Agent 讀取專案');
-    });
-    expect(order).toBe(true);
-    await expect(dialog.getByRole('region', { name: '預覽：流程整理技能', exact: true })).toBeVisible();
-    await settleIllustration(dialog);
-    await expectFullyInView(dialog.getByRole('button', { name: '送出技能', exact: true }));
-    await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
-    await expect(dialog).toBeHidden();
+    await expect(page.getByRole('heading', { name: '確認這樣分享，好嗎？', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '流程整理技能', exact: true })).toBeVisible();
+    await expect(page.getByText('分享短文 100 則', { exact: true })).toBeVisible();
+    const publishBtn = page.getByRole('button', { name: '重試公開投稿', exact: true });
+    await expect(publishBtn).toBeVisible();
+    expect((await publishBtn.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
 });
 
@@ -159,35 +143,39 @@ test('a seeded draft is completed in chat, and a different repository does not r
     return route.fulfill({ json: id === 'sub-seed' ? seededReady : submission('sub-new', 'ready_for_review') });
   });
   await login(page);
-  await navigate(page, '技能書架');
-  await page.getByRole('button', { name: '上傳技能', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  const paste = dialog.getByRole('textbox', { name: '貼上 JSON', exact: true });
+  await navigate(page, '開源投稿');
+  await openAgentUpload(page, 'https://github.com/example/other-book');
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await panel.locator('details.skill-upload-cli > summary').click();
+  const paste = panel.getByRole('textbox', { name: '貼上 JSON', exact: true });
   await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
   await paste.fill(JSON.stringify({ repository_url: 'https://github.com/example/other-book', title: '另一件', page_content: syntheticSkillPage }));
-  await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
+  await panel.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
   await expect.poll(() => uploads.length).toBe(1);
   expect(uploads[0]).toContain('/sub-new');
   expect(grants.some(path => path.includes('sub-seed'))).toBe(false);
-  await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
 
+  await navigate(page, '技能書架');
   const callout = page.locator('.skill-draft-callout');
   await expect(callout).toContainText('「種子技能」需補齊 100 則分享介紹，示意圖選填；完成後由你預覽並公開。');
   await callout.getByRole('button', { name: '補上分享介紹', exact: true }).click();
-  await expect(dialog.getByText('正在補完：種子技能', { exact: true })).toBeVisible();
-  await expect(dialog.getByLabel('給聊天 AI 的說明', { exact: true })).toHaveValue(/種子技能/);
-  await expect(dialog.getByLabel('公開儲存庫網址', { exact: true })).toHaveValue(seed.repository_url);
-  await expect(dialog.getByRole('button', { name: '複製給聊天 AI', exact: true })).toBeFocused();
+  await expect(panel.getByText('正在補完：種子技能', { exact: true }).first()).toBeVisible();
+  await expect(panel.getByText('升級：種子技能', { exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '交給我的 agent', exact: true })).toBeFocused();
+  await panel.locator('details.skill-upload-cli > summary').click();
+  await expect(panel.getByLabel('給聊天 AI 的說明', { exact: true })).toHaveValue(/種子技能/);
+  await expect(panel.getByLabel('公開儲存庫網址', { exact: true })).toHaveValue(seed.repository_url);
   await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
   await paste.fill(JSON.stringify({ repository_url: 'https://github.com/Example/Seeded-Book', title: '種子技能', page_content: syntheticSkillPage }));
-  await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
-  await expect(dialog.getByText('升級：種子技能', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
   await expect.poll(() => grants.some(path => path.includes('sub-seed'))).toBe(true);
   await expect.poll(() => uploads.some(path => path.endsWith('/sub-seed'))).toBe(true);
-  await expect(dialog.getByRole('region', { name: '預覽：流程整理技能', exact: true })).toBeVisible();
-  await expect(dialog.getByText('送出後會取代簡易版；原本的作品連結會自動轉到完整版。', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: '送出技能', exact: true }).click();
-  await expect(dialog.getByRole('status').filter({ hasText: '技能書已公開' })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '確認這樣分享，好嗎？', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '流程整理技能', exact: true })).toBeVisible();
+  await expect(panel.getByText('送出後會取代簡易版；原本的作品連結會自動轉到完整版。', { exact: true })).toBeVisible();
+  await panel.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
+  await panel.getByRole('button', { name: '重試公開投稿', exact: true }).click();
+  await expect(panel.getByRole('region', { name: '投稿完成', exact: true })).toContainText('已公開為社群技能書');
 });
 
 test('an agent upload while the private instruction is open opens the preview', async ({ page }) => {
@@ -207,18 +195,19 @@ test('an agent upload while the private instruction is open opens the preview', 
     return route.fulfill({ json: current });
   });
   await login(page);
-  await navigate(page, '技能書架');
+  await navigate(page, '開源投稿');
   await page.clock.install();
-  await page.getByRole('button', { name: '上傳技能', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  await expect(dialog.getByText('尚未上傳內容', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: '產生私人上傳指令', exact: true }).click();
-  await expect(dialog.getByLabel('私人上傳指令', { exact: true })).toBeVisible();
+  await openAgentUpload(page);
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await expect(panel.getByText('尚未上傳內容').first()).toBeVisible();
+  await expect(panel.getByLabel('給 Agent 的私人上傳指令', { exact: true })).toBeVisible();
   flip = true;
   await page.clock.fastForward(10_000);
-  await expect(dialog.getByText('Agent 已上傳「流程整理技能」，請預覽後送出。', { exact: true })).toBeVisible();
-  await expect(dialog.getByRole('region', { name: '預覽：流程整理技能', exact: true })).toBeVisible();
-  await expect(dialog.getByLabel('私人上傳指令', { exact: true })).toHaveCount(0);
+  await expect(panel.getByText('Agent 已上傳「流程整理技能」，請在下方草稿預覽並公開。', { exact: true })).toBeVisible();
+  await expect(panel.getByLabel('給 Agent 的私人上傳指令', { exact: true })).toHaveCount(0);
+  await panel.getByRole('button', { name: '預覽並公開：流程整理技能', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: '確認這樣分享，好嗎？', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '流程整理技能', exact: true })).toBeVisible();
 });
 
 test('a paste still reaches a seeded draft after its grant expired', async ({ page }) => {
@@ -228,12 +217,13 @@ test('a paste still reaches a seeded draft after its grant expired', async ({ pa
   const grants: string[] = [];
   const created: string[] = [];
   const uploads: string[] = [];
+  let seedUploaded = false;
   await page.route('**/api/v1/me/skill-submissions**', async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace('/api/v1', '');
     if (path.endsWith('/illustration')) return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
     if (request.method() === 'GET' && path === '/me/skill-submissions') return route.fulfill({ json: { items: [seeded, plain] } });
-    if (request.method() === 'GET') return route.fulfill({ json: path.endsWith('/sub-seed') ? seededReady : plain });
+    if (request.method() === 'GET') return route.fulfill({ json: path.endsWith('/sub-seed') ? (seedUploaded ? seededReady : seeded) : plain });
     if (request.method() === 'POST' && path === '/me/skill-submissions') { created.push(path); return route.fulfill({ status: 201, json: { submission: submission('sub-new', 'awaiting_upload'), upload_grant: { token: GRANT, expires_at: '2099-01-01T00:00:00Z', submit_url: '/agent-api/v1/skill-submissions/sub-new' } } }); }
     if (path.endsWith('/grant')) {
       grants.push(path);
@@ -244,6 +234,7 @@ test('a paste still reaches a seeded draft after its grant expired', async ({ pa
   });
   await page.route('**/agent-api/v1/skill-submissions/**', async route => {
     uploads.push(new URL(route.request().url()).pathname);
+    seedUploaded = true;
     return route.fulfill({ json: seededReady });
   });
   await login(page);
@@ -251,12 +242,13 @@ test('a paste still reaches a seeded draft after its grant expired', async ({ pa
   const callout = page.locator('.skill-draft-callout');
   await expect(callout).toContainText('「種子技能」需補齊 100 則分享介紹，示意圖選填；完成後由你預覽並公開。');
   await callout.getByRole('button', { name: '補上分享介紹', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  await expect(dialog.getByText('正在補完：種子技能', { exact: true })).toBeVisible();
-  const paste = dialog.getByRole('textbox', { name: '貼上 JSON', exact: true });
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await expect(panel.getByText('正在補完：種子技能', { exact: true }).first()).toBeVisible();
+  await panel.locator('details.skill-upload-cli > summary').click();
+  const paste = panel.getByRole('textbox', { name: '貼上 JSON', exact: true });
   await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
   await paste.fill(JSON.stringify({ repository_url: 'https://github.com/Example/Seeded-Book', title: '種子技能', page_content: syntheticSkillPage }));
-  await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
+  await panel.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
   await expect.poll(() => grants).toEqual(['/me/skill-submissions/sub-seed/grant']);
   await expect.poll(() => uploads.some(path => path.endsWith('/sub-seed'))).toBe(true);
   expect(uploads.some(path => path.endsWith('/sub-plain') || path.endsWith('/sub-new'))).toBe(false);
@@ -277,16 +269,15 @@ test('publishing the last ready draft keeps the drafts section above the agent i
     return route.fulfill({ json: current });
   });
   await login(page);
-  await navigate(page, '技能書架');
-  await page.locator('.skill-draft-callout').getByRole('button', { name: '預覽並送出', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  await dialog.getByRole('button', { name: '送出技能', exact: true }).click();
-  await expect(dialog.getByText('技能書已公開，可以閱讀與分享。', { exact: true })).toBeVisible();
-  const order = await dialog.evaluate(element => {
-    const headings = [...element.querySelectorAll('h3')].map(node => node.textContent);
-    return headings.indexOf('我的技能投稿') >= 0 && headings.indexOf('我的技能投稿') < headings.indexOf('交給 Agent 讀取專案');
-  });
-  expect(order).toBe(true);
+  await navigate(page, '開源投稿');
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await panel.getByRole('button', { name: '預覽並公開：流程整理技能', exact: true }).click();
+  await panel.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
+  await panel.getByRole('button', { name: '重試公開投稿', exact: true }).click();
+  const completed = panel.getByRole('region', { name: '投稿完成', exact: true });
+  await expect(completed).toContainText('已公開為社群技能書');
+  await expect(panel.getByRole('region', { name: '我的投稿草稿', exact: true })).toHaveCount(0);
+  await expect(panel.getByLabel('給 Agent 的私人上傳指令', { exact: true })).toHaveCount(0);
 });
 
 test('completing a seeded draft keeps the target line and copy button in view', async ({ page }) => {
@@ -298,33 +289,28 @@ test('completing a seeded draft keeps the target line and copy button in view', 
     return route.fulfill({ json: seeded });
   });
   await login(page);
-  await navigate(page, '技能書架');
   const callout = page.locator('.skill-draft-callout');
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
   for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
+    await navigate(page, '技能書架');
     await callout.getByRole('button', { name: '補上分享介紹', exact: true }).click();
-    const target = dialog.getByText('正在補完：種子技能', { exact: true });
-    const copy = dialog.getByRole('button', { name: '複製給聊天 AI', exact: true });
-    await expect(copy).toBeFocused();
-    await expectInsideDialog(target);
-    await expectInsideDialog(copy);
-    const gap = await target.evaluate(element => {
-      const header = element.closest('dialog')!.querySelector('.skill-upload-header')!.getBoundingClientRect();
-      return element.getBoundingClientRect().top - header.bottom;
-    });
-    expect(gap).toBeGreaterThanOrEqual(8);
-    await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
-    await expect(dialog).toBeHidden();
+    const target = panel.getByText('正在補完：種子技能', { exact: true }).first();
+    await expect(panel.getByRole('heading', { name: '交給我的 agent', exact: true })).toBeFocused();
+    await expectInView(target);
+    await panel.locator('details.skill-upload-cli > summary').click();
+    const copy = panel.getByRole('button', { name: '複製給聊天 AI', exact: true });
+    await copy.scrollIntoViewIfNeeded();
+    await expectInView(copy);
   }
   await page.setViewportSize({ width: 390, height: 520 });
+  await navigate(page, '技能書架');
   await callout.getByRole('button', { name: '補上分享介紹', exact: true }).click();
-  const shortCopy = dialog.getByRole('button', { name: '複製給聊天 AI', exact: true });
-  await expect(shortCopy).toBeFocused();
-  await expectInsideDialog(shortCopy);
+  await expect(panel.getByRole('heading', { name: '交給我的 agent', exact: true })).toBeFocused();
+  await expectInView(panel.getByText('正在補完：種子技能', { exact: true }).first());
 });
 
-test('the upload header stays above the submit footer and use notes keep their inset', async ({ page }) => {
+test('inline preview stays unobstructed and keeps use notes readable in light and dark themes', async ({ page }) => {
   const ready = submission('sub-ready', 'ready_for_review');
   await page.route('**/api/v1/me/skill-submissions**', async route => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
@@ -334,67 +320,29 @@ test('the upload header stays above the submit footer and use notes keep their i
   });
   await login(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await navigate(page, '技能書架');
-  await page.locator('.skill-draft-callout').getByRole('button', { name: '預覽並送出', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  await settleIllustration(dialog);
-  const submit = dialog.getByRole('button', { name: '送出技能', exact: true });
-  await expect(submit).toBeVisible();
-  const submitOnTop = await submit.evaluate(element => {
-    const box = element.getBoundingClientRect();
-    return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === element;
-  });
-  expect(submitOnTop).toBe(true);
+  await navigate(page, '開源投稿');
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await panel.getByRole('button', { name: '預覽並公開：流程整理技能', exact: true }).click();
+  await settleIllustration(panel);
+  await panel.getByText('使用說明與展示網址', { exact: true }).click();
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-    const notes = dialog.locator('.skill-upload-preview .help-box');
-    await expect(notes).toHaveCSS('padding-left', '12px');
-    const inset = await notes.evaluate(element => {
-      const strong = element.querySelector('strong');
-      if (!strong) return -1;
-      return strong.getBoundingClientRect().left - element.getBoundingClientRect().left;
-    });
-    expect(inset).toBeGreaterThanOrEqual(12);
+    await expect(panel.getByText('安裝 Node.js 後執行第一個範例。', { exact: true })).toBeVisible();
   }
   await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
-  const placed = await dialog.evaluate(element => {
-    const header = element.querySelector<HTMLElement>('.skill-upload-header');
-    const footer = element.querySelector<HTMLElement>('.skill-upload-submit');
-    const title = header?.querySelector('h2');
-    if (!header || !footer || !title) return null;
-    // The title centre is ~30px above the header bottom, so a 20px overlap stays in the padding and cannot see z-index.
-    const target = () => title.getBoundingClientRect().top + title.getBoundingClientRect().height / 2 - 4;
-    const max = Math.max(0, element.scrollHeight - element.clientHeight);
-    let low = 0;
-    let high = max;
-    for (let step = 0; step < 28; step += 1) {
-      element.scrollTop = (low + high) / 2;
-      if (footer.getBoundingClientRect().top > target()) low = element.scrollTop;
-      else high = element.scrollTop;
-    }
-    element.scrollTop = high;
-    element.scrollTop += footer.getBoundingClientRect().top - target();
-    const footerBox = footer.getBoundingClientRect();
-    const headerBox = header.getBoundingClientRect();
-    const titleBox = title.getBoundingClientRect();
-    const x = titleBox.left + titleBox.width / 2;
-    const y = titleBox.top + titleBox.height / 2;
-    const hit = document.elementFromPoint(x, y);
-    return {
-      overlap: headerBox.bottom - footerBox.top,
-      pointInsideFooter: x >= footerBox.left && x <= footerBox.right && y >= footerBox.top && y <= footerBox.bottom,
-      titleMidFromHeaderBottom: headerBox.bottom - y,
-      hitInHeader: Boolean(hit?.closest('.skill-upload-header')),
-    };
+  const submit = panel.getByRole('button', { name: '重試公開投稿', exact: true });
+  await panel.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
+  await submit.scrollIntoViewIfNeeded();
+  await expect(submit).toBeVisible();
+  const submitOnTop = await submit.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === element && box.height >= 44;
   });
-  expect(placed).not.toBeNull();
-  expect(placed?.pointInsideFooter).toBe(true);
-  expect(Math.abs((placed?.overlap ?? 0) - ((placed?.titleMidFromHeaderBottom ?? 0) + 4))).toBeLessThanOrEqual(2);
-  expect(placed?.hitInHeader).toBe(true);
+  expect(submitOnTop).toBe(true);
 });
 
-test('the stuck submit footer reaches the dialog bottom on a phone', async ({ page }) => {
+test('inline preview submit button fits inside a phone viewport without horizontal overflow', async ({ page }) => {
   const ready = submission('sub-ready', 'ready_for_review');
   await page.route('**/api/v1/me/skill-submissions**', async route => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
@@ -404,44 +352,23 @@ test('the stuck submit footer reaches the dialog bottom on a phone', async ({ pa
   });
   await login(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await navigate(page, '技能書架');
-  await page.locator('.skill-draft-callout').getByRole('button', { name: '預覽並送出', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  const footer = dialog.locator('.skill-upload-submit');
-  await expect(footer).toBeVisible();
-  await settleIllustration(dialog);
-  await dialog.evaluate(element => { element.scrollTop = 0; });
-  const gap = await footer.evaluate(element => {
-    const dialogNode = element.closest('dialog')!;
-    return Math.abs(dialogNode.getBoundingClientRect().bottom - element.getBoundingClientRect().bottom);
-  });
-  expect(gap).toBeLessThanOrEqual(2);
+  await navigate(page, '開源投稿');
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await panel.getByRole('button', { name: '預覽並公開：流程整理技能', exact: true }).click();
+  await settleIllustration(panel);
+  const submit = panel.getByRole('button', { name: '重試公開投稿', exact: true });
+  await submit.scrollIntoViewIfNeeded();
+  await expectInView(submit);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 const resultViewports = [{ width: 1280, height: 800 }, { width: 390, height: 844 }];
 
-async function dialogTypography(dialog: Locator) {
-  return dialog.evaluate(element => {
-    const value = (node: Element | null) => node ? getComputedStyle(node) : null;
-    const title = value(element.querySelector('.skill-upload-header h2'));
-    const agent = [...element.querySelectorAll('section')].find(section => section.querySelector('h3')?.textContent === '交給 Agent 讀取專案');
-    const heading = value(agent?.querySelector('h3') ?? null);
-    const hint = value(element.querySelector('.field-hint'));
-    const paragraph = value(agent?.querySelector('p') ?? null);
-    return {
-      titleSize: title?.fontSize ?? '',
-      titleMarginTop: title?.marginTop ?? '',
-      headingSize: heading?.fontSize ?? '',
-      hintSize: hint?.fontSize ?? '',
-      paragraphSize: paragraph?.fontSize ?? '',
-    };
-  });
-}
-
-test('publish, revoke, and chat upload show their results inside the drafts section', async ({ page }) => {
+test('publish, revoke, and chat upload show their results inside SkillSubmission', async ({ page }) => {
   const ready = submission('sub-ready', 'ready_for_review');
+  const waiting = submission('sub-waiting', 'awaiting_upload', { aggregate_version: 2 });
   const published = submission('sub-ready', 'published');
-  const revoked = submission('sub-ready', 'ready_for_review', { status: 'revoked', aggregate_version: 4 });
+  const revoked = submission('sub-waiting', 'awaiting_upload', { status: 'revoked', aggregate_version: 3 });
   const chatReady = submission('sub-chat', 'ready_for_review');
   let publishedSent = false;
   let revokedSent = false;
@@ -456,14 +383,19 @@ test('publish, revoke, and chat upload show their results inside the drafts sect
       const created = submission('sub-chat', 'awaiting_upload', { aggregate_version: 1 });
       return route.fulfill({ status: 201, json: { submission: created, upload_grant: { token: GRANT, expires_at: '2099-01-01T00:00:00Z', submit_url: '/agent-api/v1/skill-submissions/sub-chat' } } });
     }
+    if (request.method() === 'POST' && path.endsWith('/grant')) {
+      const target = path.includes('/sub-chat/') ? submission('sub-chat', 'awaiting_upload', { aggregate_version: 1 }) : waiting;
+      return route.fulfill({ json: { submission: target, upload_grant: { token: GRANT, expires_at: '2099-01-01T00:00:00Z', submit_url: `/agent-api/v1/skill-submissions/${target.submission_id}` } } });
+    }
     if (request.method() === 'GET' && path === '/me/skill-submissions') {
       if (uploaded) return route.fulfill({ json: { items: [chatReady] } });
-      const current = publishedSent ? published : revokedSent ? revoked : ready;
-      return route.fulfill({ json: { items: [current] } });
+      if (publishedSent) return route.fulfill({ json: { items: [published] } });
+      if (revokedSent) return route.fulfill({ json: { items: [ready] } });
+      return route.fulfill({ json: { items: [ready, waiting] } });
     }
     if (path.endsWith('/sub-chat')) return route.fulfill({ json: chatReady });
-    const current = publishedSent ? published : revokedSent ? revoked : ready;
-    return route.fulfill({ json: current });
+    if (path.endsWith('/sub-waiting')) return route.fulfill({ json: uploaded ? chatReady : revokedSent ? revoked : waiting });
+    return route.fulfill({ json: publishedSent ? published : ready });
   });
   await page.route('**/agent-api/v1/skill-submissions/**', async route => {
     uploaded = true;
@@ -473,75 +405,57 @@ test('publish, revoke, and chat upload show their results inside the drafts sect
   for (const viewport of resultViewports) {
     publishedSent = false; revokedSent = false; uploaded = false;
     await page.setViewportSize(viewport);
-    await navigate(page, '開源投稿');
+    if (viewport !== resultViewports[0]) await page.reload();
     await navigate(page, '技能書架');
-    await page.locator('.skill-draft-callout').getByRole('button', { name: '預覽並送出', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-    await settleIllustration(dialog);
-    await dialog.getByRole('button', { name: '送出技能', exact: true }).click();
-    const drafts = dialog.getByRole('region', { name: '我的技能投稿', exact: true });
-    const publishedNotice = drafts.getByText('技能書已公開，可以閱讀與分享。', { exact: true });
-    await expectInsideDialog(publishedNotice);
-    await expect(dialog.getByRole('alert')).toHaveCount(0);
-    await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
-    await expect(dialog).toBeHidden();
+    await navigate(page, '開源投稿');
+    const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+    await panel.getByRole('button', { name: '預覽並公開：流程整理技能', exact: true }).click();
+    await settleIllustration(panel);
+    await panel.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
+    await panel.getByRole('button', { name: '重試公開投稿', exact: true }).click();
+    await expectInView(panel.getByRole('region', { name: '投稿完成', exact: true }).getByText('已公開為社群技能書', { exact: false }));
+    await expect(panel.getByRole('alert')).toHaveCount(0);
 
     publishedSent = false; revokedSent = false; uploaded = false;
-    await navigate(page, '開源投稿');
     await navigate(page, '技能書架');
-    await page.getByRole('button', { name: '上傳技能', exact: true }).click();
-    await dialog.getByRole('button', { name: '撤銷草稿：流程整理技能', exact: true }).click();
-    const revokedNotice = dialog.getByRole('region', { name: '我的技能投稿', exact: true }).getByText('草稿已撤銷，憑證無法再上傳。', { exact: true });
-    await expectInsideDialog(revokedNotice);
-    await expect(dialog.getByRole('alert')).toHaveCount(0);
-    await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
-    await expect(dialog).toBeHidden();
+    await navigate(page, '開源投稿');
+    await panel.getByRole('button', { name: '繼續：尚未上傳內容', exact: true }).click();
+    await panel.getByRole('button', { name: '撤銷這份草稿', exact: true }).click();
+    await expectInView(panel.getByText('草稿已撤銷，憑證無法再上傳。', { exact: true }));
+    await expect(panel.getByRole('alert')).toHaveCount(0);
 
     publishedSent = false; revokedSent = false; uploaded = false;
-    await navigate(page, '開源投稿');
     await navigate(page, '技能書架');
-    await page.getByRole('button', { name: '上傳技能', exact: true }).click();
-    const paste = dialog.getByRole('textbox', { name: '貼上 JSON', exact: true });
+    await navigate(page, '開源投稿');
+    await openAgentUpload(page);
+    await panel.locator('details.skill-upload-cli > summary').click();
+    const paste = panel.getByRole('textbox', { name: '貼上 JSON', exact: true });
     await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
     await paste.fill(JSON.stringify({ repository_url: 'https://github.com/example/skill-demo', title: '流程整理技能', page_content: syntheticSkillPage }));
-    await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
-    const uploadedNotice = dialog.getByRole('region', { name: '我的技能投稿', exact: true }).getByText('草稿已上傳，請預覽內容後再送出。', { exact: true });
-    await expectInsideDialog(uploadedNotice);
-    await expect(dialog.getByRole('alert')).toHaveCount(0);
-    await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
-    await expect(dialog).toBeHidden();
+    await panel.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
+    await expectInView(panel.getByRole('heading', { name: '確認這樣分享，好嗎？', exact: true }));
+    await expect(panel.getByRole('heading', { name: '流程整理技能', exact: true })).toBeVisible();
+    await expect(panel.getByRole('alert')).toHaveCount(0);
   }
 });
 
-test('the upload dialog keeps the same type on the skill shelf and the open-source page', async ({ page }) => {
+test('the skill shelf and open-source page keep shelf typography consistent without the old dialog', async ({ page }) => {
   await login(page);
   for (const viewport of resultViewports) {
     await page.setViewportSize(viewport);
     await navigate(page, '技能書架');
     await expect(page.getByRole('heading', { name: '公會指定技能書', level: 2, exact: true })).toHaveCSS('font-size', '18px');
     await expect(page.getByRole('heading', { name: '社群技能書', level: 2, exact: true })).toHaveCSS('font-size', '18px');
-    for (const title of ['社群技能書', '公會指定技能書']) {
-      const shelfHeading = page.getByRole('heading', { name: title, level: 2, exact: true });
-      await expect(shelfHeading.locator('..').locator('p.muted')).toHaveCSS('font-size', '14px');
-    }
-    await page.getByRole('button', { name: '上傳技能', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-    await expect(dialog.getByRole('heading', { name: '交給 Agent 讀取專案', exact: true })).toBeVisible();
-    const fromShelf = await dialogTypography(dialog);
+    await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button', { name: '投稿開源工具', exact: true }).click();
+    await openAgentUpload(page);
+    const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+    await expect(panel.getByRole('heading', { name: '交給我的 agent', exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await navigate(page, '技能書架');
+    await expect(page.getByRole('heading', { name: '公會指定技能書', level: 2, exact: true })).toHaveCSS('font-size', '18px');
     await expect(page.getByRole('heading', { name: '社群技能書', level: 2, exact: true })).toHaveCSS('font-size', '18px');
-    for (const title of ['社群技能書', '公會指定技能書']) {
-      const shelfHeading = page.getByRole('heading', { name: title, level: 2, exact: true });
-      await expect(shelfHeading.locator('..').locator('p.muted')).toHaveCSS('font-size', '14px');
-    }
-    await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
-    await expect(dialog).toBeHidden();
-
-    await navigate(page, '開源投稿');
-    await page.getByText('使用 Agent 或聊天 AI 協助整理（進階）', { exact: true }).click();
-    await page.getByRole('button', { name: '上傳技能', exact: true }).click();
-    await expect(dialog.getByRole('heading', { name: '交給 Agent 讀取專案', exact: true })).toBeVisible();
-    expect(await dialogTypography(dialog)).toEqual(fromShelf);
-    await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
   }
 });
 
@@ -558,56 +472,42 @@ test('member card headings keep their margin outside the upload dialog', async (
   if (await photo.count()) await expect(photo.first()).toHaveCSS('object-fit', 'contain');
 });
 
-test('a loading draft refresh stays readable and distinctly disabled inside the dialog', async ({ page }) => {
+test('a loading draft refresh stays readable and distinctly disabled', async ({ page }) => {
+  const ready = submission('sub-ready', 'ready_for_review');
   let gate: Promise<void> | null = null;
   let release = () => {};
   await page.route('**/api/v1/me/skill-submissions**', async route => {
     const path = new URL(route.request().url()).pathname.replace('/api/v1', '');
     if (route.request().method() === 'GET' && path === '/me/skill-submissions') {
       if (gate) await gate;
-      return route.fulfill({ json: { items: [] } });
+      return route.fulfill({ json: { items: [ready] } });
     }
     return route.fallback();
   });
   await login(page);
-  for (const tab of ['開源投稿', '技能書架'] as const) {
-    await navigate(page, tab);
-    if(tab==='開源投稿'){
-      const advanced=page.locator('details.work-sharing-advanced');await expect(advanced).toBeVisible();
-      if(!await advanced.evaluate(element=>(element as HTMLDetailsElement).open))await advanced.locator(':scope > summary').click();
-    } else {
-      // The guild shelf expands above this trigger when its initial read settles.
-      const shelf = page.getByRole('region', { name: '公會指定技能書', exact: true });
-      const loaded = shelf.getByRole('status').filter({ hasText: /^顯示 \d+ \/ \d+ 本技能書$/ });
-      const empty = shelf.getByText('還沒有已解鎖的技能書。加入公會即可領取，也可先免費預覽。', { exact: true });
-      await expect(loaded.or(empty)).toBeVisible();
-    }
-    await page.getByRole('button', { name: '上傳技能', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-    const refresh = dialog.getByRole('button', { name: '重新整理草稿', exact: true });
-    await expect(refresh).toBeEnabled();
-    gate = new Promise(resolve => { release = resolve; });
-    await refresh.click();
-    await expect(refresh).toBeDisabled();
-    await expect(refresh).toHaveCSS('opacity', '1');
-    await expect(refresh).toHaveCSS('border-style', 'dashed');
-    await expect(refresh).toHaveCSS('cursor', 'not-allowed');
-    const disabled=await refresh.evaluate(element=>{
-      let clicks=0;const count=()=>{clicks++;};element.addEventListener('click',count);(element as HTMLButtonElement).click();element.removeEventListener('click',count);
-      const style=getComputedStyle(element);
-      const lum=(rgb:string)=>{const parts=rgb.match(/[\d.]+/g)!.map(Number);if(parts.length>3&&parts[3]!==1)throw Error('Expected opaque disabled colors');const v=parts.slice(0,3).map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);return v[0]*.2126+v[1]*.7152+v[2]*.0722;};
-      const a=lum(style.color),b=lum(style.backgroundColor);return {clicks,contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),height:element.getBoundingClientRect().height};
-    });
-    expect(disabled.clicks).toBe(0);expect(disabled.contrast).toBeGreaterThanOrEqual(4.5);expect(disabled.height).toBeGreaterThanOrEqual(44);
-    release();
-    gate = null;
-    await expect(refresh).toBeEnabled();
-    await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
-    await expect(dialog).toBeHidden();
-  }
+  await navigate(page, '開源投稿');
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  const refresh = panel.getByRole('button', { name: '重新整理', exact: true });
+  await expect(refresh).toBeEnabled();
+  gate = new Promise(resolve => { release = resolve; });
+  await refresh.click();
+  await expect(refresh).toBeDisabled();
+  await expect(refresh).toHaveCSS('opacity', '1');
+  await expect(refresh).toHaveCSS('border-style', 'dashed');
+  await expect(refresh).toHaveCSS('cursor', 'not-allowed');
+  const disabled=await refresh.evaluate(element=>{
+    let clicks=0;const count=()=>{clicks++;};element.addEventListener('click',count);(element as HTMLButtonElement).click();element.removeEventListener('click',count);
+    const style=getComputedStyle(element);
+    const lum=(rgb:string)=>{const parts=rgb.match(/[\d.]+/g)!.map(Number);if(parts.length>3&&parts[3]!==1)throw Error('Expected opaque disabled colors');const v=parts.slice(0,3).map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);return v[0]*.2126+v[1]*.7152+v[2]*.0722;};
+    const a=lum(style.color),b=lum(style.backgroundColor);return {clicks,contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),height:element.getBoundingClientRect().height};
+  });
+  expect(disabled.clicks).toBe(0);expect(disabled.contrast).toBeGreaterThanOrEqual(4.5);expect(disabled.height).toBeGreaterThanOrEqual(44);
+  release();
+  gate = null;
+  await expect(refresh).toBeEnabled();
 });
 
-test('a phone shows a publish conflict in the drafts section', async ({ page }) => {
+test('a phone shows a publish conflict in SkillSubmission', async ({ page }) => {
   const ready = submission('sub-ready', 'ready_for_review');
   const problem = { title: '草稿已變更', detail: '這份草稿已在別處更新，請重新整理後再送出。' };
   await page.route('**/api/v1/me/skill-submissions**', async route => {
@@ -620,18 +520,18 @@ test('a phone shows a publish conflict in the drafts section', async ({ page }) 
   });
   await login(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await navigate(page, '技能書架');
-  await page.locator('.skill-draft-callout').getByRole('button', { name: '預覽並送出', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  await settleIllustration(dialog);
-  await dialog.getByRole('button', { name: '送出技能', exact: true }).click();
-  const drafts = dialog.getByRole('region', { name: '我的技能投稿', exact: true });
-  const alert = drafts.getByRole('alert');
+  await navigate(page, '開源投稿');
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await panel.getByRole('button', { name: '預覽並公開：流程整理技能', exact: true }).click();
+  await settleIllustration(panel);
+  await panel.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
+  await panel.getByRole('button', { name: '重試公開投稿', exact: true }).click();
+  const alert = panel.getByRole('alert');
   await expect(alert).toHaveText(`${problem.title}：${problem.detail}`);
   await expect(alert).toHaveClass('banner banner-error');
-  await expectInsideDialog(alert);
-  await expect(drafts.getByText('技能書已公開，可以閱讀與分享。')).toHaveCount(0);
-  await expect(dialog.getByRole('region', { name: '交給 Agent 讀取專案', exact: true }).getByRole('alert')).toHaveCount(0);
+  await alert.scrollIntoViewIfNeeded();
+  await expectInView(alert);
+  await expect(panel.getByRole('region', { name: '投稿完成', exact: true })).toHaveCount(0);
 });
 
 test('handing a seeded draft to an agent brings the instruction into view', async ({ page }) => {
@@ -646,19 +546,20 @@ test('handing a seeded draft to an agent brings the instruction into view', asyn
   });
   await login(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await navigate(page, '技能書架');
-  await page.getByRole('button', { name: '上傳技能', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  await dialog.getByRole('button', { name: '交給 Agent：種子技能', exact: true }).click();
-  const instruction = dialog.getByLabel('私人上傳指令', { exact: true });
-  const copy = dialog.getByRole('button', { name: '複製', exact: true });
-  await expect(copy).toBeFocused();
-  await expectInsideDialog(instruction);
-  await expectInsideDialog(copy);
+  await navigate(page, '開源投稿');
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await panel.getByRole('button', { name: '繼續：升級：種子技能', exact: true }).click();
+  await panel.getByRole('button', { name: '產生私人上傳指令', exact: true }).click();
+  const instruction = panel.getByLabel('給 Agent 的私人上傳指令', { exact: true });
+  const copy = panel.getByRole('button', { name: '複製給 agent', exact: true });
+  await expect(instruction).toBeVisible();
+  await expect(copy).toBeVisible();
+  await copy.scrollIntoViewIfNeeded();
+  await expectInView(copy);
 });
 
 for (const theme of ['light', 'dark', 'versefolk'] as const) {
-  test(`draft callout and submit footer stay opaque in ${theme}`, async ({ page }) => {
+  test(`draft callout and preview publish action stay opaque in ${theme}`, async ({ page }) => {
     await page.addInitScript(value => localStorage.setItem('freedom-theme', value), theme);
     const ready = submission('sub-ready', 'ready_for_review');
     await page.route('**/api/v1/me/skill-submissions**', async route => {
@@ -671,14 +572,19 @@ for (const theme of ['light', 'dark', 'versefolk'] as const) {
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await navigate(page, '技能書架');
     const callout = page.locator('.skill-draft-callout');
-    await callout.getByRole('button', { name: '預覽並送出', exact: true }).click();
-    const footer = page.locator('.skill-upload-submit');
-    await expect(footer).toBeVisible();
-    for (const locator of [callout, footer]) {
-      const contrast = await locator.evaluate(contrastOf);
-      expect(contrast.alpha).toBe(1);
-      expect(contrast.ratio).toBeGreaterThanOrEqual(4.5);
-    }
+    await expect(callout).toBeVisible();
+    const calloutContrast = await callout.evaluate(contrastOf);
+    expect(calloutContrast.alpha).toBe(1);
+    expect(calloutContrast.ratio).toBeGreaterThanOrEqual(4.5);
+    await navigate(page, '開源投稿');
+    const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+    await panel.getByRole('button', { name: '預覽並公開：流程整理技能', exact: true }).click();
+    await panel.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
+    const submitBtn = panel.getByRole('button', { name: '重試公開投稿', exact: true });
+    await expect(submitBtn).toBeVisible();
+    const submitContrast = await submitBtn.evaluate(contrastOf);
+    expect(submitContrast.alpha).toBe(1);
+    expect(submitContrast.ratio).toBeGreaterThanOrEqual(4.5);
   });
 }
 
@@ -697,8 +603,10 @@ function fullBook(title: string) {
 
 async function publishSimple(page: Page, title: string) {
   await navigate(page, '開源投稿');
-  await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toBeHidden();
+  await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toHaveCount(0);
   await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/freetwai-test/simple-work');
+  await page.getByRole('button', { name: '下一步', exact: true }).click();
+  await page.getByRole('button', { name: '我自己填', exact: true }).click();
   await page.getByLabel('作品名稱', { exact: true }).fill(title);
   await page.getByLabel('一句話介紹', { exact: true }).fill('幫創作者把零散想法整理成合作提案。');
   await fillSkillPageContent(page);
@@ -720,25 +628,23 @@ test('the simple form upgrades into a full skill book and the old link follows i
   await login(page);
   const { completed, path } = await publishSimple(page, simpleTitle);
   await expect(completed).toContainText('這本技能書已可使用。可再補上 100 則分享介紹，示意圖選填；新版公開前，現在的版本保持不變。');
-  await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toBeHidden();
+  await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toHaveCount(0);
   await completed.getByRole('button', { name: '補充分享介紹（示意圖選填）', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  await expect(dialog.getByText(`正在補完：${simpleTitle}`, { exact: true })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '複製給聊天 AI', exact: true })).toBeFocused();
-  await expect(page.getByText('使用 Agent 或聊天 AI 協助整理（進階）', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toBeHidden();
-  const paste = dialog.getByRole('textbox', { name: '貼上 JSON', exact: true });
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await expect(panel.getByText(`正在補完：${simpleTitle}`, { exact: true }).first()).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '交給我的 agent', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toHaveCount(0);
+  await panel.locator('details.skill-upload-cli > summary').click();
+  const paste = panel.getByRole('textbox', { name: '貼上 JSON', exact: true });
   await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
   await paste.fill(fullBook(fullTitle));
-  await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
-  await expect(dialog.getByText(`升級：${simpleTitle}`, { exact: true })).toBeVisible();
-  await expect(page.getByText('繼續未公開的草稿')).toHaveCount(0);
-  const preview = dialog.getByRole('region', { name: `預覽：${fullTitle}`, exact: true });
-  await expect(preview).toBeVisible();
-  await expect(preview.getByText('送出後會取代簡易版；原本的作品連結會自動轉到完整版。', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: '送出技能', exact: true }).click();
-  await expect(dialog.getByText('技能書已公開，可以閱讀與分享。', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: '關閉上傳技能', exact: true }).click();
+  await panel.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: '確認這樣分享，好嗎？', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: fullTitle, exact: true })).toBeVisible();
+  await expect(panel.getByText('送出後會取代簡易版；原本的作品連結會自動轉到完整版。', { exact: true })).toBeVisible();
+  await panel.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
+  await panel.getByRole('button', { name: '重試公開投稿', exact: true }).click();
+  await expect(panel.getByRole('region', { name: '投稿完成', exact: true })).toContainText('已公開為社群技能書');
   await navigate(page, '技能書架');
   const library = page.locator('.community-skill-library');
   await expect(library.getByRole('heading', { name: fullTitle, exact: true })).toBeVisible();
@@ -764,12 +670,12 @@ test('the shelf callout upgrades a published simple submission into a new draft'
   const upgrading=page.waitForResponse(response=>response.request().method()==='POST'&&/\/api\/v1\/me\/skill-submissions\/[^/]+\/upgrade$/.test(new URL(response.url()).pathname));
   await callout.getByRole('button', { name: '補充分享介紹', exact: true }).click();
   const upgraded=await upgrading;expect(upgraded.status()).toBe(201);await upgraded.finished();
-  const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
-  await expect(dialog.getByText(`正在補完：${title}`, { exact: true })).toBeVisible();
-  await expect(dialog.getByText(`升級：${title}`, { exact: true })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '複製給聊天 AI', exact: true })).toBeFocused();
-  await dialog.getByRole('button', { name: `撤銷草稿：${title}`, exact: true }).click();
-  await expect(dialog.getByText('草稿已撤銷，憑證無法再上傳。', { exact: true })).toBeVisible();
+  const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
+  await expect(panel.getByText(`正在補完：${title}`, { exact: true }).first()).toBeVisible();
+  await expect(panel.getByText(`升級：${title}`, { exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: '交給我的 agent', exact: true })).toBeFocused();
+  await panel.getByRole('button', { name: '撤銷這份草稿', exact: true }).click();
+  await expect(panel.getByText('草稿已撤銷，憑證無法再上傳。', { exact: true })).toBeVisible();
 });
 
 // Real authoring components and stores; deferred synthetic transport isolates
@@ -793,6 +699,8 @@ async function requestManualResume(page: Page, id: string) {
 test('private submission resume waits through create and publication across remount and uses the newest URL', async ({ page }) => {
   await mountSharingFixture(page, 'resume');
   await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/synthetic/repo');
+  await page.getByRole('button', { name: '下一步', exact: true }).click();
+  await page.getByRole('button', { name: '我自己填', exact: true }).click();
   await page.getByLabel('作品名稱', { exact: true }).fill('Original operation');
   await page.getByLabel('一句話介紹', { exact: true }).fill('Original description');
   await fillSkillPageContent(page);
@@ -863,6 +771,9 @@ for (const operation of ['revoke', 'upgrade'] as const) {
 for (const scope of ['skill', 'skill:upgrade']) {
   test(`private submission late resume response is fenced when ${scope} begins before it arrives`, async ({ page }) => {
     await mountSharingFixture(page, 'resume');
+    await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/synthetic/repo');
+    await page.getByRole('button', { name: '下一步', exact: true }).click();
+    await page.getByRole('button', { name: '我自己填', exact: true }).click();
     await page.getByLabel('作品名稱', { exact: true }).fill('Keep local input');
     await requestManualResume(page, 'next-draft');
     await expect.poll(() => skillFixture(page, f => f.pendingReads.length)).toBe(1);
