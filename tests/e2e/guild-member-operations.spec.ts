@@ -1,5 +1,5 @@
 import {test,expect,type Page,type Route} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {navigate,openGuildCardMore} from './navigation.js';
 
 const guildKey='guild_event_space',memberId='00000000-0000-4000-8000-000000000123';
 const writePath='/api/v1/guilds/'+guildKey+'/members/'+memberId+'/tier';
@@ -37,6 +37,7 @@ for(const change of ['close-and-reopen','logout-and-login'] as const)test('a hel
  try{
   await page.goto('/');await login(page);const original=await(await page.request.get('/api/v1/session')).json();viewer=original.user.user_id;await navigate(page,'職業公會');
   const card=page.getByRole('article',{name:'活動與空間公會',exact:true});
+  await openGuildCardMore(card);
   await card.getByRole('button',{name:'查看成員',exact:true}).click();
   const panel=card.getByRole('region',{name:'活動與空間公會成員',exact:true});
   await expect(panel.getByRole('button',{name:'設為正式成員',exact:true})).toBeVisible();
@@ -47,6 +48,7 @@ for(const change of ['close-and-reopen','logout-and-login'] as const)test('a hel
    await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'登出',exact:true}).click();await expect(page.locator('.login-card')).toBeVisible();
    await login(page,'client@local.test');const replacement=await(await page.request.get('/api/v1/session')).json();expect(replacement.user.user_id).not.toBe(original.user.user_id);expect(replacement.csrf_token).not.toBe(original.csrf_token);viewer=replacement.user.user_id;await navigate(page,'會員首頁');await navigate(page,'職業公會');
   }
+  await openGuildCardMore(card);
   await card.getByRole('button',{name:'查看成員',exact:true}).click();await expect(panel.getByRole('button',{name:'設為正式成員',exact:true})).toBeEnabled();
   const searched=page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).pathname==='/api/v1/members'&&new URL(response.url()).searchParams.get('search')==='目前');
   await panel.getByRole('searchbox',{name:'搜尋公會成員',exact:true}).fill('目前');await(await searched).finished();await expect(panel.locator('.directory-member')).toHaveCount(1);

@@ -27,13 +27,15 @@ test('account puts profile and public page first, keeps existing account groups,
   await expect(privacy).toHaveJSProperty('open',false);
   await page.keyboard.press('Enter');await expect(share).toHaveJSProperty('open',false);
   await expect(page.getByRole('region',{name:'認識一位工坊夥伴'})).toHaveCount(0);
+  await openAccountSettings(page,'個人資料');
   const name=page.getByLabel('社群顯示名稱',{exact:true});await name.fill('尚未儲存的測試名字');
   await personal.locator(':scope > summary').click();
+  await openAccountSettings(page,'個人資料');await expect(name).toHaveValue('尚未儲存的測試名字');
+  page.once('dialog',dialog=>dialog.accept());
   await openAccountSettings(page,'誰能看到我');
   await page.getByRole('group',{name:'聯絡 E-mail可見範圍',exact:true}).getByRole('checkbox',{name:'不公開',exact:true}).check();
   await page.getByRole('group',{name:'聯絡 E-mail可見範圍',exact:true}).getByRole('checkbox',{name:'平台好友',exact:true}).check();
   await privacy.locator(':scope > summary').click();
-  await openAccountSettings(page,'個人資料');await expect(name).toHaveValue('尚未儲存的測試名字');
   await openAccountSettings(page,'誰能看到我');
   await expect(page.getByRole('group',{name:'聯絡 E-mail可見範圍',exact:true}).getByRole('checkbox',{name:'平台好友',exact:true})).toBeChecked();
   expect(recommendations).toEqual([]);expect(writes).toEqual([]);
@@ -42,6 +44,7 @@ test('account puts profile and public page first, keeps existing account groups,
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     for(const summary of await sections.locator(':scope > summary').all())expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
+  page.once('dialog',dialog=>dialog.accept());
   const security=securitySection.locator(':scope > summary');await security.focus();await page.keyboard.press('Enter');
   await expect(securitySection).toHaveJSProperty('open',true);await expect(security).toBeFocused();
   await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();

@@ -65,7 +65,7 @@ export async function installVisualApi(page:Page,read:()=>MemberModelSettingsOve
   await page.route('**/api/v1/**',async route=>{
     const path=new URL(route.request().url()).pathname;let json:unknown,status=200;
     if(path==='/api/v1/session')json={user:{user_id:visualIds.user,display_name:'視覺測試會員',email:'visual@local.test',profession_membership_ref:'fixture'},csrf_token:'fixture-csrf'};
-    else if(path==='/api/v1/site')json={registration_enabled:false,demo_accounts_enabled:false,public_mode:false};
+    else if(path==='/api/v1/site')json={registration_enabled:false,demo_accounts_enabled:false,public_mode:false,private_ai_enabled:true};
     else if(path==='/api/v1/me/onboarding')json={required:false,completed:true};
     else if(path==='/api/v1/guild-workspace')json={managed_guilds:[],managed_books:[],can_discuss:false};
     else if(path==='/api/v1/me/private-work')json={items:[]};

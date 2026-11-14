@@ -59,6 +59,9 @@ test('TESTER-003 members open the tester map from the community page and the fea
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await navigate(page,'自由工坊社群');
+  const communityMore=page.locator('.community-more');
+  await expect(communityMore).toBeAttached();
+  if(!await communityMore.evaluate(element=>(element as HTMLDetailsElement).open))await communityMore.locator(':scope > summary').click();
   await page.getByRole('region',{name:'社群測試週',exact:true}).getByRole('button',{name:'查看測試員地圖',exact:true}).click();
   await expect(page.getByRole('heading',{level:1,name:'測試員地圖',exact:true})).toBeVisible();
   await expect(page).toHaveURL(/#guilds\/guild_custom_032fd02e754549e9b1e056e2b95b8d50\/tools\/tester-map$/);

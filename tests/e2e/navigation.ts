@@ -262,3 +262,13 @@ export function eventAppPath(path:string){
   url.searchParams.set('app','1');
   return url.pathname+url.search+url.hash;
 }
+
+/** Guild card secondary actions (including 查看成員) are collapsed under 更多. */
+export async function openGuildCardMore(card: Locator) {
+  const settings = card.locator('.guild-membership-settings');
+  await expect(settings).toBeAttached();
+  if (!await settings.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await settings.locator(':scope > summary').click();
+  }
+  await expect(settings).toHaveJSProperty('open', true);
+}
