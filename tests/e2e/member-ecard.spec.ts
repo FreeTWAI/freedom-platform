@@ -15,7 +15,7 @@ const widths=[{width:390,height:844},{width:820,height:900},{width:1280,height:9
 
 async function signup(page:Page,name:string){
   await page.goto('/');
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill(name);
   await page.getByLabel('電子郵件',{exact:true}).fill(`ecard-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-connections-password');

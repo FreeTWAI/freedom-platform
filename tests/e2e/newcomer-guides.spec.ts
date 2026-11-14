@@ -39,7 +39,7 @@ async function registerJoined(page: Page, profile='guide-dragon') {
   // Fresh input for this newly created, isolated synthetic account; never a saved credential.
   const password = `Fixture-A1!-${randomUUID()}`;
   await page.goto('/');
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill(nickname);
   await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill(password);

@@ -4,7 +4,7 @@ import {test,expect,type Page} from './fixtures.js';
 import {navigate} from './navigation.js';
 const password='synthetic-deactivation-password-2026';
 async function register(page:Page){
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
   const form=page.locator('.login-card form');
   const email=`deactivate-${randomUUID()}@example.test`;
   await form.locator('[name=email]').fill(email);

@@ -45,7 +45,7 @@ test('guest village and tester-map aliases and canonical tool addresses show the
 
 test('a guest signs in, completes onboarding and resumes the shared object',async({page})=>{
  const hash=`#shares/${id}?via=abcdefghij`,email=`route-${randomUUID()}@example.test`,password='synthetic-route-password';
- await page.goto('/'+hash);await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+ await page.goto('/'+hash);await page.getByRole('button',{name:'免費加入',exact:true}).click();
  const form=page.locator('.login-card form');await form.getByLabel('電子郵件',{exact:true}).fill(email);await form.getByLabel('密碼',{exact:true}).fill(password);
  await form.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();await expect(page.locator('.welcome-preview')).toBeVisible();
  await page.context().clearCookies();await page.reload();

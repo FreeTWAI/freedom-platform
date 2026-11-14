@@ -34,7 +34,7 @@ test('anonymous visitors can preview a real free resource before creating an acc
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('synthetic entry budget: two required fields and one guild choice reach useful next steps in under 30 seconds',async({page})=>{
-  await page.setViewportSize({width:320,height:720});await page.goto('/');const start=Date.now();await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.setViewportSize({width:320,height:720});await page.goto('/');const start=Date.now();await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await expect(page.locator('.login-card input[required]')).toHaveCount(2);await expect(page.getByLabel('社群顯示名稱',{exact:true})).not.toHaveAttribute('required','');
   const email=`ux-${randomUUID().slice(0,8)}@example.test`;
   await page.getByLabel('電子郵件',{exact:true}).pressSequentially(email,{delay:100});await page.getByLabel('密碼',{exact:true}).pressSequentially('freedom-entry-2026',{delay:100});

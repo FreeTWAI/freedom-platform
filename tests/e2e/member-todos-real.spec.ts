@@ -258,7 +258,7 @@ test('a newly registered member at 320px stays behind the mandatory positioning 
     // Recorded before the account exists, so cleanup finds it even if the registration response is lost.
     const email=`todos-new-${randomUUID()}@example.test`,nickname=`待辦新會員 ${randomUUID().slice(0,8)}`;own.emails.push(email);
     await page.goto('/#todos');
-    await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+    await page.getByRole('button',{name:'免費加入',exact:true}).click();
     await page.getByLabel('社群顯示名稱',{exact:true}).fill(nickname);
     await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill('freedom-workshop-member-2026');
     const registered=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/api/v1/auth/register'));
@@ -293,7 +293,7 @@ test('a quick-entry member sees an optional positioning to-do',async({browser,ba
     const email=`todos-quick-${randomUUID()}@example.test`,nickname=`待辦快速加入 ${randomUUID().slice(0,8)}`;own.emails.push(email);
     const page=await open({width:1280,height:900});
     await page.goto('/');
-    await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+    await page.getByRole('button',{name:'免費加入',exact:true}).click();
     await page.getByLabel('社群顯示名稱',{exact:true}).fill(nickname);
     await page.getByLabel('電子郵件',{exact:true}).fill(email);
     await page.getByLabel('密碼',{exact:true}).fill('freedom-workshop-member-2026');

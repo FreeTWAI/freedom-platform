@@ -3,7 +3,7 @@ import {test,expect,type Page,type Route} from './fixtures.js';
 import {navigate} from './navigation.js';
 
 async function startStepThree(page:Page){
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill('定位恢復測試夥伴');await page.getByLabel('電子郵件',{exact:true}).fill(`recovery-${randomUUID()}@example.test`);await page.getByLabel('密碼',{exact:true}).fill('freedom-recovery-test-2026');
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   await page.locator('.welcome-optional > summary').click();
@@ -82,7 +82,7 @@ test('pending save blocks logout; a late committed answer after actual session e
   let onboardingReads=0,release!:()=>void,started!:()=>void,done!:()=>void;
   const pending=new Promise<void>(resolve=>{release=resolve;}),requested=new Promise<void>(resolve=>{started=resolve;}),settled=new Promise<void>(resolve=>{done=resolve;});
   try {
-    await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+    await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
     await page.getByLabel('社群顯示名稱',{exact:true}).fill('定位切換第二位夥伴');await page.getByLabel('電子郵件',{exact:true}).fill(secondEmail);await page.getByLabel('密碼',{exact:true}).fill(password);
     await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
     await page.locator('.welcome-optional > summary').click();
@@ -102,7 +102,7 @@ test('pending save blocks logout; a late committed answer after actual session e
     await page.locator('.preview-profile-menu > summary').click();
     await page.getByRole('button',{name:'登出',exact:true}).click();
 
-    await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+    await page.getByRole('button',{name:'免費加入',exact:true}).click();
     await page.getByLabel('社群顯示名稱',{exact:true}).fill('定位切換第一位夥伴');await page.getByLabel('電子郵件',{exact:true}).fill(firstEmail);await page.getByLabel('密碼',{exact:true}).fill(password);
     await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
     await page.locator('.quick-guild-option input[type="radio"]').first().check();

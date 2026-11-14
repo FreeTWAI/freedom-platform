@@ -16,7 +16,7 @@ async function scanQr(svg:Locator){
 }
 async function shareUrl(settings:Locator){const link=settings.getByRole('link',{name:'開啟名片',exact:true});await expect(link).toHaveAttribute('href',/\/member-cards\//);return (await link.getAttribute('href'))!;}
 async function signup(page:Page){
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill('Hao');await page.getByLabel('電子郵件',{exact:true}).fill(`editorial-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-editorial-password');await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   await quickJoin(page);await navigate(page,'我的名片');await openAccountSettings(page,'更換頭像','分享名片設定（免登入）','查看目前的會員名片');

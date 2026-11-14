@@ -167,7 +167,7 @@ test('an existing password account can unlink while Google is OFF only after pas
 
 async function registerNewcomer(page:Page){
   const email=`google-passwordless-${randomUUID()}@example.test`;
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
   const form=page.locator('.login-card form');await form.locator('[name=email]').fill(email);await form.locator('[name=password]').fill('synthetic-google-recovery-2026');await form.locator('[name=nickname]').fill('Google recovery member');
   await form.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();await expect(page.locator('.welcome-preview')).toBeVisible();return email;
 }

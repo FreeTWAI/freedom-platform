@@ -234,7 +234,7 @@ test('settings show one open section and at most one primary across pairs, dirty
 
 test('guild join shows unlocked skill-books link to explore, dismisses on next click, and opens #explore/resources',async({page})=>{
  await page.goto('/');
- await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+ await page.getByRole('button',{name:'免費加入',exact:true}).click();
  await page.getByLabel('社群顯示名稱',{exact:true}).fill('技能書連結');
  await page.getByLabel('電子郵件',{exact:true}).fill(`oneplace-join-${randomUUID()}@example.test`);
  await page.getByLabel('密碼',{exact:true}).fill('freedom-oneplace-join-password');

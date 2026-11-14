@@ -33,7 +33,7 @@ async function register(page: Page, nickname: string, shotPrefix?: string) {
   await expect(page.getByRole('button', { name: '登入', exact: true })).toBeVisible();
   await oneTitle(page, 'login');
   if (shotPrefix) await page.screenshot({ path: `${shots}/${shotPrefix}-login.png`, fullPage: true });
-  await page.getByRole('button', { name: '建立帳號', exact: true }).click();
+  await page.getByRole('button', { name: '免費加入', exact: true }).click();
   await oneTitle(page, 'register');
   if (shotPrefix) await page.screenshot({ path: `${shots}/${shotPrefix}-register.png`, fullPage: true });
   await page.getByLabel('社群顯示名稱', { exact: true }).fill(nickname);

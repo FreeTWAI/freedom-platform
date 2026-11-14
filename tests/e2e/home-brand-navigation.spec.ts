@@ -206,7 +206,7 @@ test('login wordmark failure retains its space and accessible name through regis
   await page.goto('/');
   const logo=page.locator('.login-entry-logo');
   for(const action of ['login','register','reload']){
-    if(action==='register')await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+    if(action==='register')await page.getByRole('button',{name:'免費加入',exact:true}).click();
     if(action==='reload')await page.reload();
     await expect(logo).toBeVisible();await expect(logo).toHaveAccessibleName('自由工坊');
     await expect(logo).toHaveJSProperty('naturalWidth',0);

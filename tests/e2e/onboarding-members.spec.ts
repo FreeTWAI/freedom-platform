@@ -6,7 +6,7 @@ import { test, expect, type Page } from './fixtures.js';
 const password='freedom-workshop-member-2026';
 async function register(page:Page, nickname:string){
   const email=`member-${Date.now()}-${Math.random().toString(16).slice(2)}@example.test`;
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill(nickname);
   await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill(password);
   await expect(page.locator('input[type=email]')).toHaveCount(1);

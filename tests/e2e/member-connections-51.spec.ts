@@ -28,7 +28,7 @@ for(const trigger of ['focus','pageshow','visibilitychange'])test(`a withdrawn p
 async function account(page:Page,name:string){
   const email=`connections51-${randomUUID()}@example.test`;
   await page.goto('/');
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill(name);
   await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-connections-password');

@@ -3,7 +3,7 @@ import {test,expect,type Page} from './fixtures.js';
 import {answerGuildQuestions} from './quick-join.js';
 
 async function registration(page:Page){
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
   return page.locator('.login-card form');
 }
 async function createAccount(page:Page){

@@ -9,7 +9,7 @@ const guild = 'guild_commerce_sales';
 async function register(page: Page, nickname: string) {
   const email = `merchant-journey-${randomUUID()}@example.test`;
   await page.goto('/');
-  await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+  await page.getByRole('button', {name: '免費加入', exact: true}).click();
   await page.getByLabel('社群顯示名稱', {exact: true}).fill(nickname);
   await page.getByLabel('電子郵件', {exact: true}).fill(email);
   await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);

@@ -137,7 +137,7 @@ registrationTest('HO-SUI04 fresh UI and API registrations keep the configured co
   expect(foreign[1].community_id).toBe(foreign[0].community_id);
   const uiEmail = `ho-register-ui-${randomUUID()}@example.test`, apiEmail = `ho-register-api-${randomUUID()}@example.test`, nickname = '跨社群註冊測試';
   await page.route(url => !['127.0.0.1', 'localhost'].includes(url.hostname), route => route.abort());
-  await page.goto('/'); await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+  await page.goto('/'); await page.getByRole('button', {name: '免費加入', exact: true}).click();
   await page.getByLabel('社群顯示名稱', {exact: true}).fill(nickname);
   await page.getByLabel('電子郵件', {exact: true}).fill(uiEmail);
   await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);

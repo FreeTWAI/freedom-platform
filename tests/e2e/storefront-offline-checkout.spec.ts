@@ -816,7 +816,7 @@ test('checkout registration returns before guild choice; unavailable stores keep
     const page = await context.newPage(), email = `buyer-registration-${randomUUID()}@example.test`;
     await start(page, store);
     await page.getByRole('link', {name: '登入會員', exact: true}).click();
-    await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+    await page.getByRole('button', {name: '免費加入', exact: true}).click();
     await expect(page.getByText('建立帳號後，會先確認並返回原本的商店頁面；選公會與完整定位可以稍後再做。', {exact: true})).toBeVisible();
     await page.getByLabel('電子郵件', {exact: true}).fill(email);
     await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
@@ -843,7 +843,7 @@ test('checkout registration returns before guild choice; unavailable stores keep
     await expect(page.getByText('登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。', {exact: true})).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/');
     await context.clearCookies(); await page.goto(destination);
-    await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+    await page.getByRole('button', {name: '免費加入', exact: true}).click();
     await page.getByLabel('電子郵件', {exact: true}).fill(`buyer-unpublished-${randomUUID()}@example.test`);
     await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
     await page.getByRole('button', {name: '建立帳號，先逛工坊', exact: true}).click();
