@@ -76,6 +76,9 @@ test('the guild shelf and 社群技能書 hold all 55 books once each; guild sea
   const grantedBefore=await (await page.request.get('/api/v1/me/skill-books')).json();
   await expect(library.getByRole('status')).toHaveText('顯示 29 / 29 個原作資源');
   await expect(community.getByRole('status')).toHaveText('顯示 26 / 26 個社群原作資源');
+  await expect(communityCards).toHaveCount(20);
+  await community.locator('> .actions').getByRole('button',{name:'更多',exact:true}).click();
+  await expect(communityCards).toHaveCount(26);
   const catalog=await (await page.request.get('/api/v1/community')).json() as {skill_books:SkillBook[]};
   const shelved=async(cards:Locator)=>(await cards.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-book-id')!))).sort();
   expect(await shelved(communityCards)).toEqual([...communityBookIds].sort());
@@ -217,14 +220,14 @@ test('all public book pages and Markdown preserve beginner summaries, covers, or
   await page.goto(example.guide_url);
   await expect(page.getByRole('heading',{name:example.title,exact:true})).toBeVisible();
   await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-start');
-  await expect(page.locator('.public-skill-entry').getByRole('link',{name:'查看原作 Repo ↗',exact:true})).toHaveAttribute('href',example.upstream_url);
+  await expect(page.locator('.public-skill-entry').getByRole('link',{name:'前往 GitHub 加星 ↗',exact:true})).toHaveAttribute('href',example.upstream_url);
   const details=page.locator('#skill-usage-notes');
   await expect(details).not.toHaveAttribute('open');
   await details.locator(':scope > summary').click();
   await expect(details).toHaveAttribute('open','');
   await expect(details.locator('.public-skill-purpose')).toHaveText(example.guide!.beginner.purpose);
   await expect(details.locator('.public-skill-source').getByRole('link',{name:example.guide!.reading_url,exact:true})).toHaveAttribute('href',example.guide!.reading_url);
-  await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href',example.upstream_url);
+  await expect(details.locator('.public-skill-source').getByRole('link',{name:`${example.upstream_url} ↗`,exact:true})).toHaveAttribute('href',example.upstream_url);
   await expect(details.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href',`${example.upstream_url}/fork`);
   const exampleCopyUrl=distinctCopyUrl(example.fork_url,example.repository_url)!;
   expect(exampleCopyUrl).toBeTruthy();
@@ -266,7 +269,8 @@ test('the original repository leads member introductions and public skill pages'
   await page.goto('/development/skills/security-scanner');
   await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-start');
   await expect(page.getByRole('link',{name:'前往作者網站 ↗',exact:true})).toHaveAttribute('href',website);
-  await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href',original);
+  await page.locator('#skill-usage-notes > summary').click();
+  await expect(page.locator('.public-skill-source').getByRole('link',{name:`${original} ↗`,exact:true})).toHaveAttribute('href',original);
 });
 
 test('every bookshelf uses compact illustrated rows with full copy, live counts and expandable secondary metrics',async({page,e2eAuthPool})=>{
@@ -610,6 +614,10 @@ for(const width of [1280,390])test(`skill introductions defer unvisited content 
   await page.route('**/api/v1/promotion/links',route=>route.fulfill({json:{path:'/share/synthetic-skill-link',points:{week:0,all:0}}}));
   try {
   const library=await openLibrary(page),card=library.locator('article[data-book-id="supplier-client"]');
+  const community=page.locator('.community-skill-library');
+  await expect(community.locator('article.skill-library-book')).toHaveCount(20);
+  await community.locator('> .actions').getByRole('button',{name:'更多',exact:true}).click();
+  await expect(community.locator('article.skill-library-book')).toHaveCount(26);
   const allShells=page.locator('.community-library .skill-intro-dialog, .community-skill-library .skill-intro-dialog');
   await expect(allShells).toHaveCount(55);
   await expect(allShells.locator(':scope > *')).toHaveCount(0);
@@ -760,6 +768,7 @@ test('guild book with null-full_name original_cache uses live metrics, upstream 
   await expect(dialog.locator('.skill-intro-original-head')).toContainText('★ 654');
   await dialog.locator('.skill-intro-usage-notes > summary').click();
   await expect(dialog.locator('.skill-intro-usage-notes .github-star-control')).toHaveCount(0);
-  await expect(dialog.locator('.skill-intro-usage-notes .github-fork-count')).toHaveText('—');
+  await expect(dialog.locator('.skill-intro-usage-notes .github-fork-count')).toHaveCount(0);
+  await expect(dialog.locator('.skill-intro-usage-notes .github-fork-link')).toHaveAttribute('title','複製專案');
   await dialog.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();
 });

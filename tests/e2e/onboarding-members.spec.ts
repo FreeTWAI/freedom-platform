@@ -1,6 +1,6 @@
 import {openAccountSettings} from './navigation.js';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
-import { navigate, signOut } from './navigation.js';
+import { navigate, openGuildCardMore, signOut } from './navigation.js';
 import { randomUUID } from 'node:crypto';
 import { test, expect, type Page } from './fixtures.js';
 const password='freedom-workshop-member-2026';
@@ -520,6 +520,7 @@ test('a pending guild join keeps the primary card from opening a dialog',async({
     await joinButton.click();
     const primary=page.locator('.guild-card').first();
     await expect(primary.locator('.guild-book-list').getByRole('button').first()).toBeDisabled();
+    await openGuildCardMore(primary);
     await expect(primary.getByRole('button',{name:'查看成員',exact:true})).toBeDisabled();
     releaseJoin();
     const joinedCard=page.getByRole('article',{name:guildName,exact:true});
@@ -629,6 +630,7 @@ test('guilds place renders partial directory items without skill_books before op
   const directoryCard=page.locator('.guild-card').filter({hasText:'測試公會'});
   await expect(directoryCard).toBeVisible();
   await expect(directoryCard).toContainText('技能書整理中');
+  await openGuildCardMore(directoryCard);
   await expect(directoryCard.getByRole('button',{name:'公會技能書庫 · 0 個原作資源',exact:true})).toBeVisible();
   await navigate(page,'我的定位');
   await expect(page.getByRole('article',{name:'測試公會',exact:true}).getByRole('button',{name:'回答',exact:true})).toBeVisible();

@@ -3,6 +3,7 @@ import { test as base, expect, type BrowserContext, type Page } from './fixtures
 import { DEMO_COMMUNITY, DEMO_PASSWORD, DEMO_USERS } from '../../packages/testing/seed.js';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
 import { navigate, signOut } from './navigation.js';
+import { openWorkForm } from './sharing-authoring-fixture.js';
 
 type MemberFixture = {
   id: string;
@@ -59,6 +60,7 @@ test('PUBLIC-WORK-01 owner opt-in, mobile responsiveness, tracked /go credit, ed
   await creator.page.setViewportSize({ width: 390, height: 844 });
   await signIn(creator.page, creator.email);
   await navigate(creator.page, '作品與合作');
+  await openWorkForm(creator.page);
 
   const title = `公開瀏覽作品 ${randomUUID().slice(0, 6)}`;
   const summary = '只有本人明確開啟「開放公開閱讀」的當前版本才會出現在 /works/:id。';

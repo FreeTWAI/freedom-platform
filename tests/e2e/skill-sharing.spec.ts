@@ -1,4 +1,4 @@
-import { navigate } from './navigation.js';
+import { navigate, openSkillCardMore, openSkillFilterDrawer } from './navigation.js';
 import {test,expect,type Page} from './fixtures.js';
 
 const metadata=(book_id:string,extra:Record<string,unknown>={})=>({book_id,published_at:null,official_guild_keys:[],is_new_today:false,week_rank:null,month_rank:null,week_stars:0,month_stars:0,...extra});
@@ -25,13 +25,14 @@ test('one discovery request supplies card and dialog badges; week and month use 
   await social.getByRole('button',{name:'預覽技能書',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Hao 社群貼文技能書',exact:true});await expect(dialog.getByText('成長與行銷公會指定技能',{exact:true})).toBeVisible();await dialog.locator('.skill-intro-usage-notes > summary').click();await expect(dialog.getByRole('button',{name:'加入共同開發',exact:true})).toBeVisible();await expect(dialog.getByRole('link',{name:'交給 Agent ↗',exact:true})).toHaveAttribute('href','/development/skills/social-post/SKILL.md');await expect(dialog.getByRole('link',{name:'查看里程碑與任務 ↗',exact:true})).toHaveAttribute('href','/development/skills/social-post');
   await page.keyboard.press('Escape');expect(reads).toBe(1);
+  await openSkillFilterDrawer(lib);
   await lib.getByRole('button',{name:'工坊週榜',exact:true}).click();await expect(lib.locator('article.skill-library-book')).toHaveCount(2);await expect(lib.locator('article.skill-library-book').first()).toHaveAttribute('data-book-id','video-autopilot');await expect(lib).toContainText('不是 GitHub 總星數');
   await lib.getByRole('button',{name:'工坊月榜',exact:true}).click();await expect(lib.locator('article.skill-library-book').first()).toHaveAttribute('data-book-id','social-post');
   await lib.getByRole('button',{name:'每日新技能',exact:true}).click();await expect(lib.locator('article.skill-library-book')).toHaveCount(1);await expect(lib.locator('article.skill-library-book').first()).toHaveAttribute('data-book-id','event-space');
   await page.setViewportSize({width:320,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(reads).toBe(1);
 });
 async function socialCard(page:Page){const lib=await library(page);await lib.getByLabel('搜尋技能書',{exact:true}).fill('社群貼文');return lib.locator('article[data-book-id="social-post"]');}
-async function openPreview(page:Page){const card=await socialCard(page);await card.getByRole('button',{name:'分享技能',exact:true}).click();const dialog=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});await expect(dialog).toBeVisible();return {card,dialog};}
+async function openPreview(page:Page){const card=await socialCard(page);await openSkillCardMore(card);await card.getByRole('button',{name:'分享技能',exact:true}).click();const dialog=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});await expect(dialog).toBeVisible();return {card,dialog};}
 async function selectIntro(dialog:ReturnType<Page['getByRole']>,index=0){
   const intros=dialog.locator('.share-intros');
   if(!await intros.evaluate(el=>(el as HTMLDetailsElement).open))await intros.locator('> summary').click();
@@ -117,9 +118,9 @@ test('Escape closes only a nested share preview and returns focus to the reading
 });
 test('sharing a second book uses only that book’s introductions and public URL',async({page})=>{
   await stubShare(page,'none');const lib=await library(page),search=lib.getByLabel('搜尋技能書',{exact:true});
-  await search.fill('社群貼文');await lib.locator('article[data-book-id="social-post"]').getByRole('button',{name:'分享技能',exact:true}).click();
+  await search.fill('社群貼文');const firstCard=lib.locator('article[data-book-id="social-post"]');await openSkillCardMore(firstCard);await firstCard.getByRole('button',{name:'分享技能',exact:true}).click();
   const first=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});await selectIntro(first,0);await preview(first);await page.keyboard.press('Escape');
-  await search.fill('影片自動化');const card=lib.locator('article[data-book-id="video-autopilot"]');await card.getByRole('button',{name:'分享技能',exact:true}).click();
+  await search.fill('影片自動化');const card=lib.locator('article[data-book-id="video-autopilot"]');await openSkillCardMore(card);await card.getByRole('button',{name:'分享技能',exact:true}).click();
   const next=page.locator('.skill-share-dialog[open]');await selectIntro(next,0);
   await expect(next.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}\?intro=\d+$/);
   const text=await next.locator('.skill-share-text').innerText(),url=(await next.locator('.skill-share-url').innerText()).trim();
@@ -138,5 +139,5 @@ for(const viewport of [{name:'desktop',width:1280,height:800},{name:'mobile',wid
 test('empty rankings are distinct from an unavailable discovery service and can be retried',async({page})=>{
   let broken=true;await page.route('**/api/v1/skills/discovery',route=>broken?route.fulfill({status:503,json:{detail:'unavailable'}}):route.fulfill({json:{...discovery,books:discovery.books.map(book=>({...book,week_rank:null,month_rank:null})),weekly:[],monthly:[]}}));
   // 全部技能 on the guild shelf lists the 29 guild-designated books; the other 26 are 社群技能書.
-  const lib=await library(page);await lib.getByRole('button',{name:'工坊週榜',exact:true}).click();await expect(lib.getByRole('alert')).toContainText('暫時無法載入');await expect(lib).not.toContainText('目前還沒有上榜');broken=false;await lib.getByRole('button',{name:'重讀徽章與榜單',exact:true}).click();await expect(lib.getByRole('alert')).toHaveCount(0);await expect(lib).toContainText('目前還沒有上榜的技能書');await expect(lib.locator('article.skill-library-book')).toHaveCount(0);await lib.getByRole('button',{name:'全部技能',exact:true}).click();await expect(lib.locator('article.skill-library-book')).toHaveCount(29);
+  const lib=await library(page);await openSkillFilterDrawer(lib);await lib.getByRole('button',{name:'工坊週榜',exact:true}).click();await expect(lib.getByRole('alert')).toContainText('暫時無法載入');await expect(lib).not.toContainText('目前還沒有上榜');broken=false;await lib.getByRole('button',{name:'重讀徽章與榜單',exact:true}).click();await expect(lib.getByRole('alert')).toHaveCount(0);await expect(lib).toContainText('目前還沒有上榜的技能書');await expect(lib.locator('article.skill-library-book')).toHaveCount(0);await lib.getByRole('button',{name:'全部技能',exact:true}).click();await expect(lib.locator('article.skill-library-book')).toHaveCount(20);await lib.locator('> .actions').getByRole('button',{name:'更多',exact:true}).click();await expect(lib.locator('article.skill-library-book')).toHaveCount(29);
 });

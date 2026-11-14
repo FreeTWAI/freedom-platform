@@ -63,7 +63,7 @@ for(const [index,language] of languages.entries()){
       await expect(form.getByRole('button',{name:language.pending,exact:true})).toBeDisabled();
       await expect.poll(()=>attempts).toBe(1);
       const next=languages[(index+1)%languages.length];
-      await page.getByRole('combobox',{name:'Language',exact:true}).selectOption(next.id);
+      await page.getByRole('combobox',{name:'語言',exact:true}).selectOption(next.id);
       await expect(feedback).toHaveText(next.working);
       await expect(form.getByRole('button',{name:next.pending,exact:true})).toBeDisabled();
       await expect(form.locator('[name=email]')).toHaveValue('maker@local.test');
@@ -84,7 +84,7 @@ for(const [index,language] of languages.entries()){
       await expect(feedback).toHaveText(language.reading);await expect.poll(()=>reads).toBe(1);
       const input=page.locator('.login-card form [name=email]');await input.fill('kept-feedback@example.test');
       const next=languages[(index+1)%languages.length];
-      await page.getByRole('combobox',{name:'Language',exact:true}).selectOption(next.id);
+      await page.getByRole('combobox',{name:'語言',exact:true}).selectOption(next.id);
       await expect(feedback).toHaveText(next.reading);await expect(input).toHaveValue('kept-feedback@example.test');
       for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});await contained(page,feedback);}
       expect(reads).toBe(1);release();await expect(feedback).toHaveCount(0);expect(reads).toBe(1);

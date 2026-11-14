@@ -40,7 +40,7 @@ test('five-language iPhone installation guidance fits 320px and preserves accoun
   try{
     const page=await context.newPage();await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('pwa-draft@example.test');await page.getByLabel('密碼',{exact:true}).fill('pwa-password-draft');
     for(const [language,title] of [['zh-Hant','加入主畫面'],['en','Add to home screen'],['ja','ホーム画面に追加'],['ko','홈 화면에 추가'],['es','Añadir a la pantalla de inicio']]){
-      await page.getByRole('combobox',{name:'Language',exact:true}).selectOption(language);
+      await page.getByRole('combobox',{name:'語言',exact:true}).selectOption(language);
       const button=page.locator('.app-install-trigger');await expect(button).toContainText(title);expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       await button.click();const dialog=page.getByRole('dialog',{name:title,exact:true});await expect(dialog).toBeVisible();await expect(dialog.locator('ol')).toContainText('Safari');
       expect(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

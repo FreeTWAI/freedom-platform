@@ -30,6 +30,7 @@ for(const [width,height] of [[390,844],[320,568]])test(`one place navigation at 
  await login(page);await go(page,'#me');
  await expect(page.locator('.personal-space-entry')).toHaveCount(2);
  await expect(page.locator('.personal-space-hero-actions a')).toHaveText(['編輯個人頁']);await primary(page);
+ await page.locator('.personal-space-filters-disclosure > summary').click();
  await page.getByRole('button',{name:'草稿',exact:true}).click();await expect(page.locator('.personal-space-entry')).toHaveCount(1);await expect(page.locator('.personal-space-entry')).toContainText('合成草稿');
  await page.getByRole('button',{name:'已發布',exact:true}).click();await expect(page.locator('.personal-space-entry')).toHaveCount(1);await expect(page.locator('.personal-space-entry')).toContainText('合成已發布');
  await page.locator('.personal-space-more summary').click();await expect(page.locator('.personal-space-more').getByRole('link',{name:'撤下',exact:true})).toBeVisible();

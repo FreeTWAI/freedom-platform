@@ -1,5 +1,5 @@
 import {test,expect,type Page} from './fixtures';
-import {navigate,openHomeGuide,openFeatureSearch,setHomeViewport} from './navigation';
+import {enablePrivateAiViews,navigate,openHomeGuide,openFeatureSearch,setHomeViewport} from './navigation';
 async function login(page:Page){
   await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
@@ -173,7 +173,7 @@ test('personal space is the only account content entry and legacy management ret
 });
 
 test('creation navigation keeps three task choices and all child routes discoverable on a phone',async({page})=>{
-  await page.setViewportSize({width:390,height:844});await login(page);
+  await page.setViewportSize({width:390,height:844});await enablePrivateAiViews(page);await login(page);
   await navigate(page,'作品與合作');
   await expect(page.getByRole('heading',{name:'探索',level:1,exact:true})).toBeVisible();
   const links=page.getByRole('navigation',{name:'作品與合作',exact:true});

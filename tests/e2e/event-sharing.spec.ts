@@ -15,6 +15,12 @@ test('paste event link, confirm, publish, register signed out and credit its sha
  await box.getByLabel('貼上連結',{exact:true}).fill('https://www.accupass.com/event/synthetic');
  await expect(box.getByLabel('名稱',{exact:true})).toHaveValue('合成讀書會');await expect(box.getByLabel('時間',{exact:true})).not.toHaveValue('');
  await box.getByLabel('名稱',{exact:true}).fill('合成讀書會確認版');await box.getByRole('button',{name:'發布',exact:true}).click();
+ await expect(page).toHaveURL(/#home$/);
+ const item=page.locator('.home-timeline > article').first();
+ await expect(item).toBeFocused();
+ const shareLink=item.getByRole('link',{name:'看分享頁',exact:true});
+ await expect(shareLink).toHaveAttribute('href',/\/events\/[0-9a-f-]+$/);
+ await shareLink.click();
  await expect(page).toHaveURL(/\/events\/[0-9a-f-]+$/);const eventUrl=page.url(),id=new URL(eventUrl).pathname.split('/').pop()!;
  await expect(page.getByRole('heading',{name:'合成讀書會確認版',exact:true})).toBeVisible();
  await expect(page.getByText('主辦：合成主辦（未核實）',{exact:true})).toBeVisible();

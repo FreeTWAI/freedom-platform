@@ -1,6 +1,6 @@
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
-import {navigate,openPageTools,expandHomeSections} from './navigation.js';
+import {navigate,openPageTools,expandHomeSections,openSkillCardMore} from './navigation.js';
 
 type CapabilityWindow=Window&{localCapabilities:{kind:'copy'|'share';value:string|ShareData;active:boolean;resolve:()=>void;reject:(error:Error)=>void}[]};
 const languages=[['zh-Hant','繁體中文','複製中…'],['en','English','Copying…'],['ja','日本語','コピー中…'],['ko','한국어','복사 중…'],['es','Español','Copiando…']] as const;
@@ -67,7 +67,7 @@ async function promotion(page:Page){
 async function skill(page:Page){
   await page.route('**/api/v1/skills/social-post/share-content',route=>route.fulfill({json:{introductions:['一起學會整理真實的社群貼文。','先寫好，再親自分享給朋友。'],illustration_url:'',illustration_alt:''}}));
   await navigate(page,'技能書架');await page.getByRole('button',{name:'未解鎖',exact:true}).click();const library=page.locator('.community-library');
-  await library.getByLabel('搜尋技能書',{exact:true}).fill('社群貼文');await library.locator('article[data-book-id="social-post"]').getByRole('button',{name:'分享技能',exact:true}).click();
+  await library.getByLabel('搜尋技能書',{exact:true}).fill('社群貼文');const card=library.locator('article[data-book-id="social-post"]');await openSkillCardMore(card);await card.getByRole('button',{name:'分享技能',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'分享「Hao 社群貼文技能書」',exact:true});
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   await dialog.locator('.share-intros > summary').click();
@@ -141,7 +141,7 @@ for(const native of [false,true])test(`skill share ${native?'native':'copy'} wai
   await dialog.getByRole('button',{name:native?'分享':'複製連結',exact:true}).click();await capture(page,dialog,`skill-${native?'share':'copy'}-pending`);
   const pending=dialog.getByRole('button',{name:native?'分享中…':'複製中…',exact:true});await expect(pending).toBeDisabled();await expect(dialog.getByRole('radio').first()).toBeDisabled();
   await pending.dispatchEvent('click');expect(await calls(page)).toHaveLength(1);await page.keyboard.press('Escape');await expect(dialog).toBeHidden();
-  await page.locator('article[data-book-id="social-post"]').getByRole('button',{name:'分享技能',exact:true}).click();dialog=page.getByRole('dialog',{name:'分享「Hao 社群貼文技能書」',exact:true});await expect(dialog).toBeVisible();
+  const card=page.locator('article[data-book-id="social-post"]');await openSkillCardMore(card);await card.getByRole('button',{name:'分享技能',exact:true}).click();dialog=page.getByRole('dialog',{name:'分享「Hao 社群貼文技能書」',exact:true});await expect(dialog).toBeVisible();
   await finish(page,0,native?'cancel':undefined);await expect(dialog.getByRole('button',{name:native?'分享':'複製連結',exact:true})).toBeEnabled();await expect(dialog.getByRole('status')).toHaveCount(0);
   expect(await calls(page)).toHaveLength(1);
 });

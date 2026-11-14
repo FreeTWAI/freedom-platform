@@ -127,9 +127,12 @@ for (const [label, viewport] of viewports) {
 test('account contacts align each field with its choices and state the privacy rules once', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await register(page, '名片審查'); await onboard(page);
-  await navigate(page, '我的名片');await openAccountSettings(page,'誰能看到我','更多個人資料（選填）','查看目前的會員名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'更多個人資料（選填）','查看目前的會員名片');
   await expect(page.getByRole('combobox', { name: '我是（選填）', exact: true }).locator('option')).toHaveText(['不顯示', '男', '女', '外星人', 'AI']);
   await expect(page.getByLabel('社群顯示名稱', { exact: true })).toBeVisible();
+  await expect(page.locator('.account-panel .member-card')).toContainText('尚未新增社群連結。');
+  await expect(page.getByRole('button', { name: '前往技能書架', exact: true })).toHaveCount(0);
+  await openAccountSettings(page,'誰能看到我');
   await expect(page.getByText(/「平台公開」是所有已登入的工坊會員/)).toHaveCount(1);
   await expect(page.getByText(/社群帳號由本人填寫，尚未驗證身分/)).toHaveCount(1);
   for (const name of ['聯絡 E-mail', 'Discord 帳號', 'GitHub 帳號', 'LINE ID']) {
@@ -147,8 +150,6 @@ test('account contacts align each field with its choices and state the privacy r
   await line.getByRole('checkbox', { name: '平台公開', exact: true }).check();
   await expect(line.getByRole('checkbox', { name: '平台好友', exact: true })).toBeDisabled();
   await expect(line.getByText('平台公開已包含好友、小隊與公會夥伴。')).toBeVisible();
-  await expect(page.locator('.account-panel .member-card')).toContainText('尚未新增社群連結。');
-  await expect(page.getByRole('button', { name: '前往技能書架', exact: true })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await pageFits(page, 'phone account');
   await page.screenshot({ path: `${shots}/account-privacy-phone.png`, fullPage: true });
