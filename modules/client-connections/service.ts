@@ -21,7 +21,10 @@ export async function startClientPairing(pool:Pool,raw:unknown,platformOrigin:st
  const userCode=randomBytes(10).toString('hex').toUpperCase().match(/.{1,5}/g)!.join('-');
  const origin=new URL(platformOrigin);requireCondition(origin.protocol==='https:'||origin.hostname==='127.0.0.1'||origin.hostname==='localhost',500,'platform_origin_invalid','平台連線網址尚未設定。');
  await pool.query('INSERT INTO client_pairing_requests(pairing_id,device_secret_hash,user_code_hash,kind,client_name) VALUES($1,$2,$3,$4,$5)',[randomUUID(),tokenHash(deviceSecret),tokenHash(normalizeCode(userCode)),body.kind,body.client_name]);
- return {device_secret:deviceSecret,user_code:userCode,verification_uri:origin.origin+'/#automation/connections',expires_in:300,interval:5,scope:body.kind+':read'};
+ // Pinned storefront and supplier clients accept only /#account; it opens 我的 → 設定, whose
+ // 「連結 GitHub 與其他工具」 leads to 工具連線. The library here also accepts the new address,
+ // so the answer can move once every consumer has re-vendored it.
+ return {device_secret:deviceSecret,user_code:userCode,verification_uri:origin.origin+'/#account',expires_in:300,interval:5,scope:body.kind+':read'};
 }
 export async function pollClientPairing(pool:Pool,raw:unknown,network:string){
  await authRateLimit(pool,'client-pairing-poll-network',network,120,60);
