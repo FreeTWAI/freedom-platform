@@ -47,6 +47,7 @@ test('legacy credit and private-work links retain queries and the selected objec
   if(path.endsWith('/results'))return route.fulfill({json:{items:[]}});
   return route.fulfill({json:works.find(w=>path.endsWith('/'+w.work_item_id))});
  });
+ await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),private_ai_enabled:true}});});
  await page.route('**/api/v1/me/model-step-overview',route=>route.fulfill({json:{persistenceAvailable:true,configuration:'unavailable',runs:[],models:[],connections:[],grants:[],approvals:[],steps:[],allowedSelections:[]}}));
  await page.goto('/');
  await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');

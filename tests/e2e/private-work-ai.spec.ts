@@ -62,13 +62,14 @@ test.describe('Social Post uses the existing isolated member model pipeline',()=
     expect(saved).toContain(JSON.stringify({draft}));
   });
 });
-async function login(page: Page) {
+async function login(page: Page, openPrivateWork = true) {
   await page.goto('/');
   await page.getByLabel('電子郵件', { exact: true }).fill('maker@local.test');
   await page.getByLabel('密碼', { exact: true }).fill('freedom-local-demo');
   await page.getByRole('button', { name: '登入', exact: true }).click();
   await expect(page.locator('.shell')).toBeVisible();
-  await navigate(page, '私人 AI 工作室');
+  if (openPrivateWork) await navigate(page, '私人 AI 工作室');
+  else await page.getByRole('navigation', { name: '主要工作區' }).getByRole('button', { name: '自動化', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: '自動化' })).toBeVisible();
   const tools = page.getByRole('group', { name: '私人 AI 工作室頁面工具', exact: true });
   await openPageTools(page);
@@ -108,11 +109,25 @@ async function readyStep(page: Page, title: string) {
   await expect(page.getByRole('button', { name: '執行一次推論', exact: true })).toBeEnabled();
 }
 
-test('the unconfigured member page reports unavailable service without model login or a fake ready state', async ({ page }) => {
+test('the unconfigured member page hides unavailable automation tabs and routes direct addresses to automation home', async ({ page }) => {
   test.skip(fixtureEnabled, 'This checks the default unconfigured product composition.');
-  await login(page);
-  await expect(page.getByText('模型執行服務目前無法使用。尚未確認供應商登入、模型可用性或費用。', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '執行一次推論', exact: true })).toHaveCount(0);
+  const unavailableRequests: string[] = [];
+  page.on('request', request => {
+    if (/^\/api\/v1\/me\/(?:private-work|model-step-overview|agent-connections|model-settings)(?:\/|$)/.test(new URL(request.url()).pathname)) {
+      unavailableRequests.push(request.url());
+    }
+  });
+  await login(page, false);
+  await expect(page.getByLabel('自動化檢視', { exact: true }).locator('option')).toHaveText(['我的 Agent', '工具連線']);
+  await expect(page.getByRole('heading', { level: 2, name: '我的 Agent', exact: true })).toBeVisible();
+  for (const hash of ['#automation/work', '#automation/devices', '#automation/models', '#private-ai']) {
+    await page.evaluate(nextHash => { window.location.hash = nextHash; }, hash);
+    await expect(page.getByRole('heading', { level: 2, name: '我的 Agent', exact: true })).toBeVisible();
+    await expect(page.getByLabel('自動化檢視', { exact: true })).toHaveValue('#automation/agent');
+    await expect(page.getByText('模型執行服務目前無法使用。尚未確認供應商登入、模型可用性或費用。', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '執行一次推論', exact: true })).toHaveCount(0);
+  }
+  expect(unavailableRequests).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 

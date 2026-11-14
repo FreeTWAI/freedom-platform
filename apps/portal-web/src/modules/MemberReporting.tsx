@@ -121,7 +121,7 @@ export function AdminReports({client,initialOpen=false}:{client:PortalClient;ini
     if(held.current.size)return;
     const ticket=++sequence.current;setLoading(true);setError('');
     const query=new URLSearchParams();if(next)query.set('cursor',next);if(state)query.set('state',state);
-    try{const value=await client.get<{items:AdminReportCase[];next_cursor:string|null}>('/admin/reports'+(query.size?'?'+query.toString():''),{suppressConsole:true});if(ticket===sequence.current&&generation===client.sessionGeneration){setItems(previous=>next?[...(previous??[]),...value.items.filter(item=>!previous?.some(old=>old.case_id===item.case_id))]:value.items);setCursor(value.next_cursor);}}
+    try{const value=await client.get<{items:AdminReportCase[];next_cursor:string|null}>('/admin/reports'+(query.size?'?'+query.toString():''),{suppressConsole:true});if(ticket===sequence.current&&generation===client.sessionGeneration){setItems(previous=>next?[...(previous??[]),...value.items.filter(item=>!previous?.some(old=>old.case_id===item.case_id))]:value.items);setCursor(value.next_cursor);if(!next&&value.items.length>0)setOpen(true);}}
     catch(cause){if(ticket===sequence.current&&generation===client.sessionGeneration){if(cause instanceof ApiError&&!cause.network&&[401,403,404].includes(cause.status)){setItems(null);setOpen(false);setCursor(null);}setError(cause instanceof Error?cause.message:'案件暫時無法讀取。');}}
     finally{if(ticket===sequence.current&&generation===client.sessionGeneration)setLoading(false);}
   }

@@ -29,7 +29,7 @@ function periodNote(period: Period, since: string | null): string {
 }
 const WORKSHOP_TEXT = '自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。';
 
-export function PromotionBoards({client,resultsOnly=false}: {client: PortalClient;resultsOnly?:boolean}) {
+export function PromotionBoards({client,resultsOnly=false,boardsOnly=false}: {client: PortalClient;resultsOnly?:boolean;boardsOnly?:boolean}) {
   const [period, setPeriod] = useState<Period>('week');
   const [boards, setBoards] = useState<Board[] | null>(null);
   const [range, setRange] = useState<{period: Period; since: string | null}>({period: 'week', since: null});
@@ -47,12 +47,12 @@ export function PromotionBoards({client,resultsOnly=false}: {client: PortalClien
     setError(''); setLoading(true); setBoards(null); setMine([]); setCopyNotice(null);
     void Promise.all([
       client.get<Boards>(`/promotion/leaderboards?period=${period}`),
-      client.get<Mine>(`/promotion/links/mine?period=${period}`),
+      boardsOnly ? Promise.resolve<Mine>({period, items: []}) : client.get<Mine>(`/promotion/links/mine?period=${period}`),
     ]).then(([board, links]) => { if (live) { setBoards(board.boards); setRange({period: board.period, since: board.since}); setMine(links.items); } })
       .catch((cause: unknown) => { if (live) setError(cause instanceof Error ? cause.message : '分享紀錄暫時無法載入。'); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [client, period, attempt]);
+  }, [client, period, attempt, boardsOnly]);
   const shown = expanded ? mine : mine.slice(0, 10);
   async function copy(path: string) {
     const url = `${window.location.origin}${path}`;
@@ -62,7 +62,7 @@ export function PromotionBoards({client,resultsOnly=false}: {client: PortalClien
     }
   }
   return <section className="promotion-page stack" aria-label="推廣排行榜">
-    {resultsOnly?<h2>分享成效</h2>:<section className="card promotion-start" aria-label="選擇分享內容">
+    {resultsOnly||boardsOnly?<h2>{boardsOnly?'推廣排行榜':'分享成效'}</h2>:<section className="card promotion-start" aria-label="選擇分享內容">
       <h2>把用得上的內容分享給需要的人</h2>
       <div className="promotion-destinations">
         <a className="btn btn-ghost" href="#skills">找一本技能書</a>
@@ -85,14 +85,14 @@ export function PromotionBoards({client,resultsOnly=false}: {client: PortalClien
     {notice && <p className="banner banner-info" role="status">{notice}</p>}
     {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={() => setAttempt(value => value + 1)}>重新載入分享紀錄</button></div>}
     {loading && <p role="status">正在載入分享紀錄…</p>}
-    <section className="card promotion-mine" aria-label="我的推廣連結">
+    {!boardsOnly && <section className="card promotion-mine" aria-label="我的推廣連結">
       <h2>我的推廣連結</h2>
       <p className="promotion-howto">右側數字是{PERIODS.find(item => item.id === range.period)!.label}的點擊分數。</p>
       {loading ? <p className="promotion-empty">正在讀取你的連結…</p> : error ? <p className="promotion-empty">尚未取得連結紀錄，請重新載入。</p> : shown.length === 0 ? <p className="promotion-empty">還沒有建立分享連結。</p> : <ul>
         {shown.map(item => <li key={item.code} className={item.available ? undefined : 'is-unavailable'}><span className="promotion-kind">{COPY[item.kind].label}</span><span className="promotion-link-title">{item.available ? item.title : '已無法開啟'}</span>{item.available && <button type="button" className="btn btn-ghost" disabled={copyAction.pending !== null} aria-busy={copyAction.pending === item.path} onClick={() => void copy(item.path)}>複製</button>}<strong>{item.period_points}</strong></li>)}
       </ul>}
       {mine.length > 10 && <button type="button" className="btn btn-ghost" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '收合' : '顯示全部'}</button>}
-    </section>
+    </section>}
     <details className="promotion-rankings">
       <summary>查看推廣排行榜</summary>
       <p className="promotion-howto">感謝每一次出於需要的分享。點擊不代表閱讀完成、採用或成交，也不衡量一個人的貢獻。</p>
