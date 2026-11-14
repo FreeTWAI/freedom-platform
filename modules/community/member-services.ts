@@ -260,7 +260,7 @@ export async function readMemberCover(pool:Pool,actor:Actor,id:string,store?:Obj
  return (await readDomainMedia(()=>readWithMemberSession(pool,actor,q=>coverSnapshot(q,actor.community_id,id,actor)),{purpose:'member.service-cover',targetId:id,variant:'cover'},store)).bytes;
 }
 
-export async function resolvePublicCommunity(pool: Pool, configured?: string) {
+export async function resolvePublicCommunity(pool: Pool | PoolClient, configured?: string) {
   if (configured && z.uuid().safeParse(configured).success) return configured;
   const rows = await pool.query('SELECT community_id::text AS id FROM communities ORDER BY community_id LIMIT 2');
   return rows.rowCount === 1 ? rows.rows[0].id as string : null;

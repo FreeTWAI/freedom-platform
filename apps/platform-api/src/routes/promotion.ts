@@ -12,6 +12,7 @@ import { authRateLimit } from '../../../../modules/identity-membership/members.j
 import { authenticate } from '../../../../modules/identity-membership/service.js';
 import { previewLink } from '../../../../modules/community/link-preview.js';
 import { createPromotionLink, creditPromotionClick, listMyPromotionLinks, promotionGo, promotionUnavailableHtml, promotionLeaderboards } from '../../../../modules/community/promotion.js';
+import { myShareResults } from '../../../../modules/shares/results.js';
 import { SocialPostExists, activeSocialPostId, createSocialPost, deleteSocialPost, hideSocialPost, listSocialPosts, publicSocialThumbnail, readSocialThumbnail, saveSocialThumbnail, socialPostDraft } from '../../../../modules/community/social-posts.js';
 import { moduleCommand, type PlatformEnv } from '../module-context.js';
 import {createNativeSocialPost, setSocialLike, listSocialComments, createSocialComment, removeSocialComment, editSocialPost, editSocialComment} from '../../../../modules/community/social-posts.js';
@@ -66,7 +67,7 @@ export function registerPublicPromotion(app: Hono<PlatformEnv>, pool: Pool, runt
   app.get('/go/:code', async c => {
     c.header('X-Robots-Tag', 'noindex, nofollow');
     c.header('Cache-Control', 'no-store');
-    const html = await promotionGo(pool, c.req.param('code'), c.req.query('intro'), runtime.publicOrigin, clock(runtime));
+    const html = await promotionGo(pool, c.req.param('code'), c.req.query('intro'), runtime.publicOrigin, clock(runtime), runtime.registrationCommunityId());
     if (!html) return c.html(promotionUnavailableHtml(), 404);
     return c.html(html);
   });
@@ -74,7 +75,7 @@ export function registerPublicPromotion(app: Hono<PlatformEnv>, pool: Pool, runt
     await authRateLimit(pool, 'promotion-click-network', (runtime.rateLimitNetwork??runtime.sourceNetwork)(c), 300, 3600);
     const body = z.object({ code: z.string().max(80) }).strict().parse(await c.req.json());
     const sessionUserId = await optionalUser(pool, readSessionCookie(c.req.header('Cookie'),origin));
-    await creditPromotionClick(pool, { code: body.code, userAgent: c.req.header('User-Agent') ?? '', network: runtime.sourceNetwork(c), sessionUserId, now: clock(runtime) });
+    await creditPromotionClick(pool, { code: body.code, userAgent: c.req.header('User-Agent') ?? '', network: runtime.sourceNetwork(c), sessionUserId, now: clock(runtime), publicCommunity: runtime.registrationCommunityId() });
     return c.json({ ok: true });
   });
   app.get('/api/v1/public/social-posts/:id/thumbnail', async c => {
@@ -87,10 +88,14 @@ export function registerPublicPromotion(app: Hono<PlatformEnv>, pool: Pool, runt
 }
 
 export function registerMemberPromotion(app: Hono<PlatformEnv>, pool: Pool, runtime: PlatformRuntime) {
-  app.post('/api/v1/promotion/links', async c => c.json(await createPromotionLink(pool, c.get('actor'), await c.req.json(), clock(runtime))));
+  app.post('/api/v1/promotion/links', async c => c.json(await createPromotionLink(pool, c.get('actor'), await c.req.json(), clock(runtime), runtime.registrationCommunityId())));
   app.get('/api/v1/promotion/links/mine', async c => {
     const actor = c.get('actor');
-    return c.json(await readWithMemberSession(pool, actor, q => listMyPromotionLinks(q, actor, c.req.query('period'), clock(runtime))));
+    return c.json(await readWithMemberSession(pool, actor, q => listMyPromotionLinks(q, actor, c.req.query('period'), clock(runtime), runtime.registrationCommunityId())));
+  });
+  app.get('/api/v1/me/share-results', async c => {
+    const actor = c.get('actor');
+    return c.json(await readWithMemberSession(pool, actor, q => myShareResults(q, actor, c.req.query(), runtime.registrationCommunityId())));
   });
   app.get('/api/v1/promotion/leaderboards', async c => {
     const actor = c.get('actor');

@@ -3,7 +3,7 @@ import {accessAwareFetch} from '../access-fetch'
 import {ApiError, type PortalClient} from '../api'
 import {SERVICE_CATEGORIES, SERVICE_CATEGORY_LABELS, SERVICE_COVER_INPUT_BYTES, SERVICE_LIMIT, SERVICE_MODE_LABELS, SERVICE_MODES, validateMemberService, type ServiceCategory, type ServiceMode} from '../../../../packages/shared/member-service'
 import {MemberAvatar} from './MemberAvatar'
-import {PromotionShare} from './PromotionShare'
+import {promotionLink, ShareButton} from '../share/ShareButton'
 import './MemberServices.css'
 
 type Contact = {label: string; url: string}
@@ -279,7 +279,7 @@ export function MemberServices({client}: {client: PortalClient}) {
     }
     return <div className="service-actions">
       {!paused && <a className="btn btn-ghost" href={service.public_path} target="_blank" rel="noopener noreferrer">服務頁 ↗</a>}
-      {!paused && <PromotionShare client={client} kind="member_service" target={service.service_id} title={service.title} text={`${service.title}｜${service.owner.display_name}：${service.summary}`} label="分享"/>}
+      {!paused && <ShareButton title={service.title} fallbackUrl={`/services/${service.service_id}`} makeLink={promotionLink(client, 'member_service', service.service_id)} text={`${service.title}｜${service.owner.display_name}：${service.summary}`} label="分享"/>}
       {service.mine && <button type="button" className="btn btn-ghost" disabled={saving || pending !== null} onClick={() => openEdit(service)}>編輯</button>}
       {service.mine && !paused && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(service, 'pause')}>暫停</button>}
       {service.mine && paused && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(service, 'resume')}>恢復</button>}

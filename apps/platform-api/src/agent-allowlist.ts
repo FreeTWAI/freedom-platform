@@ -42,6 +42,7 @@ export const agentOperations: readonly AgentOperation[] = [
   {id:'shares.restore',method:'POST',route:'/admin/api/shares/:id/restore',scope:'share',title:'恢復分享（限管理員）',screen:'shares',granted:false},
   {id:'shares.confirm',method:'POST',route:'/admin/api/shares/:id/confirm',scope:'share',title:'確認檢舉（限管理員）',screen:'shares',granted:false},
   {id:'credit.read',method:'GET',route:'/api/v1/me/credit',scope:'read',title:'我的貢獻',screen:'credit'},
+  {id:'credit.results',method:'GET',route:'/api/v1/me/share-results',scope:'read',title:'我的分享成果',screen:'credit'},
 ];
 // Report, claim and star are person-only. No react routes are granted in pass 1.
 export function agentOperation(method:string,registeredPattern:string) {

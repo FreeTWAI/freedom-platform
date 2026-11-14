@@ -1,59 +1,274 @@
-import {test} from 'node:test';
+import {test, type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {runInNewContext} from 'node:vm';
 import {webcrypto} from 'node:crypto';
+import {createRequire} from 'node:module';
 import {transformSync} from 'esbuild';
+import React from 'react';
 import {ApiError} from '../../apps/portal-web/src/api';
-const source=readFileSync(new URL('../../apps/portal-web/src/modules/SocialPostShare.tsx',import.meta.url),'utf8');
-const actionSource=readFileSync(new URL('../../apps/portal-web/src/useLocalAction.ts',import.meta.url),'utf8');
-type Node={type:string;props:any};
-function all(tree:any):Node[]{return !tree||typeof tree!=='object'?[]:[tree,...[tree.props?.children].flat(Infinity).flatMap(all)];}
-function harness(mine=true){
-  const hooks:any[]=[],effects:(()=>void)[]=[],reads:any[]=[],writes:any[]=[],copies:string[]=[],shares:any[]=[];let index=0;
-  const client={sessionGeneration:1,get:(path:string)=>new Promise((resolve,reject)=>reads.push({path,resolve,reject})),post:(path:string,body:unknown,options:unknown)=>new Promise((resolve,reject)=>writes.push({path,body,options,resolve,reject}))};
-  const post={post_id:'post-a',mine,kind:'note',revision:1,note:'完整私人正文',author:{display_name:'作者'}};const props:any={client,post};
-  const effect=(fn:()=>unknown,deps:unknown[])=>{const i=index++;if(!hooks[i]||deps.some((v,n)=>v!==hooks[i].deps[n])){hooks[i]?.cleanup?.();hooks[i]={deps};effects.push(()=>{hooks[i].cleanup=fn();});}};
-  const react={useId:()=> 'share',useRef:(value:unknown)=>{const i=index++;return hooks[i]??(hooks[i]={current:value});},useCallback:(fn:any)=>fn,useLayoutEffect:effect,useEffect:effect,useState:(value:any)=>{const i=index++;if(!(i in hooks))hooks[i]=value;return [hooks[i],(v:any)=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];}};
-  const navigator={share:async(data:any)=>{shares.push(data);throw Object.assign(new Error('cancel'),{name:'AbortError'});},clipboard:{writeText:async(url:string)=>{copies.push(url);}}};
-  const elements=new Map<any,any>();
-  const jsx=(type:string,p:any)=>{if(p?.ref){if(!elements.has(p.ref))elements.set(p.ref,{open:false,focused:false,selected:false,showModal(){this.open=true;},close(){this.open=false;},focus(){this.focused=true;},select(){this.selected=true;}});p.ref.current=elements.get(p.ref);}return {type,props:p};};
-  const actionModule={exports:{} as any};runInNewContext(transformSync(actionSource,{loader:'ts',format:'cjs'}).code,{module:actionModule,exports:actionModule.exports,require:()=>react});
-  const module={exports:{} as any};runInNewContext(transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,crypto:webcrypto,URL,AbortController,window:{location:{origin:'https://workshop.example.test'}},navigator,require:(name:string)=>{if(name==='react')return react;if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};if(name==='../api')return {ApiError};if(name==='../useLocalAction')return actionModule.exports;if(name==='../portal-session')return {describeError:(e:any)=>({message:e.message})};if(name==='./SocialTools')return {SocialIcon:'icon'};throw Error(name);}});
-  const render=()=>{index=0;const tree=module.exports.SocialPostShare(props);while(effects.length)effects.shift()!();return tree;};const view=()=>{render();return render();};
-  const node=(predicate:(n:Node)=>boolean)=>all(view()).find(predicate)!;
-  const button=(label:string)=>node(n=>n.type==='button'&&(n.props.children===label||n.props['aria-label']===label));
-  const click=(label:string)=>{const n=button(label);assert.ok(n,label);assert.ok(!n.props.disabled,label+' enabled');return n.props.onClick();};
-  const state={enabled:false,available:false,post_revision:1,media_version:'1',version:'1',public_path:null,image_url:null};
-  const settle=()=>new Promise<void>(resolve=>setImmediate(resolve));
-  const open=async()=>{click('分享貼文連結');view();reads.at(-1).resolve(mine?state:{});await settle();view();};
-  return {client,props,reads,writes,copies,shares,navigator,state,view,node,button,click,open,settle};
+
+class HostNode {
+  [key: string]: any;
+  parentNode: HostNode | null = null;
+  childNodes: HostNode[] = [];
+  attributes: Record<string, string> = {};
+  style = {setProperty() {}, removeProperty() {}};
+  listeners: Record<string, Function[]> = {};
+  namespaceURI = 'http://www.w3.org/1999/xhtml';
+  open = false;
+  focused = false;
+  selected = false;
+  constructor(public nodeType: number, public nodeName: string, public ownerDocument: any) {
+    if (nodeType === 1) this.tagName = nodeName;
+  }
+  appendChild(node: HostNode) {
+    node.parentNode?.removeChild(node); this.childNodes.push(node); node.parentNode = this; return node;
+  }
+  removeChild(node: HostNode) {
+    const index = this.childNodes.indexOf(node); assert.notEqual(index, -1);
+    this.childNodes.splice(index, 1); node.parentNode = null; return node;
+  }
+  insertBefore(node: HostNode, before: HostNode) {
+    node.parentNode?.removeChild(node); const index = this.childNodes.indexOf(before); assert.notEqual(index, -1);
+    this.childNodes.splice(index, 0, node); node.parentNode = this; return node;
+  }
+  setAttribute(key: string, value: unknown) {this.attributes[key] = String(value); if (key === 'open') this.open = true;}
+  removeAttribute(key: string) {delete this.attributes[key]; if (key === 'open') this.open = false;}
+  getAttribute(key: string) {return this.attributes[key] ?? null;}
+  setAttributeNS(_namespace: string, key: string, value: unknown) {this.setAttribute(key, value);}
+  addEventListener(type: string, fn: Function) {(this.listeners[type] ??= []).push(fn);}
+  removeEventListener(type: string, fn: Function) {this.listeners[type] = (this.listeners[type] ?? []).filter(item => item !== fn);}
+  get firstChild(): HostNode | null {return this.childNodes[0] ?? null;}
+  get lastChild(): HostNode | null {return this.childNodes.at(-1) ?? null;}
+  get nextSibling(): HostNode | null {return this.parentNode?.childNodes[this.parentNode.childNodes.indexOf(this) + 1] ?? null;}
+  get textContent(): string {return this.nodeType === 3 ? this.nodeValue : this.childNodes.map(node => node.textContent).join('');}
+  set textContent(value: string) {this.childNodes.forEach(node => {node.parentNode = null;}); this.childNodes = []; if (value) this.appendChild(this.ownerDocument.createTextNode(String(value)));}
+  get parentElement(): HostNode | null {return this.parentNode?.nodeType === 1 ? this.parentNode : null;}
+  contains(node: HostNode): boolean {return node === this || this.childNodes.some(child => child.contains(node));}
 }
-test('restricted link is directly shareable/copyable; preview and raw URL are folded and neither action publishes',async()=>{
-  const h=harness();await h.open();const nodes=all(h.view());
-  assert.equal(h.node(n=>n.props.className==='social-sharing-consent').props.open,undefined);
-  assert.ok(nodes.indexOf(h.button('複製貼文連結'))<nodes.findIndex(n=>n.props.className==='social-sharing-consent'));
-  await h.click('複製貼文連結');await h.settle();assert.match(h.copies[0],/\?social-post=post-a#social$/);
-  await h.click('系統分享');await h.settle();assert.equal(h.shares.length,1);assert.equal(h.writes.length,0);
-  assert.equal(all(h.view()).some(n=>n.props.children==='系統分享暫時無法使用，可以複製貼文連結。'),false);
+class HostDetailsElement extends HostNode {}
+class HostDocument extends HostNode {
+  constructor() {
+    super(9, '#document', null); this.ownerDocument = this;
+    this.documentElement = new HostNode(1, 'HTML', this); this.body = new HostNode(1, 'BODY', this);
+    this.appendChild(this.documentElement); this.documentElement.appendChild(this.body); this.activeElement = this.body;
+  }
+  createElement(name: string) {
+    return name.toUpperCase() === 'DETAILS'
+      ? new HostDetailsElement(1, 'DETAILS', this)
+      : new HostNode(1, name.toUpperCase(), this);
+  }
+  createElementNS(namespace: string, name: string) {const node = this.createElement(name); node.namespaceURI = namespace; return node;}
+  createTextNode(value: string) {const node = new HostNode(3, '#text', this); node.nodeValue = value; return node;}
+}
+
+const document = new HostDocument();
+const navigatorState: {share: (data: any) => Promise<void>; clipboard: {writeText: (url: string) => Promise<void>}} = {
+  share: async () => {},
+  clipboard: {writeText: async () => {}},
+};
+const windowObj = {
+  location: {origin: 'https://workshop.example.test'},
+  open() {throw Error('No external navigation permitted');},
+  document, HTMLElement: HostNode, HTMLDetailsElement: HostDetailsElement, HTMLIFrameElement: class {},
+  addEventListener() {}, removeEventListener() {}, get event() {return undefined;},
+};
+document.defaultView = windowObj;
+Object.assign(globalThis, {
+  document, window: windowObj,
+  HTMLElement: HostNode, HTMLDetailsElement: HostDetailsElement, Node: HostNode,
+  IS_REACT_ACT_ENVIRONMENT: true,
 });
-test('clipboard denial opens/selects fallback and close returns focus without publishing',async()=>{
-  const h=harness();await h.open();h.navigator.clipboard.writeText=async()=>{throw Error('denied');};await h.click('複製貼文連結');await h.settle();
-  assert.equal(h.node(n=>n.props.className==='social-share-link').props.ref.current.open,true);
-  const field=h.node(n=>n.type==='input').props.ref.current;assert.equal(field.focused,true);assert.equal(field.selected,true);
-  h.click('關閉分享');assert.equal(h.button('分享貼文連結').props.ref.current.focused,true);assert.equal(h.writes.length,0);
+
+const req = createRequire(import.meta.url);
+const {createRoot} = req('react-dom/client') as typeof import('react-dom/client');
+const {flushSync} = req('react-dom') as typeof import('react-dom');
+const flush = (fn: () => void) => React.act(() => flushSync(fn));
+
+HostNode.prototype.closest = function () {return null;};
+HostNode.prototype.showModal = function () {this.open = true; this.setAttribute('open', '');};
+HostNode.prototype.close = function () {this.open = false; this.removeAttribute('open');};
+HostNode.prototype.focus = function () {this.focused = true; this.ownerDocument.activeElement = this;};
+HostNode.prototype.select = function () {this.selected = true;};
+
+const base = fileURLToPath(new URL('../../', import.meta.url));
+const propsOf = (node: HostNode) => node[Object.keys(node).find(k => k.startsWith('__reactProps$'))!];
+const descendants = (node: HostNode): HostNode[] => [node, ...node.childNodes.flatMap(descendants)];
+
+function compile(relative: string, cache = new Map<string, any>()): any {
+  const file = path.resolve(base, relative);
+  if (cache.has(file)) return cache.get(file);
+  const mod = {exports: {} as any};
+  cache.set(file, mod.exports);
+  const raw = readFileSync(file, 'utf8');
+  runInNewContext(transformSync(raw, {loader: relative.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic'}).code, {
+    module: mod, exports: mod.exports, crypto: webcrypto, Intl, URL, AbortController,
+    window: windowObj, document, navigator: navigatorState, HTMLDetailsElement: HostDetailsElement, setTimeout, clearTimeout, console,
+    require(name: string) {
+      if (name === 'react') return React;
+      if (name === 'react/jsx-runtime' || name === 'react-dom' || name === 'qrcode') return req(name);
+      if (name === '../api') return {ApiError};
+      if (name === '../portal-session') return {describeError: (e: any) => ({message: e.message})};
+      if (name === '../language') return {useLanguage: () => ({t: (k: string) => k})};
+      if (name === './SocialTools') return {SocialIcon: () => null};
+      if (name.endsWith('.css')) return {};
+      if (name.startsWith('.')) {
+        const resolved = path.resolve(path.dirname(file), name);
+        const target = [resolved, resolved + '.ts', resolved + '.tsx'].find(existsSync);
+        assert.ok(target, `missing ${name}`);
+        return compile(path.relative(base, target), cache);
+      }
+      throw Error('Unexpected import: ' + name);
+    },
+  });
+  cache.set(file, mod.exports);
+  return mod.exports;
+}
+
+const {SocialPostShare} = compile('apps/portal-web/src/modules/SocialPostShare.tsx');
+
+function harness(t: TestContext, mine = true) {
+  const reads: any[] = [], writes: any[] = [], copies: string[] = [], shares: any[] = [];
+  navigatorState.clipboard.writeText = async (url: string) => {copies.push(url);};
+  navigatorState.share = async (data: any) => {shares.push(data); throw Object.assign(new Error('cancel'), {name: 'AbortError'});};
+  const client: any = {
+    sessionGeneration: 1,
+    get: (p: string) => new Promise((resolve, reject) => reads.push({path: p, resolve, reject})),
+    post: (p: string, body: unknown, options: unknown) => new Promise((resolve, reject) => writes.push({path: p, body, options, resolve, reject})),
+  };
+  let currentProps: any = {client, post: {post_id: 'post-a', mine, kind: 'note', revision: 1, note: '完整私人正文', author: {display_name: '作者'}}};
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container as unknown as HTMLElement);
+  const render = (patch?: Partial<typeof currentProps>) => {
+    if (patch) currentProps = {...currentProps, ...patch};
+    flush(() => root.render(React.createElement(SocialPostShare, currentProps)));
+  };
+  t.after(() => {flush(() => root.unmount()); container.parentNode?.removeChild(container);});
+  render();
+  const all = () => descendants(document.body);
+  const button = (label: string) => all().find(n => n.nodeName === 'BUTTON' && (n.textContent === label || n.getAttribute('aria-label') === label));
+  const click = async (label: string) => {
+    const target = all().filter(n => n.nodeName === 'BUTTON' && (n.textContent === label || n.getAttribute('aria-label') === label)).at(-1);
+    assert.ok(target, `missing button ${label}`);
+    assert.ok(!propsOf(target).disabled, `${label} disabled`);
+    await React.act(async () => {await propsOf(target).onClick?.({preventDefault() {}, stopPropagation() {}});});
+  };
+  const settle = () => React.act(async () => {await new Promise(resolve => setImmediate(resolve));});
+  const state = {enabled: false, available: false, post_revision: 1, media_version: '1', version: '1', public_path: null, image_url: null};
+  const open = async () => {
+    await click('分享貼文連結');
+    if (mine) reads.at(-1).resolve(state);
+    else reads.at(-1).reject(new ApiError({status: 404, message: 'not_found'}));
+    await settle();
+  };
+  return {client, currentProps: () => currentProps, reads, writes, copies, shares, render, all, button, click, open, settle, state, navigatorState};
+}
+
+test('restricted link is directly shareable/copyable; preview and raw URL are folded and neither action publishes', async t => {
+  const h = harness(t);
+  await h.open();
+  const nodes = h.all();
+  const consent = nodes.find(n => n.getAttribute('class') === 'social-sharing-consent')!;
+  assert.equal(consent.open, false);
+  const shareTrigger = nodes.find(n => n.nodeName === 'BUTTON' && n.textContent === '分享' && n.getAttribute('aria-haspopup') === 'dialog')!;
+  assert.ok(nodes.indexOf(shareTrigger) < nodes.indexOf(consent));
+  await h.click('分享');
+  await h.click('複製連結');
+  await h.settle();
+  assert.match(h.copies[0], /\?social-post=post-a#social$/);
+  await h.click('分享');
+  await h.settle();
+  assert.equal(h.shares.length, 1);
+  assert.equal(h.writes.length, 0);
 });
-test('non-owner never receives publication controls',async()=>{const h=harness(false);await h.open();assert.equal(h.button('開放免登入閱讀'),undefined);await h.click('複製貼文連結');assert.equal(h.writes.length,0);});
-test('unknown publication keeps same tuple and disabled sharing; successful retry reveals public URL',async()=>{
-  const h=harness();await h.open();h.click('開放免登入閱讀');h.view();assert.equal(h.button('複製貼文連結').props.disabled,true);
-  const first=h.writes[0];first.resolve({});await h.settle();assert.equal(h.node(n=>n.props.className==='social-sharing-consent').props.ref.current.open,true);
-  assert.equal(h.button('複製貼文連結').props.disabled,true);h.click('確認上次設定');assert.deepEqual(h.writes[1].body,first.body);assert.deepEqual(h.writes[1].options,first.options);
-  h.writes[1].resolve({...h.state,enabled:true,available:true,version:'2',public_path:'/posts/post-a'});await h.settle();await h.click('複製貼文連結');assert.equal(h.copies.at(-1),'https://workshop.example.test/posts/post-a');
+
+test('clipboard denial opens/selects fallback and close returns focus without publishing', async t => {
+  const h = harness(t);
+  await h.open();
+  navigatorState.clipboard.writeText = async () => {throw Error('denied');};
+  await h.click('分享');
+  await h.click('複製連結');
+  await h.settle();
+  const field = h.all().find(n => n.nodeName === 'TEXTAREA')!;
+  assert.ok(field, 'manual copy textarea rendered');
+  assert.equal(field.focused, true);
+  assert.equal(field.selected, true);
+  await h.click('關閉分享');
+  await h.click('關閉分享');
+  assert.equal(h.button('分享貼文連結')!.focused, true);
+  assert.equal(h.writes.length, 0);
 });
-for(const change of ['session','post','client'])test(`late publication acknowledgement cannot alter replacement ${change}`,async()=>{
-  const h=harness();await h.open();h.click('開放免登入閱讀');if(change==='session')h.client.sessionGeneration++;if(change==='post')h.props.post={...h.props.post,post_id:'post-b'};if(change==='client')h.props.client={...h.client};h.view();
-  h.writes[0].resolve({...h.state,enabled:true,available:true,version:'2',public_path:'/posts/post-a'});await h.settle();assert.equal(h.node(n=>n.type==='input').props.value.includes('/posts/post-a'),false);
+
+test('non-owner never receives publication controls', async t => {
+  const h = harness(t, false);
+  await h.open();
+  assert.equal(h.button('開放免登入閱讀'), undefined);
+  await h.click('分享');
+  await h.click('複製連結');
+  await h.settle();
+  assert.match(h.copies[0], /\?social-post=post-a#social$/);
+  assert.equal(h.writes.length, 0);
 });
-test('unreviewed media and stale revision remain disabled instead of bypassing consent',async()=>{
-  for(const state of [{image_url:'/api/v1/social-posts/post-a/thumbnail?v=1'},{post_revision:2}]){const h=harness();h.click('分享貼文連結');h.view();h.reads[0].resolve({...h.state,...state});await h.settle();assert.equal(h.button('開放免登入閱讀').props.disabled,true);assert.equal(h.writes.length,0);}
+
+test('unknown publication keeps same tuple and disabled sharing; successful retry reveals tracked URL', async t => {
+  const h = harness(t);
+  await h.open();
+  await h.click('開放免登入閱讀');
+  const shareBtn = h.all().find(n => n.nodeName === 'BUTTON' && n.textContent === '分享' && n.getAttribute('aria-haspopup') === 'dialog')!;
+  assert.equal(propsOf(shareBtn).disabled, true);
+  const first = h.writes[0];
+  first.resolve({});
+  await h.settle();
+  assert.equal(h.all().find(n => n.getAttribute('class') === 'social-sharing-consent')!.open, true);
+  assert.equal(propsOf(h.all().find(n => n.nodeName === 'BUTTON' && n.textContent === '分享' && n.getAttribute('aria-haspopup') === 'dialog')!).disabled, true);
+  await h.click('確認上次設定');
+  assert.deepEqual(h.writes[1].body, first.body);
+  assert.deepEqual(h.writes[1].options, first.options);
+  h.writes[1].resolve({...h.state, enabled: true, available: true, version: '2', public_path: '/posts/post-a'});
+  await h.settle();
+  await h.click('分享');
+  assert.equal(h.writes.at(-1).path, '/promotion/links');
+  h.writes.at(-1).resolve({path: '/go/note123456'});
+  await h.settle();
+  await h.click('複製連結');
+  await h.settle();
+  assert.equal(h.copies.at(-1), 'https://workshop.example.test/go/note123456');
+});
+
+for (const change of ['session', 'post', 'client']) {
+  test(`late publication acknowledgement cannot alter replacement ${change}`, async t => {
+    const h = harness(t);
+    await h.open();
+    await h.click('開放免登入閱讀');
+    if (change === 'session') {h.client.sessionGeneration++; h.render();}
+    if (change === 'post') h.render({post: {...h.currentProps().post, post_id: 'post-b'}});
+    if (change === 'client') h.render({client: {...h.client}});
+    h.writes[0].resolve({...h.state, enabled: true, available: true, version: '2', public_path: '/posts/post-a'});
+    await h.settle();
+    if (change === 'session') {
+      await h.open().catch(() => {});
+    } else {
+      h.reads.at(-1).resolve({...h.state, post_revision: h.currentProps().post.revision});
+      await h.settle();
+    }
+    await h.click('分享');
+    const urlText = h.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent ?? '';
+    assert.equal(urlText.includes('/posts/post-a'), false);
+  });
+}
+
+test('unreviewed media and stale revision remain disabled instead of bypassing consent', async t => {
+  for (const state of [{image_url: '/api/v1/social-posts/post-a/thumbnail?v=1'}, {post_revision: 2}]) {
+    const h = harness(t);
+    await h.click('分享貼文連結');
+    h.reads[0].resolve({...h.state, ...state});
+    await h.settle();
+    const publishBtn = h.button('開放免登入閱讀')!;
+    assert.equal(propsOf(publishBtn).disabled, true);
+    assert.equal(h.writes.length, 0);
+  }
 });

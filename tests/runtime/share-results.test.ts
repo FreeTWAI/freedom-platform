@@ -1,0 +1,287 @@
+import { test, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
+import { createPool, LOCAL_DATABASE_URL } from '../../packages/db/index.js';
+import { transaction } from '../../packages/db/index.js';
+import { migrate } from '../../scripts/database.js';
+import { seedLocal, DEMO_COMMUNITY, DEMO_PASSWORD, DEMO_USERS } from '../../packages/testing/seed.js';
+import { createApp } from '../../apps/platform-api/src/app.js';
+import { agentOperation } from '../../apps/platform-api/src/agent-allowlist.js';
+import type { Actor } from '../../modules/identity-membership/service.js';
+import { appendCredit, endorseShare, reverseCredit } from '../../modules/shares/credit.js';
+import { myShareResults } from '../../modules/shares/results.js';
+
+const origin = 'http://127.0.0.1:4318';
+const databaseUrl = process.env.TEST_DATABASE_URL ?? LOCAL_DATABASE_URL;
+const schema = `fp_share_results_${process.pid}_${Date.now()}`;
+const admin = createPool(databaseUrl);
+const pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}`, max: 8 });
+let app: ReturnType<typeof createApp>;
+
+type Session = { cookie: string; csrf: string; actor: Actor };
+
+before(async () => {
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  await migrate(pool);
+  app = createApp(pool, origin, 'local', { registrationCommunityId: DEMO_COMMUNITY });
+});
+
+after(async () => {
+  await pool.end();
+  await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+  await admin.end();
+});
+
+beforeEach(async () => {
+  await pool.query('TRUNCATE communities, login_attempts, auth_rate_limits CASCADE');
+  await pool.query('TRUNCATE promotion_click_salts');
+  await seedLocal(pool);
+});
+
+async function createNonTestUser(email: string, displayName: string): Promise<Session> {
+  const id = randomUUID();
+  await pool.query(
+    `INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active,onboarding_required)
+     SELECT $1,community_id,$2,$3,password_hash,$4,true,false FROM users WHERE user_id=$5`,
+    [id, email, displayName, randomUUID(), DEMO_USERS[0].user_id],
+  );
+  const res = await app.request(`${origin}/api/v1/auth/login`, {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: DEMO_PASSWORD }),
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json() as { csrf_token: string; user: { user_id: string; community_id: string } };
+  const cookie = res.headers.get('set-cookie')!.split(';')[0];
+  return {
+    cookie,
+    csrf: data.csrf_token,
+    actor: { user_id: id, community_id: DEMO_COMMUNITY } as Actor,
+  };
+}
+
+async function req(path: string, session?: Session, body?: unknown, method?: string, extraHeaders: Record<string, string> = {}) {
+  const verb = method ?? (body === undefined ? 'GET' : 'POST');
+  const headers: Record<string, string> = {
+    Origin: origin,
+    ...(session ? { Cookie: session.cookie, 'X-CSRF-Token': session.csrf } : {}),
+    ...(body === undefined ? {} : { 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }),
+    ...extraHeaders,
+  };
+  const res = await app.request(`${origin}/api/v1${path}`, {
+    method: verb,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  return { status: res.status, data: text ? JSON.parse(text) : null, text };
+}
+
+test('S3: myShareResults merges shares, credits, and standalone links with visibility zeroing and cross-member isolation', async () => {
+  const alice = await createNonTestUser('alice-s3@example.com', 'Alice');
+  const bob = await createNonTestUser('bob-s3@example.com', 'Bob');
+  const actorC = await createNonTestUser('charlie-s3@example.com', 'Charlie');
+
+  assert.equal((await req('/me/share-results')).status, 401);
+  assert.ok(agentOperation('GET', '/api/v1/me/share-results'));
+
+  // (a) Repository share + tracked link created via BOTH /shares/:id/links and /promotion/links {kind:'share'} -> same code, 3 clicks + 1 star
+  const shareA = randomUUID(), repoA = randomUUID();
+  await pool.query(
+    `INSERT INTO canonical_repositories(repo_id,provider,provider_repo_id,full_name,current_url)
+     VALUES($1,'github','997701','org/repo-a','https://github.com/org/repo-a')`,
+    [repoA],
+  );
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,repo_id,title,first_sharer_user_id,state)
+     VALUES($1,$2,'repository','github:org/repo-a','https://github.com/org/repo-a',$3,'開源專案 A',$4,'published')`,
+    [shareA, DEMO_COMMUNITY, repoA, alice.actor.user_id],
+  );
+  await transaction(pool, async q => {
+    await endorseShare(q, { share_id: shareA, community_id: DEMO_COMMUNITY, first_sharer_user_id: alice.actor.user_id, state: 'published' }, alice.actor.user_id);
+    await appendCredit(q, { community_id: DEMO_COMMUNITY, share_id: shareA, user_id: alice.actor.user_id, role: 'sharer', basis: 'star_confirmed', source_ref: `star:1`, actor_user_id: actorC.actor.user_id });
+    const rev = await appendCredit(q, { community_id: DEMO_COMMUNITY, share_id: shareA, user_id: alice.actor.user_id, role: 'sharer', basis: 'star_confirmed', source_ref: `star:2`, actor_user_id: bob.actor.user_id });
+    await reverseCredit(q, rev!);
+  });
+  const viaShares = await req(`/shares/${shareA}/links`, alice, {});
+  const viaPromo = await req('/promotion/links', alice, { kind: 'share', target: shareA });
+  assert.equal(viaShares.status, 200, viaShares.text);
+  assert.equal(viaPromo.status, 200, viaPromo.text);
+  assert.equal(viaPromo.data.code, viaShares.data.code);
+
+  const clickRes = await req('/promotion/clicks', undefined, { code: viaShares.data.code }, 'POST', {
+    'User-Agent': 'Mozilla/5.0 Chrome/128.0.0.0 Safari/537.36',
+  });
+  assert.equal(clickRes.status, 200);
+  // Two visitors on one day and one visitor on the next -> 3 clicks total (plus 1 credit event if recorded)
+  const linkA = (await pool.query('SELECT link_id FROM promotion_links WHERE code=$1', [viaShares.data.code])).rows[0].link_id as string;
+  await pool.query(
+    `INSERT INTO promotion_clicks(link_id,click_day,visitor_key,network_key,community_id,user_id,kind,created_at)
+     VALUES($1,'2026-10-04',$2,$3,$4,$5,'share','2026-10-04T02:00:00Z'),
+           ($1,'2026-10-04',$6,$7,$4,$5,'share','2026-10-04T03:00:00Z')`,
+    [linkA, `v:${'a'.repeat(64)}`, 'b'.repeat(64), DEMO_COMMUNITY, alice.actor.user_id, `v:${'c'.repeat(64)}`, 'd'.repeat(64)],
+  );
+
+  // (b) Event link + event share with registrations
+  const eventId = randomUUID();
+  const eventShareId = randomUUID();
+  await pool.query(
+    `INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
+     VALUES($1,$2,$3,'社群聚會 B','說明',now()+interval '2 days',now()+interval '3 days','online','線上','published','open','other')`,
+    [eventId, DEMO_COMMUNITY, alice.actor.user_id],
+  );
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,first_sharer_user_id,state)
+     VALUES($1,$2,'event',$3,$4,'community_events',$5,'社群聚會 B',$6,'published')`,
+    [eventShareId, DEMO_COMMUNITY, `event:${eventId}`, `/events/${eventId}`, eventId, alice.actor.user_id],
+  );
+  await transaction(pool, async q => {
+    await endorseShare(q, { share_id: eventShareId, community_id: DEMO_COMMUNITY, first_sharer_user_id: alice.actor.user_id, state: 'published' }, alice.actor.user_id);
+    await appendCredit(q, { community_id: DEMO_COMMUNITY, share_id: eventShareId, user_id: alice.actor.user_id, role: 'spreader', basis: 'registration', source_ref: `reg:${eventId}:1`, actor_user_id: actorC.actor.user_id });
+  });
+  const eventLink = await req('/promotion/links', alice, { kind: 'event', target: eventId });
+  assert.equal(eventLink.status, 200, eventLink.text);
+
+  // (c) Standalone links without a shares row: public note post + member_service
+  const note = await req('/social-posts/notes', alice, { text: '筆記 C\n內容' });
+  assert.equal(note.status, 201);
+  const noteState = await req(`/social-posts/${note.data.post_id}/public-sharing`, alice);
+  await req(`/social-posts/${note.data.post_id}/public-sharing`, alice, {
+    enabled: true, post_revision: noteState.data.post_revision, media_version: noteState.data.media_version,
+  }, 'POST', { 'If-Match': `"${noteState.data.version}"` });
+  const noteLink = await req('/promotion/links', alice, { kind: 'social_post', target: note.data.post_id });
+  assert.equal(noteLink.status, 200, noteLink.text);
+
+  const serviceId = randomUUID();
+  await pool.query(
+    `INSERT INTO member_services(service_id,community_id,owner_user_id,title,category,summary,service_mode,contacts,state)
+     VALUES($1,$2,$3,'站外服務 C2','language','服務簡介','online','[{"label":"網站","url":"https://example.com/svc-c2"}]'::jsonb,'active')`,
+    [serviceId, DEMO_COMMUNITY, alice.actor.user_id],
+  );
+  const serviceLink = await req('/promotion/links', alice, { kind: 'member_service', target: serviceId });
+  assert.equal(serviceLink.status, 200, serviceLink.text);
+  const svcClick = await req('/promotion/clicks', undefined, { code: serviceLink.data.code }, 'POST', {
+    'User-Agent': 'Mozilla/5.0 Chrome/128.0.0.0 Safari/537.36',
+  });
+  assert.equal(svcClick.status, 200);
+
+  // (d) Share credit without a tracked link + net-zero reversed share excluded
+  const shareD = randomUUID();
+  const shareZero = randomUUID();
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,title,first_sharer_user_id,state)
+     VALUES($1,$2,'link','https://example.com/d','https://example.com/d','無連結分享 D',$3,'published'),
+           ($4,$2,'link','https://example.com/z','https://example.com/z','已撤銷積分 Z',$5,'published')`,
+    [shareD, DEMO_COMMUNITY, alice.actor.user_id, shareZero, bob.actor.user_id],
+  );
+  await transaction(pool, async q => {
+    await endorseShare(q, { share_id: shareD, community_id: DEMO_COMMUNITY, first_sharer_user_id: alice.actor.user_id, state: 'published' }, alice.actor.user_id);
+    const zeroEv = await endorseShare(q, { share_id: shareZero, community_id: DEMO_COMMUNITY, first_sharer_user_id: bob.actor.user_id, state: 'published' }, alice.actor.user_id);
+    await reverseCredit(q, zeroEv!);
+  });
+
+  const resA = await req('/me/share-results', alice);
+  assert.equal(resA.status, 200, resA.text);
+  assert.equal(resA.data.next_offset, null);
+  assert.equal(resA.data.items.length, 5);
+  assert.equal(resA.data.items.some((x: { key: string }) => x.key === `share:${shareZero}`), false);
+
+  const rowA = resA.data.items.find((x: { key: string }) => x.key === `share:${shareA}`);
+  assert.deepEqual(rowA.link, { kind: 'share', target: shareA, path: `/go/${viaShares.data.code}` });
+  assert.equal(rowA.open_path, `/go/${viaShares.data.code}`);
+  assert.equal(rowA.kind, 'repository');
+  assert.equal(rowA.title, '開源專案 A');
+  assert.equal(rowA.available, true);
+  assert.equal(rowA.clicks, 3);
+  assert.equal(rowA.stars, 1);
+  assert.equal(rowA.registrations, 0);
+
+  const rowB = resA.data.items.find((x: { key: string }) => x.key === `share:${eventShareId}`);
+  assert.equal(rowB.kind, 'event');
+  assert.equal(rowB.link.kind, 'event');
+  assert.equal(rowB.open_path, `/go/${eventLink.data.code}`);
+  assert.equal(rowB.registrations, 1);
+
+  const rowC = resA.data.items.find((x: { key: string }) => x.key === `social_post:${note.data.post_id}`);
+  assert.equal(rowC.kind, 'social_post');
+  assert.equal(rowC.available, true);
+  assert.equal(rowC.title, '筆記 C');
+  assert.equal(rowC.open_path, `/go/${noteLink.data.code}`);
+
+  const rowC2 = resA.data.items.find((x: { key: string }) => x.key === `member_service:${serviceId}`);
+  assert.equal(rowC2.kind, 'member_service');
+  assert.equal(rowC2.available, true);
+  assert.equal(rowC2.title, '站外服務 C2');
+  assert.equal(rowC2.open_path, `/go/${serviceLink.data.code}`);
+  assert.equal(rowC2.clicks, 1);
+
+  const rowD = resA.data.items.find((x: { key: string }) => x.key === `share:${shareD}`);
+  assert.equal(rowD.link, null);
+  assert.equal(rowD.open_path, `#shares/${shareD}`);
+  assert.equal(rowD.available, true);
+  assert.equal(resA.data.items[0].key, `share:${shareD}`);
+
+  // Bob sees none of Alice's results
+  const resBob = await req('/me/share-results', bob);
+  assert.equal(resBob.status, 200);
+  assert.equal(resBob.data.items.length, 0);
+
+  // Retracted shareD and hidden non-event shareA -> unavailable, '已停止分享', link null, counts 0
+  await pool.query(`UPDATE shares SET state='retracted' WHERE share_id=$1`, [shareD]);
+  await pool.query(`UPDATE shares SET state='hidden' WHERE share_id=$1`, [shareA]);
+  // Hidden event share stays available to organizer (hidden-event exception matching myCredit), unavailable to outsider in guild event
+  await pool.query(`UPDATE shares SET state='hidden' WHERE share_id=$1`, [eventShareId]);
+  // Note post edit makes standalone note unavailable, pausing service makes standalone service unavailable
+  await pool.query(`UPDATE community_social_posts SET edit_revision=edit_revision+1 WHERE post_id=$1`, [note.data.post_id]);
+  await pool.query(`UPDATE member_services SET state='paused' WHERE service_id=$1`, [serviceId]);
+
+  const resA2 = await req('/me/share-results', alice);
+  const a2 = resA2.data.items.find((x: { key: string }) => x.key === `share:${shareA}`);
+  assert.equal(a2.available, false);
+  assert.equal(a2.title, '已停止分享');
+  assert.equal(a2.link, null);
+  assert.equal(a2.open_path, null);
+  assert.equal(a2.clicks, 0);
+  assert.equal(a2.stars, 0);
+
+  const d2 = resA2.data.items.find((x: { key: string }) => x.key === `share:${shareD}`);
+  assert.equal(d2.available, false);
+  assert.equal(d2.title, '已停止分享');
+  assert.equal(d2.open_path, null);
+
+  const c2 = resA2.data.items.find((x: { key: string }) => x.key === `social_post:${note.data.post_id}`);
+  assert.equal(c2.available, false);
+  assert.equal(c2.title, '已停止分享');
+  assert.equal(c2.link, null);
+  assert.equal(c2.open_path, null);
+
+  const svc2 = resA2.data.items.find((x: { key: string }) => x.key === `member_service:${serviceId}`);
+  assert.equal(svc2.available, false);
+  assert.equal(svc2.title, '已停止分享');
+  assert.equal(svc2.link, null);
+  assert.equal(svc2.open_path, null);
+
+  const b2 = resA2.data.items.find((x: { key: string }) => x.key === `share:${eventShareId}`);
+  assert.equal(b2.available, true);
+  assert.equal(b2.title, '社群聚會 B');
+});
+
+test('S3: myShareResults pages at 50 rows with next_offset', async () => {
+  const alice = await createNonTestUser('alice-page@example.com', 'Alice Pager');
+  const base = Date.UTC(2026, 9, 1, 0, 0, 0);
+  await transaction(pool, async q => {
+    for (let i = 0; i < 52; i++) {
+      await q.query(
+        `INSERT INTO promotion_links(community_id,user_id,kind,target_key,code,created_at) VALUES($1,$2,'skill_book',$3,$4,$5)`,
+        [DEMO_COMMUNITY, alice.actor.user_id, `book:typo-studio-${i}`, randomBytes(7).toString('base64url'), new Date(base + i * 1000)],
+      );
+    }
+    const first = await myShareResults(q, alice.actor, { offset: 0 }, DEMO_COMMUNITY);
+    assert.equal(first.items.length, 50);
+    assert.equal(first.next_offset, 50);
+    const second = await myShareResults(q, alice.actor, { offset: 50 }, DEMO_COMMUNITY);
+    assert.equal(second.items.length, 2);
+    assert.equal(second.next_offset, null);
+  });
+});

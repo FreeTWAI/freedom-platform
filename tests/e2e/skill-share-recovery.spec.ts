@@ -22,15 +22,23 @@ for(const target of ['introduction','session','promotion'] as const)test(`skill 
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/promotion/links')writes++;});
   try{
     await card.getByRole('button',{name:'分享技能',exact:true}).click();await expect.poll(()=>held.length).toBe(1);
-    if(target!=='introduction')await expect(page.getByRole('dialog',{name:`分享「${title}」`,exact:true})).toBeVisible();
+    const dialog=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});
+    await expect(dialog).toBeVisible();
     await page.clock.fastForward(8001);
-    const dialog=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});await expect(dialog).toBeVisible();
-    const copy=dialog.getByRole('button',{name:target==='introduction'?'複製連結':'複製介紹與連結',exact:true});await expect(copy).toBeEnabled();
-    if(target==='introduction')await expect(dialog.getByRole('alert')).toContainText('分享介紹暫時無法載入');
-    else await expect(dialog.locator('.skill-share-url')).toHaveText(new RegExp('/development/skills/social-post\\?intro=[12]$'));
+    await expect(dialog).toBeVisible();
+    const copy=dialog.getByRole('button',{name:'複製連結',exact:true});await expect(copy).toBeEnabled();
+    if(target==='introduction'){
+      await expect(dialog.locator('.share-intros')).toHaveCount(0);
+      await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+    }else{
+      await expect(dialog.locator('.skill-share-url')).toHaveText(/\/development\/skills\/social-post$/);
+      await dialog.locator('.share-intros > summary').click();
+      await dialog.getByRole('radio').first().check();
+      await expect(dialog.locator('.skill-share-url')).toHaveText(/\/development\/skills\/social-post\?intro=1$/);
+    }
     await copy.click();const copied=await page.evaluate(()=>(window as any).__recoveryCopy as string);expect(copied).toContain(new URL(baseURL!).origin);
     const writesBefore=writes;await page.clock.fastForward(16000);expect(writes).toBe(writesBefore);
-    await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
+    await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
   }finally{for(const route of held)await route.abort().catch(()=>{});await page.unrouteAll({behavior:'wait'});}
 });
 
@@ -38,19 +46,16 @@ test('closing the reading dialog cancels its pending nested share and does not r
   const card=await prepare(page),held:Route[]=[];
   await card.getByRole('button',{name:'預覽技能書',exact:true}).click();
   const reading=page.getByRole('dialog',{name:title,exact:true});await expect(reading).toBeVisible();
-  const shell=await reading.locator('.skill-share-dialog').elementHandle();expect(shell).not.toBeNull();
+  await expect(page.locator('.skill-share-dialog')).toHaveCount(0);
   await page.route('**/api/v1/skills/social-post/share-content',route=>{held.push(route);});
   try{
     await reading.getByRole('button',{name:'分享技能',exact:true}).click();await expect.poll(()=>held.length).toBeGreaterThan(0);
     await reading.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();await expect(reading).toBeHidden();
-    expect(await shell!.evaluate(element=>element.isConnected)).toBe(true);
-    await page.clock.fastForward(8001);await expect(page.getByRole('dialog',{name:`分享「${title}」`,exact:true})).toBeHidden();
+    await page.clock.fastForward(8001);await expect(page.locator('.skill-share-dialog')).toHaveCount(0);
     await expect(card.getByRole('button',{name:'預覽技能書',exact:true})).toBeFocused();
     for(const route of held)await route.fulfill({json:content}).catch(()=>{});
-    await expect(page.getByRole('dialog',{name:`分享「${title}」`,exact:true})).toBeHidden();
+    await expect(page.locator('.skill-share-dialog')).toHaveCount(0);
     await card.getByRole('button',{name:'預覽技能書',exact:true}).click();await expect(reading).toBeVisible();
-    expect(await shell!.evaluate(element=>element===element.closest('.skill-intro-dialog')?.querySelector('.skill-share-dialog'))).toBe(true);
-    await expect(reading.locator('.skill-share-dialog')).toBeHidden();await expect(reading.getByRole('button',{name:'分享技能',exact:true})).toBeEnabled();
-    await shell!.dispose();
+    await expect(page.locator('.skill-share-dialog')).toHaveCount(0);await expect(reading.getByRole('button',{name:'分享技能',exact:true})).toBeEnabled();
   }finally{for(const route of held)await route.abort().catch(()=>{});await page.unrouteAll({behavior:'wait'});}
 });

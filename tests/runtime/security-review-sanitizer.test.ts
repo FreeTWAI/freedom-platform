@@ -127,12 +127,12 @@ test('built portal SharePage final DOM and response CSP keep hostile README iner
  assert.equal(await page.locator('.share-page base,.share-page meta,.share-page script,.share-page iframe').count(),0);
 });
 
-test('hidden share remains in the sharer contribution list with the waiting state and no public link',async()=>{
+test('hidden share remains in the sharer contribution list with the unavailable state and no public link',async()=>{
  await pool.query("UPDATE shares SET state='hidden' WHERE share_id=$1",[shareId]);
  await page.evaluate(()=>{location.hash='#me/credit';});
- const card=page.locator('.share-page article').filter({hasText:'fixture/security-readme'});
- await card.getByText('暫停公開，等待確認',{exact:false}).waitFor();
+ const card=page.locator('.share-page .share-result-card').filter({hasText:'已停止分享'}).first();
+ await card.waitFor();
  assert.equal(await card.locator('a').count(),0);
- assert.match(await card.innerText(),/分享 1/);
+ assert.doesNotMatch(await page.locator('.share-page').innerText(),/fixture\/security-readme/);
  const response=await page.request.get(`${origin}/s/${shareId}`);assert.equal(response.status(),404);
 });

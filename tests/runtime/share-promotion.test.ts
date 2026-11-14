@@ -16,6 +16,9 @@ import { communityCatalog } from '../../modules/community/catalog.js';
 import { getSkillShareContent } from '../../modules/community/skill-share-content.js';
 import { PREVIEW_BOT_MARKERS, isPreviewBot } from '../../packages/shared/promotion-bots.js';
 import { promotionGo, promotionLeaderboardSql, taipeiDate, type PromotionKind } from '../../modules/community/promotion.js';
+import { createShowcase } from '../../modules/opportunity-project-work/business.js';
+import { setShowcaseSharing } from '../../modules/opportunity-project-work/public-sharing.js';
+import type { Actor } from '../../modules/identity-membership/service.js';
 import { readPublicCards } from '../../modules/identity-membership/member-sharing.js';
 import type { PreviewFetch } from '../../modules/community/link-preview.js';
 import { createPlatformApp } from '../../apps/platform-api/src/platform-app.js';
@@ -1474,4 +1477,207 @@ test('external destinations come only from the current canonical post, never que
     assert.equal(response.headers.get('location'), null);
     assert.doesNotMatch(await response.text(), /會員核准的作品|og:|data-target|data-code|evil.example/);
   }
+});
+
+test('S1: revoked link or deactivated owner link is refused at /go and scores zero across share, event, and service targets', async () => {
+  await addUser('s1-owner-a@example.com', 'S1 會員 A');
+  await addUser('s1-owner-b@example.com', 'S1 會員 B');
+  const maker = await signIn('s1-owner-a@example.com');
+  const second = await signIn('s1-owner-b@example.com');
+  const third = await signIn(DEMO_USERS[1].email);
+  const makerSession = (await pool.query('SELECT token_hash FROM sessions WHERE user_id=$1 ORDER BY expires_at DESC LIMIT 1', [maker.user.user_id])).rows[0].token_hash as string;
+  const makerActor = { user_id: maker.user.user_id, community_id: DEMO_COMMUNITY, session_hash: makerSession } as Actor;
+
+  // link + repository + public work shares, plus event & member_service
+  const shareLinkRevoked = randomUUID(), shareLinkInactive = randomUUID(), repoShareId = randomUUID(), repoId = randomUUID();
+  await pool.query(
+    `INSERT INTO canonical_repositories(repo_id,provider,provider_repo_id,full_name,current_url)
+     VALUES($1,'github','998801','org/s1-repo','https://github.com/org/s1-repo')`,
+    [repoId],
+  );
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,repo_id,title,first_sharer_user_id,state)
+     VALUES($1,$2,'link','https://example.com/s1-a','https://example.com/s1-a',NULL,'公開分享 A',$3,'published'),
+           ($4,$2,'link','https://example.com/s1-b','https://example.com/s1-b',NULL,'公開分享 B',$5,'published'),
+           ($6,$2,'repository','github:org/s1-repo','https://github.com/org/s1-repo',$7,'公開 Repo',$3,'published')`,
+    [shareLinkRevoked, DEMO_COMMUNITY, maker.user.user_id, shareLinkInactive, second.user.user_id, repoShareId, repoId],
+  );
+  const work = await createShowcase(pool, {
+    actor: makerActor, body: { title: 'S1 公開作品', description: '作品簡介', artifact_ref: 'artifact:s1-work', consent_to_share: true },
+    operation: 'showcases', key: randomUUID(),
+  });
+  await setShowcaseSharing(pool, {
+    actor: makerActor, body: { enabled: true, work_version: String(work.aggregate_version) },
+    expected: String(work.aggregate_version), operation: 'sharing', key: randomUUID(),
+  }, work.showcase_id);
+  const workShareId = randomUUID();
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,first_sharer_user_id,state)
+     VALUES($1,$2,'work',$3,$4,'showcases',$5,'S1 公開作品',$6,'published')`,
+    [workShareId, DEMO_COMMUNITY, `work:${work.showcase_id}`, `/#showcase/${work.showcase_id}`, work.showcase_id, maker.user.user_id],
+  );
+
+  const eventId = randomUUID();
+  await eventRow(eventId, maker.user.user_id, 'open', 'S1 公開活動', '活動說明');
+  const serviceId = randomUUID();
+  await pool.query(
+    `INSERT INTO member_services(service_id,community_id,owner_user_id,title,category,summary,service_mode,contacts,state)
+     VALUES($1,$2,$3,'S1 會員服務','language','簡介','online','[{"label":"網站","url":"https://example.com/s1-svc"}]'::jsonb,'active')`,
+    [serviceId, DEMO_COMMUNITY, maker.user.user_id],
+  );
+
+  const revokedTargets = [
+    await request('/promotion/links', maker, { kind: 'share', target: shareLinkRevoked }),
+    await request('/promotion/links', maker, { kind: 'share', target: repoShareId }),
+    await request('/promotion/links', maker, { kind: 'share', target: workShareId }),
+    await request('/promotion/links', maker, { kind: 'event', target: eventId }),
+    await request('/promotion/links', maker, { kind: 'member_service', target: serviceId }),
+  ];
+  const inactiveTargets = [
+    await request('/promotion/links', second, { kind: 'share', target: shareLinkInactive }),
+    await request('/promotion/links', second, { kind: 'share', target: repoShareId }),
+    await request('/promotion/links', second, { kind: 'share', target: workShareId }),
+    await request('/promotion/links', second, { kind: 'event', target: eventId }),
+    await request('/promotion/links', second, { kind: 'member_service', target: serviceId }),
+  ];
+  for (const r of [...revokedTargets, ...inactiveTargets]) {
+    assert.equal(r.status, 200, r.text);
+    assert.equal((await app.request(`${origin}/go/${r.data.code}`)).status, 200);
+  }
+  // Third user's event/service links revoked individually too, while maker shares repo/work/link
+  const thirdEvent = await request('/promotion/links', third, { kind: 'event', target: eventId });
+  assert.equal(thirdEvent.status, 200);
+
+  for (const r of [...revokedTargets, thirdEvent]) {
+    await pool.query('UPDATE promotion_links SET revoked_at=now() WHERE code=$1', [r.data.code]);
+  }
+  await pool.query('UPDATE users SET active=false WHERE user_id=$1', [second.user.user_id]);
+
+  for (const r of [...revokedTargets, ...inactiveTargets, thirdEvent]) {
+    const code = r.data.code as string;
+    const gone = await app.request(`${origin}/go/${code}`);
+    const html = await gone.text();
+    assert.equal(gone.status, 404, `${code} should be 404 after S1`);
+    assert.match(html, /分享連結目前無法開啟/);
+    assert.equal(gone.headers.get('location'), null);
+    assert.doesNotMatch(html, /og:|data-target|data-code|公開分享/);
+    await click(code, REAL);
+    assert.equal(await pointsOf(code), 0);
+  }
+});
+
+test('S2: note posts with a public page get credited links; private, disabled, or stale note posts are refused', async () => {
+  await addUser('note-author@example.com', '筆記作者');
+  const maker = await signIn('note-author@example.com');
+  const otherMember = await signIn(DEMO_USERS[1].email);
+  const secondCommunity = randomUUID();
+  await pool.query('INSERT INTO communities(community_id,name) VALUES($1,$2)', [secondCommunity, 'Second community']);
+  const scopedApp = createApp(pool, origin, 'local', { now: () => clock, linkPreviewFetch: previewFetch, registrationCommunityId: DEMO_COMMUNITY });
+  const note = await request('/social-posts/notes', maker, { text: '筆記公開標題\n內文說明' });
+  assert.equal(note.status, 201, note.text);
+  const postId = note.data.post_id as string;
+
+  // Private note (public sharing off): refused for both author and another member even when registrationCommunityId matches.
+  for (const caller of [maker, otherMember]) {
+    const deniedResp = await scopedApp.request(`${origin}/api/v1/promotion/links`, {
+      method: 'POST',
+      headers: { Origin: origin, Cookie: caller.cookie, 'X-CSRF-Token': caller.csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() },
+      body: JSON.stringify({ kind: 'social_post', target: postId }),
+    });
+    assert.equal(deniedResp.status, 404);
+    const deniedData = await deniedResp.json() as { code: string; detail: string };
+    assert.equal(deniedData.code, 'not_found');
+    assert.equal(deniedData.detail, '這則貼文沒有公開頁，只能分享站內連結。');
+  }
+  assert.equal((await pool.query(`SELECT count(*)::int AS c FROM promotion_links WHERE target_key=$1`, [postId])).rows[0].c, 0);
+
+  // Enable public sharing on the note via scopedApp (which configures registrationCommunityId).
+  const pubState = await (await scopedApp.request(`${origin}/api/v1/social-posts/${postId}/public-sharing`, {
+    headers: { Origin: origin, Cookie: maker.cookie },
+  })).json() as { version: string; post_revision: number; media_version: string };
+  const enableResp = await scopedApp.request(`${origin}/api/v1/social-posts/${postId}/public-sharing`, {
+    method: 'POST',
+    headers: { Origin: origin, Cookie: maker.cookie, 'X-CSRF-Token': maker.csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID(), 'If-Match': `"${pubState.version}"` },
+    body: JSON.stringify({ enabled: true, post_revision: pubState.post_revision, media_version: pubState.media_version }),
+  });
+  const enabledData = await enableResp.json() as { version: string; post_revision: number; media_version: string };
+  assert.equal(enableResp.status, 200, JSON.stringify(enabledData));
+
+  // With two communities in DB and NO configured registrationCommunityId, public page resolution is null -> refused.
+  const unconfigured = await request('/promotion/links', maker, { kind: 'social_post', target: postId });
+  assert.equal(unconfigured.status, 404, unconfigured.text);
+
+  // With registrationCommunityId=DEMO_COMMUNITY, note post gets a /go link.
+  const createdResp = await scopedApp.request(`${origin}/api/v1/promotion/links`, {
+    method: 'POST',
+    headers: { Origin: origin, Cookie: maker.cookie, 'X-CSRF-Token': maker.csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() },
+    body: JSON.stringify({ kind: 'social_post', target: postId.toUpperCase() }),
+  });
+  const created = await createdResp.json() as { code: string; path: string; title: string };
+  assert.equal(createdResp.status, 200, JSON.stringify(created));
+
+  const goResp = await scopedApp.request(`${origin}/go/${created.code}`);
+  assert.equal(goResp.status, 200);
+  const goHtml = await goResp.text();
+  assert.match(goHtml, new RegExp(`data-target="/posts/${postId}"`));
+  assert.doesNotMatch(goHtml, /\?via=/);
+  assert.match(goHtml, /property="og:title" content="筆記公開標題"/);
+  assert.match(goHtml, /property="og:description" content="自由工坊貼文"/);
+
+  const clickResp = await scopedApp.request(`${origin}/api/v1/promotion/clicks`, {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json', 'User-Agent': REAL },
+    body: JSON.stringify({ code: created.code }),
+  });
+  assert.equal(clickResp.status, 200);
+  assert.equal(await pointsOf(created.code), 1);
+
+  const mineLive = await (await scopedApp.request(`${origin}/api/v1/promotion/links/mine?period=week`, {
+    headers: { Origin: origin, Cookie: maker.cookie },
+  })).json() as { items: { code: string; available: boolean; title: string }[] };
+  assert.equal(mineLive.items.find(i => i.code === created.code)?.available, true);
+
+  // Turning off public sharing makes /go 404, refuses new links, and marks available: false.
+  const disableResp = await scopedApp.request(`${origin}/api/v1/social-posts/${postId}/public-sharing`, {
+    method: 'POST',
+    headers: { Origin: origin, Cookie: maker.cookie, 'X-CSRF-Token': maker.csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID(), 'If-Match': `"${enabledData.version}"` },
+    body: JSON.stringify({ enabled: false, post_revision: enabledData.post_revision, media_version: enabledData.media_version }),
+  });
+  const disabledData = await disableResp.json() as { version: string; post_revision: number; media_version: string };
+  assert.equal(disableResp.status, 200, JSON.stringify(disabledData));
+  assert.equal((await scopedApp.request(`${origin}/go/${created.code}`)).status, 404);
+  const refusedAfterOff = await scopedApp.request(`${origin}/api/v1/promotion/links`, {
+    method: 'POST',
+    headers: { Origin: origin, Cookie: otherMember.cookie, 'X-CSRF-Token': otherMember.csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() },
+    body: JSON.stringify({ kind: 'social_post', target: postId }),
+  });
+  assert.equal(refusedAfterOff.status, 404);
+
+  // Re-enable then edit the note to verify stale publication also turns /go 404 and refuses new links.
+  const reenableResp = await scopedApp.request(`${origin}/api/v1/social-posts/${postId}/public-sharing`, {
+    method: 'POST',
+    headers: { Origin: origin, Cookie: maker.cookie, 'X-CSRF-Token': maker.csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID(), 'If-Match': `"${disabledData.version}"` },
+    body: JSON.stringify({ enabled: true, post_revision: disabledData.post_revision, media_version: disabledData.media_version }),
+  });
+  assert.equal(reenableResp.status, 200, await reenableResp.text());
+  assert.equal((await scopedApp.request(`${origin}/go/${created.code}`)).status, 200);
+
+  await pool.query('UPDATE community_social_posts SET edit_revision=edit_revision+1 WHERE post_id=$1', [postId]);
+  assert.equal((await scopedApp.request(`${origin}/go/${created.code}`)).status, 404);
+  const refusedAfterEdit = await scopedApp.request(`${origin}/api/v1/promotion/links`, {
+    method: 'POST',
+    headers: { Origin: origin, Cookie: otherMember.cookie, 'X-CSRF-Token': otherMember.csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() },
+    body: JSON.stringify({ kind: 'social_post', target: postId }),
+  });
+  assert.equal(refusedAfterEdit.status, 404);
+  await scopedApp.request(`${origin}/api/v1/promotion/clicks`, {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json', 'User-Agent': REAL.replace('128.0.0.0', '128.0.0.10') },
+    body: JSON.stringify({ code: created.code }),
+  });
+  assert.equal(await pointsOf(created.code), 1);
+  const mineStale = await (await scopedApp.request(`${origin}/api/v1/promotion/links/mine?period=week`, {
+    headers: { Origin: origin, Cookie: maker.cookie },
+  })).json() as { items: { code: string; available: boolean }[] };
+  assert.equal(mineStale.items.find(i => i.code === created.code)?.available, false);
 });

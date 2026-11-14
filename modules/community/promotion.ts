@@ -15,7 +15,8 @@ import { getEventShareCode } from './events.js';
 import { highlightShareImage, readHighlightEvent } from './event-highlights.js';
 import { avatarUrl } from '../identity-membership/avatars.js';
 import { readPublicCards } from '../identity-membership/member-sharing.js';
-import { PUBLIC_WORK_VISIBLE, readPublicWork } from '../opportunity-project-work/public-sharing.js';
+import { readPublicWork, PUBLIC_WORK_VISIBLE } from '../opportunity-project-work/public-sharing.js';
+import { publicSocialPostIds } from './public-social-posts.js';
 import type { Actor } from '../identity-membership/service.js';
 
 const SHARE_TARGET_JOIN = `LEFT JOIN showcases s ON sh.kind='work' AND s.showcase_id=sh.ref_id AND s.community_id=sh.community_id
@@ -136,7 +137,7 @@ async function memberCardTarget(pool: Pool | PoolClient, actor: Actor, target: s
   return { title: card.title, key: `${uid}:${card.generation}` };
 }
 
-async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: PromotionKind, target: string) {
+async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: PromotionKind, target: string, publicCommunity?: string | null) {
   if (kind === 'share') {
     requireCondition(z.uuid().safeParse(target).success,422,'validation_failed','分享目標不正確。');
     const row=(await pool.query(`SELECT sh.title FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE}`,[target,actor.community_id])).rows[0];
@@ -156,9 +157,12 @@ async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: Promoti
   }
   if (kind === 'social_post') {
     requireCondition(z.uuid().safeParse(target).success, 422, 'validation_failed', '貼文目標不正確。');
-    const row = (await pool.query(`SELECT title FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active' AND kind='link'`, [target, actor.community_id])).rows[0];
+    const row = (await pool.query(`SELECT kind, title FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active'`, [target, actor.community_id])).rows[0] as { kind: string; title: string } | undefined;
     requireCondition(row, 404, 'not_found', '找不到可分享的貼文。');
-    return { title: row.title as string, key: target };
+    if (row.kind !== 'link') {
+      requireCondition((await publicSocialPostIds(pool, [target], publicCommunity ?? undefined)).has(target.toLowerCase()), 404, 'not_found', '這則貼文沒有公開頁，只能分享站內連結。');
+    }
+    return { title: (row.kind === 'link' ? row.title : row.title || '自由工坊貼文'), key: target };
   }
   if (kind === 'member_service') {
     requireCondition(z.uuid().safeParse(target).success, 422, 'validation_failed', '服務目標不正確。');
@@ -181,7 +185,7 @@ function linkView(row: { kind: PromotionKind; target_key: string; code: string }
   return { kind: row.kind, target: row.target_key, code: row.code, path: `/go/${row.code}`, title, points };
 }
 
-export async function createPromotionLink(pool: Pool, actor: Actor, raw: unknown, now = new Date()): Promise<PromotionLinkView> {
+export async function createPromotionLink(pool: Pool, actor: Actor, raw: unknown, now = new Date(), publicCommunity?: string | null): Promise<PromotionLinkView> {
   const body = linkInput.parse(raw);
   const day = taipeiDayStart(now);
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -189,7 +193,7 @@ export async function createPromotionLink(pool: Pool, actor: Actor, raw: unknown
       return await transaction(pool, async q => {
         await lockMemberSession(q, actor);
         await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`promo-link:${actor.user_id}:${taipeiDate(now)}`]);
-        const { title, key } = await assertTarget(q, actor, body.kind, body.target);
+        const { title, key } = await assertTarget(q, actor, body.kind, body.target, publicCommunity);
         const existing = (await q.query(`SELECT link_id,kind,target_key,code FROM promotion_links
           WHERE community_id=$1 AND user_id=$2 AND kind=$3 AND target_key=$4 AND revoked_at IS NULL`, [actor.community_id, actor.user_id, body.kind, key])).rows[0];
         if (existing) {
@@ -223,7 +227,7 @@ function catalogBook(target: string) {
 }
 
 // Titles are read-only and batched: one query per kind that actually appears. Catalog books need none.
-async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) {
+export async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: Pick<MineRow, 'kind' | 'target_key'>[], publicCommunity?: string | null) {
   const shareIds=rows.filter(row=>row.kind==='share'&&z.uuid().safeParse(row.target_key).success).map(row=>row.target_key);
   const shareRows=shareIds.length?(await pool.query("SELECT share_id::text AS id,title,state='published' AS available FROM shares WHERE community_id=$1 AND share_id=ANY($2::uuid[])",[actor.community_id,shareIds])).rows:[];
   const shareById=new Map(shareRows.map(row=>[row.id,row]));
@@ -232,7 +236,9 @@ async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) 
   const submissions = rows.filter(row => row.kind === 'skill_book' && /^submission:[0-9a-f-]{36}$/i.test(row.target_key)).map(row => row.target_key.slice(11).toLowerCase());
   const services = rows.filter(row => row.kind === 'member_service' && z.uuid().safeParse(row.target_key).success).map(row => row.target_key);
   const eventRows = events.length ? (await pool.query(`SELECT event_id::text AS id,title,state='published' AS available FROM community_events WHERE community_id=$1 AND event_id=ANY($2::uuid[])`, [actor.community_id, events])).rows as { id: string; title: string; available: boolean }[] : [];
-  const postRows = posts.length ? (await pool.query(`SELECT post_id::text AS id,title,state='active' AS available FROM community_social_posts WHERE community_id=$1 AND post_id=ANY($2::uuid[])`, [actor.community_id, posts])).rows as { id: string; title: string; available: boolean }[] : [];
+  const postRows = posts.length ? (await pool.query(`SELECT post_id::text AS id,kind,title,state='active' AS active FROM community_social_posts WHERE community_id=$1 AND post_id=ANY($2::uuid[])`, [actor.community_id, posts])).rows as { id: string; kind: string; title: string; active: boolean }[] : [];
+  const notePostIds = postRows.filter(row => row.active && row.kind !== 'link').map(row => row.id);
+  const publicNotes = notePostIds.length ? await publicSocialPostIds(pool, notePostIds, publicCommunity ?? undefined) : new Set<string>();
   const submissionById = await readPublishedSkillTitles(pool, actor.community_id, submissions);
   const serviceById = await readMemberServiceTitles(pool, actor.community_id, services);
   const cardOwners = [...new Set(rows.flatMap(row => {
@@ -242,8 +248,8 @@ async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) 
   }))];
   const cardByOwner = cardOwners.length ? await readPublicCards(pool, actor.community_id, cardOwners) : new Map();
   const eventById = new Map(eventRows.map(row => [row.id, row]));
-  const postById = new Map(postRows.map(row => [row.id, row]));
-  return (row: MineRow) => {
+  const postById = new Map(postRows.map(row => [row.id, { title: row.kind === 'link' ? row.title : row.title || '自由工坊貼文', available: row.active && (row.kind === 'link' || publicNotes.has(row.id.toLowerCase())) }]));
+  return (row: Pick<MineRow, 'kind' | 'target_key'>) => {
     if(row.kind==='share'){const found=shareById.get(row.target_key);return found?{title:found.title,available:found.available}:{title:'已無法開啟',available:false};}
     if (row.kind === 'platform') {
       const page = platformTarget(row.target_key);
@@ -276,7 +282,7 @@ async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) 
   };
 }
 
-export async function listMyPromotionLinks(pool: Pool|PoolClient, actor: Actor, periodRaw: string | undefined, now = new Date()) {
+export async function listMyPromotionLinks(pool: Pool|PoolClient, actor: Actor, periodRaw: string | undefined, now = new Date(), publicCommunity?: string | null) {
   const period = periodSchema.parse(periodRaw ?? 'week');
   const since = periodStart(period, now);
   const week = periodStart('week', now);
@@ -289,7 +295,7 @@ export async function listMyPromotionLinks(pool: Pool|PoolClient, actor: Actor, 
     FROM promotion_links l LEFT JOIN promotion_clicks c ON c.link_id=l.link_id
     WHERE l.community_id=$1 AND l.user_id=$2 AND l.revoked_at IS NULL
     GROUP BY l.link_id ORDER BY points DESC,l.created_at DESC LIMIT 100`, [actor.community_id, actor.user_id, since, week, month])).rows as MineRow[];
-  const resolve = await mineTitles(pool, actor, rows);
+  const resolve = await mineTitles(pool, actor, rows, publicCommunity);
   const items = rows.map(row => {
     const resolved = resolve(row);
     return { ...linkView(row, resolved.title, { week: row.week_points, month: row.month_points, all: row.all_points }), period_points: row.points, available: resolved.available };
@@ -345,7 +351,7 @@ function absoluteUrl(origin: string, url: string) {
   return url.startsWith('https://') || url.startsWith('http://') ? url : origin + url;
 }
 
-async function shareable(pool: Pool, link: LinkRow) {
+async function shareable(pool: Pool, link: LinkRow, publicCommunity?: string | null) {
   if (link.revoked_at || !link.owner_active) return false;
   if (link.kind === 'share') return Boolean((await pool.query(`SELECT 1 FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE} AND (sh.first_sharer_user_id IS NULL OR NOT is_verification_test_account(sh.first_sharer_user_id))`,[link.target_key,link.community_id])).rowCount);
   if (link.kind === 'platform') return Boolean(platformTarget(link.target_key));
@@ -356,8 +362,9 @@ async function shareable(pool: Pool, link: LinkRow) {
   }
   if (link.kind === 'event') return Boolean(await eventStillShared(pool, link.target_key));
   if (link.kind === 'social_post') {
-    const row = (await pool.query(`SELECT 1 FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active'`, [link.target_key, link.community_id])).rows[0];
-    return Boolean(row);
+    const row = (await pool.query(`SELECT kind FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active'`, [link.target_key, link.community_id])).rows[0] as { kind: string } | undefined;
+    if (!row) return false;
+    return row.kind === 'link' || (await publicSocialPostIds(pool, [link.target_key], publicCommunity ?? undefined)).has(link.target_key.toLowerCase());
   }
   if (link.kind === 'member_service') return Boolean(await readMemberServiceShare(pool, link.community_id, link.target_key));
   if (link.kind === 'member_card') return Boolean(await memberCardForLink(pool, link));
@@ -373,7 +380,8 @@ function introNumber(raw: string | undefined) {
 type OpenTarget = { href: string; title: string; description: string; image?: { url: string; width: number; height: number } } &
   ({ navigation: 'internal' } | { navigation: 'external'; destination: string; action: string });
 
-async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefined, origin: string, now: Date): Promise<OpenTarget | null> {
+async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefined, origin: string, now: Date, publicCommunity?: string | null): Promise<OpenTarget | null> {
+  if (!await shareable(pool, link, publicCommunity)) return null;
   if(link.kind==='share'){
     const row=(await pool.query(`SELECT sh.kind, sh.ref_id, sh.title FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE}`,[link.target_key,link.community_id])).rows[0];
     if(!row)return null;
@@ -385,7 +393,6 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
     return {navigation:'internal',href:`/s/${link.target_key}?via=${link.code}`,title:row.title,description:'自由工坊分享'};
   }
   if (link.kind === 'member_card') {
-    if (link.revoked_at || !link.owner_active) return null;
     const card = await memberCardForLink(pool, link);
     if (!card) return null;
     return {
@@ -395,7 +402,6 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
       image: { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height },
     };
   }
-  if (!await shareable(pool, link)) return null;
   if (link.kind === 'platform') {
     const page = platformTarget(link.target_key)!;
     return { navigation: 'internal', href: page.href, title: page.title, description: page.description, image: { url: origin + page.image, width: page.width, height: page.height } };
@@ -449,8 +455,12 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
       : { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height };
     return { navigation: 'internal', href: `/services/${link.target_key}`, title: service.title, description: service.summary, image };
   }
-  const post = (await pool.query(`SELECT post_id,url,title,platform FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active' AND kind='link'`, [link.target_key, link.community_id])).rows[0] as { post_id: string; url: string; title: string; platform: SocialPlatform } | undefined;
+  const post = (await pool.query(`SELECT post_id,kind,url,title,platform FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active'`, [link.target_key, link.community_id])).rows[0] as { post_id: string; kind: string; url: string | null; title: string; platform: SocialPlatform } | undefined;
   if (!post) return null;
+  if (post.kind !== 'link') {
+    return { navigation: 'internal', href: `/posts/${post.post_id}`, title: post.title || '自由工坊貼文', description: '自由工坊貼文' };
+  }
+  if (!post.url) return null;
   const destination = normalizeShareUrl(post.url);
   if (!destination.ok || destination.url !== post.url || isOwnWorkshopHost(destination.host, origin)) return null;
   const thumb = (await pool.query('SELECT 1 FROM community_social_post_thumbnails WHERE post_id=$1', [post.post_id])).rowCount;
@@ -482,18 +492,18 @@ export function promotionUnavailableHtml() {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>分享連結目前無法開啟｜自由工坊</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/go.css"></head><body><main>${goBrand}<h1>分享連結目前無法開啟</h1><p>連結可能已撤回、內容已停止分享，或網址不完整。</p><a class="go-primary" href="/">返回自由工坊</a></main></body></html>`;
 }
 
-export async function promotionGo(pool: Pool, code: string, intro: string | undefined, origin: string, now = new Date()) {
+export async function promotionGo(pool: Pool, code: string, intro: string | undefined, origin: string, now = new Date(), publicCommunity?: string | null) {
   const link = await readLink(pool, code);
   if (!link) return null;
-  const target = await openTarget(pool, link, intro, origin, now);
+  const target = await openTarget(pool, link, intro, origin, now, publicCommunity);
   if (!target) return null;
   const chosen = link.kind === 'skill_book' ? introNumber(intro) : null;
   return goHtml(link.code, target, `${origin}/go/${link.code}${chosen ? `?intro=${chosen}` : ''}`);
 }
 
-export async function creditPromotionClick(pool: Pool, input: { code: string; userAgent: string; network: string; sessionUserId: string | null; now: Date }) {
+export async function creditPromotionClick(pool: Pool, input: { code: string; userAgent: string; network: string; sessionUserId: string | null; now: Date; publicCommunity?: string | null }) {
   const link = await readLink(pool, input.code);
-  if (!link || !await shareable(pool, link)) return;
+  if (!link || !await shareable(pool, link, input.publicCommunity)) return;
   if (isPreviewBot(input.userAgent)) return;
   if (input.sessionUserId && (await pool.query('SELECT is_verification_test_account($1) AS test',[input.sessionUserId])).rows[0].test) return;
   if (input.sessionUserId && input.sessionUserId === link.user_id) return;

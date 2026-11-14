@@ -308,7 +308,7 @@ function ShowcaseCard({
         </div>
       </dl>
       {showcase.public_url && <div className="actions"><a className="btn btn-ghost" href={showcase.public_url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">查看作品 ↗</a></div>}
-      {mine && <WorkPublicSharing showcaseId={showcase.showcase_id} workVersion={showcase.aggregate_version} status="published" onReload={onReload} />}
+      {mine && <WorkPublicSharing showcaseId={showcase.showcase_id} title={showcase.title} workVersion={showcase.aggregate_version} status="published" onReload={onReload} />}
       <details><summary>成果紀錄</summary><code>{showcase.artifact_ref}</code></details>
       {authoring.error && <p className="banner banner-error" role="alert">{authoring.error}</p>}
       {submitted && <section className="stack" role="status" aria-label="合作需求已送出"><p>已送出合作需求。這是你與作品作者的合作需求，不是公開貼文。</p><div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => { const card = document.getElementById(`opportunity-${submitted.opportunity_id}`); card?.scrollIntoView({ block: 'center', behavior: 'instant' }); card?.focus(); }}>查看這份合作需求</button></div></section>}
@@ -528,7 +528,7 @@ export function ShowcaseDraftEditor({ id, onChanged, onClose }: { id: string | n
       <div className="actions">{row?.status !== 'published' && <button className="btn btn-secondary btn-small" disabled={disabled || conflict}>儲存私人草稿</button>}{row && row.status !== 'published' && <button type="button" className="btn btn-secondary btn-small" disabled={disabled || conflict || dirty} onClick={() => { setConfirm(true); setConsent(false) }}>確認發布範圍</button>}{row && row.status !== 'withdrawn' && <button type="button" className="btn btn-secondary btn-small" disabled={disabled || conflict} onClick={() => command('withdraw')}>撤下作品</button>}</div>
       {row?.status !== 'published' && dirty && <p className="hint">先儲存目前輸入，才可確認發布。</p>}
       {confirm && <section className="stack" aria-label="確認作品發布"><h3>發布為會員可見</h3><p>只有本社群會員可見，不提供「僅分享連結」或「公開可索引」發布範圍。</p><label className="choice"><input type="checkbox" checked={consent} disabled={disabled} onChange={event => setConsent(event.target.checked)}/>我同意將已儲存版本分享給本社群會員</label><div className="actions"><button type="button" className="btn btn-primary btn-small" disabled={disabled || !consent || dirty || conflict} onClick={() => command('publish')}>確認發布</button><button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => { setConfirm(false); setConsent(false) }}>取消發布</button></div></section>}
-      {row?.status === 'published' && <WorkPublicSharing showcaseId={row.showcase_id} workVersion={dirty ? undefined : row.aggregate_version} status={row.status} onReload={() => reload(false)} />}
+      {row?.status === 'published' && <WorkPublicSharing showcaseId={row.showcase_id} title={row.title} workVersion={dirty ? undefined : row.aggregate_version} status={row.status} onReload={() => reload(false)} />}
     </form>}
     {!loading && id && !row && <div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => void reload(false)}>重新載入作品</button></div>}
   </section>

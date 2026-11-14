@@ -173,6 +173,7 @@ html:is([data-theme="light"],[data-theme="versefolk"]) :is(
   .guild-thread-select,.guild-announcements summary,
   .social-links-editor .social-link-own-row strong,.member-social-link,
   .skill-badge,.skill-badge-rank,.skill-share-text,.skill-share-dialog,.promotion-share-dialog,
+  .share-intros > summary,.share-more > summary,
   .skill-intro-dialog,.skill-upload-dialog,.skill-library-book .skill-library-copy > .skill-library-title,
   .github-book-metrics dd
 ) {color:var(--ink);}
@@ -196,7 +197,7 @@ html:is([data-theme="light"],[data-theme="versefolk"]) :is(
   .members-panel .directory-empty,.guild-thread-select span,.guild-announcements time,
   .social-links-editor .social-link-platform,.social-links-editor .social-link-visibility,
   .member-social-display h4,.member-social-link > span:first-child,
-  .skill-discovery .field-hint,.skill-share-status,.skill-share-url,
+  .skill-discovery .field-hint,.skill-share-status,.skill-share-url,.share-credit-note,
   .skill-intro-collaboration p,.skill-discovery .field-hint,
   :is(.community-library,.community-skill-library) .skill-library-count,:is(.community-library,.community-skill-library) .community-book > p,
   :is(.community-library,.community-skill-library) .community-library-heading > div > p:last-child,
@@ -232,6 +233,7 @@ html:is([data-theme="light"],[data-theme="versefolk"]) :is(
 
 /* Dialogs and profile details. */
 html:is([data-theme="light"],[data-theme="versefolk"]) :is(.skill-intro-header,.skill-share-dialog,.promotion-share-dialog,.guild-detail-dialog) {background:var(--bg-elev);color:var(--ink);border-color:var(--line);}
+html:is([data-theme="light"],[data-theme="versefolk"]) .share-intro-option {background:var(--module-subtle);color:var(--ink);border-color:var(--line);}
 html:is([data-theme="light"],[data-theme="versefolk"]) .skill-intro-command {color:var(--ink);}
 html:is([data-theme="light"],[data-theme="versefolk"]) .skill-intro-details > summary {color:var(--ink);}
 html:is([data-theme="light"],[data-theme="versefolk"]) :is(.skill-intro-details > summary:hover,.skill-intro-details > summary:focus-visible) {color:var(--module-green-ink);}

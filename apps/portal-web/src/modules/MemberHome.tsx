@@ -6,7 +6,7 @@ import type { ModulePanelProps } from './shared';
 import type { TabId } from '../types';
 import { loadLabels, type MemberCardData } from './Membership';
 import { MemberAvatar } from './MemberAvatar';
-import { PromotionShare } from './PromotionShare';
+import { promotionLink, ShareButton } from '../share/ShareButton';
 import { logConsoleEvent } from '../game-console-core';
 import { consoleChannel } from '../game-console-routing';
 import './HomeDesign.css';
@@ -253,7 +253,7 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
       <div className="home-member-actions">
         <a className="btn btn-ghost" href="#me/settings">編輯個人頁</a>
         {showAssessment && <button type="button" className="btn btn-ghost" onClick={() => onNavigate?.('positioning')}>補做定位測驗</button>}
-        <PromotionShare client={client} kind="platform" target="workshop" title="自由工坊" text="自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。" label="分享自由工坊"/>
+        <ShareButton title="自由工坊" fallbackUrl="/" makeLink={promotionLink(client, 'platform', 'workshop')} text="自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。" label="分享自由工坊"/>
       </div>
     </section>
     <MemberRecommendations client={client}/>

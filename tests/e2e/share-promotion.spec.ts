@@ -64,6 +64,8 @@ async function creditVisit(browser: Browser, url: string, expected: (url: URL) =
 
 async function openBoards(page: Page) {
   await navigate(page, '推廣排行榜');
+  const legacy = page.locator('.legacy-promotion');
+  if (!await legacy.evaluate(element => (element as HTMLDetailsElement).open)) await legacy.locator(':scope > summary').click();
   const rankings = page.locator('.promotion-rankings');
   await expect(rankings).toBeVisible();
   if (!await rankings.evaluate(element => (element as HTMLDetailsElement).open)) await rankings.locator(':scope > summary').click();
@@ -104,9 +106,9 @@ test('a skill-book share link credits one guest click on the weekly board', asyn
   const dialog = page.getByRole('dialog', { name: '分享「Hao 社群貼文技能書」', exact: true });
   const url = dialog.locator('.skill-share-url');
   await expect(url).toHaveText(/\/go\/[A-Za-z0-9_-]{10}(\?intro=\d+)?$/);
-  await expect(dialog.locator('.promotion-share-points')).toHaveText(/這個連結：本週 \d+ 分・累計 \d+ 分/);
-  const before = await dialog.locator('.promotion-share-points').innerText();
-  const weekBefore = Number(/本週 (\d+) 分/.exec(before)![1]);
+  await expect(dialog.locator('.share-credit-note')).toHaveText('有人點開，會記在你名下。');
+  const boardsBefore = await (await page.request.get('/api/v1/promotion/leaderboards?period=week')).json() as { boards: { kind: string; me?: { points: number } | null }[] };
+  const weekBefore = Number(boardsBefore.boards.find(board => board.kind === 'skill_book')?.me?.points ?? 0);
   const go = (await url.innerText()).trim();
   await page.keyboard.press('Escape');
 
@@ -146,10 +148,11 @@ test('an event share link lands on the public page and shows the click', async (
   const card = page.locator('article.experience-card').filter({ has: page.getByRole('heading', { name: EVENT_TITLE, level: 3 }) });
   await card.scrollIntoViewIfNeeded();
   await card.getByRole('button', { name: '分享活動', exact: true }).click();
-  const field = card.getByLabel('分享連結');
-  await expect(field).toHaveValue(/\/go\/[A-Za-z0-9_-]{10}$/);
-  await expect(card.getByText('推薦碼已包含在連結內；訪客每天點開算 1 分（活動推廣排行榜）。')).toBeVisible();
-  eventGo = await field.inputValue();
+  const dialog = page.getByRole('dialog', { name: `分享「${EVENT_TITLE}」`, exact: true });
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  await expect(dialog.locator('.share-credit-note')).toHaveText('有人點開，會記在你名下。');
+  eventGo = (await dialog.locator('.skill-share-url').innerText()).trim();
+  await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, eventGo, url => url.pathname === `/events/${eventId}` && url.searchParams.has('ref'), e2eAuthPool);
   await card.getByRole('button', { name: '分享報名統計', exact: true }).click();
   const report = card.locator('.event-referral-report');
@@ -191,10 +194,9 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   const dialog = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   await expect(dialog).toContainText('自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。');
-  await expect(dialog.locator('.promotion-share-rule')).toHaveText('只在你按下分享或複製後交給系統處理，不會自動發文或傳訊息。請先確認內容適合對方。有效點擊依既有規則計分；不代表閱讀、成交或獎勵。');
-  const points = dialog.locator('.promotion-share-points');
-  await expect(points).toHaveText(/這個連結：本週 \d+ 分・累計 \d+ 分/);
-  const weekBefore = Number(/本週 (\d+) 分/.exec(await points.innerText())![1]);
+  await expect(dialog.locator('.share-credit-note')).toHaveText('有人點開，會記在你名下。');
+  const boardsBefore = await (await page.request.get('/api/v1/promotion/leaderboards?period=week')).json() as { boards: { kind: string; me?: { points: number } | null }[] };
+  const weekBefore = Number(boardsBefore.boards.find(board => board.kind === 'platform')?.me?.points ?? 0);
   platformGo = (await dialog.locator('.skill-share-url').innerText()).trim();
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
 
@@ -262,6 +264,7 @@ test('platform choices hand the canonical referral URL to LINE and Telegram only
   expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionOpens)).toEqual([]);
   await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
+  await dialog.locator('.share-more > summary').click();
   try {
     await requested;
     await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toBeDisabled();
@@ -295,7 +298,7 @@ test('platform choices hand the canonical referral URL to LINE and Telegram only
   await dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true }).click();
   const manual = dialog.getByLabel('手動複製分享內容', { exact: true });
   await expect(manual).toHaveValue(`${text}\n${url}`); await expect(manual).toBeFocused();
-  await expect(dialog.getByRole('status')).toHaveText('無法開啟 LINE 分享，請選取並複製下方內容');
+  await expect(dialog.getByRole('status')).toHaveText('無法開啟 LINE 分享，請手動複製下面的內容。');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden(); await expect(page.getByRole('button', { name: '分享自由工坊', exact: true })).toBeFocused();
 });
@@ -366,13 +369,15 @@ test('the social zone previews, shares, replaces and keeps a thumbnail', async (
   await sharePost(page, INSTAGRAM);
   await sharePost(page, FACEBOOK, 'Facebook 示範');
 
-  await youtube.getByRole('button', { name: '推廣原文', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '分享「E2E 示範影片」', exact: true });
-  await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toHaveCount(0);
-  await expect(dialog.getByRole('button', { name: 'Telegram 分享 ↗', exact: true })).toHaveCount(0);
+  await youtube.getByRole('button', { name: '分享貼文連結', exact: true }).click();
+  const postShare = page.getByRole('dialog', { name: '分享貼文連結', exact: true });
+  await postShare.getByRole('button', { name: '分享', exact: true }).click();
+  const dialog = page.locator('.skill-share-dialog');
+  await expect(dialog.locator('.share-more')).not.toHaveAttribute('open');
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   const go = (await dialog.locator('.skill-share-url').innerText()).trim();
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
+  await postShare.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, go, url => url.href === YOUTUBE, e2eAuthPool, 'https://www.youtube.com/**');
   await page.reload();
   await selectSocialFeed(page,'全部動態');
@@ -407,8 +412,9 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
   const avatar = await card.locator('.social-byline .social-avatar').boundingBox();
   expect(avatar!.width).toBeLessThanOrEqual(40);
   const open = await card.getByRole('link', { name: '開啟原文 ↗', exact: true }).boundingBox();
-  const share = await card.getByRole('button', { name: '推廣原文', exact: true }).boundingBox();
-  expect(Math.abs(open!.y - share!.y)).toBeLessThanOrEqual(1);
+  const share = await card.getByRole('button', { name: '分享貼文連結', exact: true }).boundingBox();
+  expect(open!.height).toBeGreaterThanOrEqual(44);
+  expect(share!.height).toBeGreaterThanOrEqual(44);
 
   await navigate(page, '會員首頁');await expandHomeSections(page);
   await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
@@ -573,11 +579,13 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
     await navigate(page, '社群活動');
     const card = page.locator('article.experience-card').filter({ has: page.getByRole('heading', { name: EVENT_TITLE, level: 3 }) });
     await card.scrollIntoViewIfNeeded();
-    if (!await card.getByLabel('分享連結').count()) await card.getByRole('button', { name: '分享活動', exact: true }).click();
-    await expect(card.getByLabel('分享連結')).toBeVisible();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-      await card.screenshot({ path: `${SHOTS}/event-share-${theme}-${width}.png` });
+      await card.getByRole('button', { name: '分享活動', exact: true }).click();
+      const eventDialog = page.getByRole('dialog', { name: `分享「${EVENT_TITLE}」`, exact: true });
+      await expect(eventDialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+      await eventDialog.screenshot({ path: `${SHOTS}/event-share-${theme}-${width}.png` });
+      await eventDialog.getByRole('button', { name: '關閉分享', exact: true }).click();
     }
   }
 
@@ -840,6 +848,8 @@ test('sharing starts with real content choices and keeps ranking optional', asyn
   }
   await expect(page.getByRole('navigation',{name:'主要工作區',exact:true}).getByRole('button',{name:'動態',exact:true})).toBeVisible();
   await navigate(page, '推廣排行榜');
+  await expect(page.locator('.legacy-promotion')).not.toHaveAttribute('open');
+  await page.locator('.legacy-promotion > summary').click();
   await expect(page.locator('.promotion-rankings')).not.toHaveAttribute('open');
   await expect(page.getByRole('region',{name:'我的推廣連結',exact:true})).toBeVisible();
   expect(creates).toBe(0);
@@ -860,6 +870,7 @@ test('failed personal-link reads are not presented as an empty sharing history',
   await login(page);
   await page.route('**/api/v1/promotion/links/mine?period=*', route => route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({status:503,detail:'合成讀取失敗'})}));
   await navigate(page, '推廣排行榜');
+  await page.locator('.legacy-promotion > summary').click();
   const mine=page.getByRole('region',{name:'我的推廣連結',exact:true});
   await expect(mine).toContainText('尚未取得連結紀錄，請重新載入。');
   await expect(mine).not.toContainText('還沒有建立分享連結。');

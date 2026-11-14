@@ -68,7 +68,12 @@ async function skill(page:Page){
   await page.route('**/api/v1/skills/social-post/share-content',route=>route.fulfill({json:{introductions:['一起學會整理真實的社群貼文。','先寫好，再親自分享給朋友。'],illustration_url:'',illustration_alt:''}}));
   await navigate(page,'技能書架');await page.getByRole('button',{name:'未解鎖',exact:true}).click();const library=page.locator('.community-library');
   await library.getByLabel('搜尋技能書',{exact:true}).fill('社群貼文');await library.locator('article[data-book-id="social-post"]').getByRole('button',{name:'分享技能',exact:true}).click();
-  const dialog=page.getByRole('dialog',{name:'分享「Hao 社群貼文技能書」',exact:true});await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}\?intro=\d+$/);return dialog;
+  const dialog=page.getByRole('dialog',{name:'分享「Hao 社群貼文技能書」',exact:true});
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  await dialog.locator('.share-intros > summary').click();
+  await dialog.getByRole('radio').first().check();
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}\?intro=\d+$/);
+  return dialog;
 }
 
 test('positive control: a real caller shows success only after the controlled clipboard ACK',async({page})=>{
@@ -118,8 +123,8 @@ test('promotion copy locks related share actions until ACK and selects exact man
   await dialog.getByRole('button',{name:'複製連結',exact:true}).click();await capture(page,dialog,'promotion-copy-pending');
   const pending=dialog.getByRole('button',{name:'複製中…',exact:true});await expect(pending).toBeDisabled();await expect(dialog.getByRole('button',{name:'分享',exact:true})).toBeDisabled();
   await pending.dispatchEvent('click');expect(await calls(page)).toHaveLength(1);await finish(page,0,'denied');const manual=dialog.getByLabel('手動複製分享內容',{exact:true});
-  await expect(manual).toBeFocused();expect(await manual.inputValue()).toBe((await calls(page))[0].value);expect(await manual.inputValue()).toContain(url);await expect(dialog).not.toContainText('已複製連結');
-  await dialog.getByRole('button',{name:'複製連結',exact:true}).click();await finish(page,1);await expect(dialog.getByRole('status')).toHaveText('已複製連結');await expect(manual).toHaveCount(0);
+  await expect(manual).toBeFocused();expect(await manual.inputValue()).toBe((await calls(page))[0].value);expect(await manual.inputValue()).toContain(url);await expect(dialog).not.toContainText('已複製。');
+  await dialog.getByRole('button',{name:'複製連結',exact:true}).click();await finish(page,1);await expect(dialog.getByRole('status')).toHaveText('已複製。');await expect(manual).toHaveCount(0);
 });
 
 test('promotion native share shows waiting, retains direct user activation and cancels without copying',async({page})=>{
@@ -131,11 +136,11 @@ test('promotion native share shows waiting, retains direct user activation and c
 
 for(const native of [false,true])test(`skill share ${native?'native':'copy'} waits visibly and does not leak old ACK into a reopened preview`,async({page})=>{
   await page.setViewportSize({width:320,height:844});await holdCapabilities(page,native);await login(page);let dialog=await skill(page);
-  await dialog.getByRole('button',{name:native?'分享':'複製介紹與連結',exact:true}).click();await capture(page,dialog,`skill-${native?'share':'copy'}-pending`);
-  const pending=dialog.getByRole('button',{name:native?'分享中…':'複製中…',exact:true});await expect(pending).toBeDisabled();await expect(dialog.getByRole('button',{name:'換一句',exact:true})).toBeDisabled();
+  await dialog.getByRole('button',{name:native?'分享':'複製連結',exact:true}).click();await capture(page,dialog,`skill-${native?'share':'copy'}-pending`);
+  const pending=dialog.getByRole('button',{name:native?'分享中…':'複製中…',exact:true});await expect(pending).toBeDisabled();await expect(dialog.getByRole('radio').first()).toBeDisabled();
   await pending.dispatchEvent('click');expect(await calls(page)).toHaveLength(1);await page.keyboard.press('Escape');await expect(dialog).toBeHidden();
   await page.locator('article[data-book-id="social-post"]').getByRole('button',{name:'分享技能',exact:true}).click();dialog=page.getByRole('dialog',{name:'分享「Hao 社群貼文技能書」',exact:true});await expect(dialog).toBeVisible();
-  await finish(page,0,native?'cancel':undefined);await expect(dialog.getByRole('button',{name:native?'分享':'複製介紹與連結',exact:true})).toBeEnabled();await expect(dialog.getByRole('status')).toHaveCount(0);
+  await finish(page,0,native?'cancel':undefined);await expect(dialog.getByRole('button',{name:native?'分享':'複製連結',exact:true})).toBeEnabled();await expect(dialog.getByRole('status')).toHaveCount(0);
   expect(await calls(page)).toHaveLength(1);
 });
 

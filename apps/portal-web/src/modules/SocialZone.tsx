@@ -7,7 +7,6 @@ import {ApiError, type PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
 import {isOwnWorkshopHost,normalizeShareUrl,PLATFORM_LABELS, type SocialPlatform} from '../../../../packages/shared/share-url';
 import {MemberAvatar} from './MemberAvatar';
-import {PromotionShare} from './PromotionShare';
 import {SocialInteractions} from './SocialInteractions';
 import {SocialPostEditor} from './SocialPostEditor';
 import {ShortVideoFeed} from './ShortVideoFeed';
@@ -736,7 +735,6 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           <SocialInteractions onCommentsChanged={view.inline === false ? () => { void reconcileShortComments(post); } : undefined} onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => {if(client!==currentClient.current||feedSession!==client.sessionGeneration)return;++confirmedWrites.current;setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item));}}/>
           <div className="social-actions">
             {post.url && <a className="btn btn-ghost" href={post.url} target="_blank" rel="noopener noreferrer">開啟原文 ↗</a>}
-            {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="推廣原文"/>}
           </div>
         </div>
       </article>;

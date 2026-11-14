@@ -80,7 +80,7 @@ async function copyCard(page:Page,settings:Locator,name:string){
   const url=(await dialog.locator('.skill-share-url').innerText()).trim();
   expect(new URL(url).origin).toBe(new URL(page.url()).origin);
   await dialog.getByRole('button',{name:'複製連結',exact:true}).click();
-  await expect(dialog.getByRole('status')).toHaveText('已複製連結');
+  await expect(dialog.getByRole('status')).toHaveText('已複製。');
   await expect.poll(async()=>(await localShares(page)).copies).toEqual([...before.copies,`${SHARE_TEXT}\n${url}`]);
   await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
   await expect(dialog).toBeHidden();

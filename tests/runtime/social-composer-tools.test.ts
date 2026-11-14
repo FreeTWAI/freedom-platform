@@ -56,7 +56,7 @@ function harness(){
   const jsx=(type:any,props:Record<string,any>,key?:unknown)=>({type,props,key}),module={exports:{} as any};
   const childModules:Record<string,string[]>={
     './SocialPostBookmark':['SocialPostOptions'],'./SocialTools':['SocialIcon','SocialTextTools','SocialRichText'],
-    './MemberAvatar':['MemberAvatar'],'./PromotionShare':['PromotionShare'],'./SocialInteractions':['SocialInteractions'],
+    './MemberAvatar':['MemberAvatar'],'./SocialInteractions':['SocialInteractions'],
     './SocialPostEditor':['SocialPostEditor'],'./ShortVideoFeed':['ShortVideoFeed'],'./InlineVideo':['InlineVideo'],'./SocialPostShare':['SocialPostShare'],
   };
   const children=Object.fromEntries(Object.entries(childModules).map(([path,names])=>[path,Object.fromEntries(names.map(name=>[name,()=>null]))]));

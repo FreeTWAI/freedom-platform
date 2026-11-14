@@ -204,3 +204,15 @@ export async function readPublicSocialPostImage(pool: Pool, id: string, configur
     throw error;
   }
 }
+
+export async function publicSocialPostIds(pool: Pool | PoolClient, ids: readonly string[], configured?: string): Promise<Set<string>> {
+  const valid = [...new Set(ids.filter(id => z.uuid().safeParse(id).success).map(id => id.toLowerCase()))];
+  if (!valid.length) return new Set();
+  const community = await resolvePublicCommunity(pool, configured);
+  if (!community) return new Set();
+  const rows = (await pool.query(
+    `SELECT p.post_id::text AS id ${PUBLIC_JOINS} WHERE p.post_id=ANY($1::uuid[]) AND p.community_id=$2 AND ${PUBLIC_VISIBLE}`,
+    [valid, community],
+  )).rows as { id: string }[];
+  return new Set(rows.map(row => row.id.toLowerCase()));
+}

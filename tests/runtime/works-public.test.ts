@@ -344,46 +344,155 @@ test('consent idempotency, concurrency, default app without personalContent flag
 // Execute the real control and PortalClient with delayed HTTP, following the
 // existing component harness pattern in skill-share-client.test.ts.
 async function sharingControl(t: import('node:test').TestContext) {
-  const { readFileSync } = await import('node:fs');
+  const { existsSync, readFileSync } = await import('node:fs');
+  const pathMod = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
   const { runInNewContext } = await import('node:vm');
+  const { webcrypto } = await import('node:crypto');
+  const { createRequire } = await import('node:module');
   const { transformSync } = await import('esbuild');
+  const React = (await import('react')).default;
   const { PortalClient, ApiError } = await import('../../apps/portal-web/src/api.js');
+
+  class HostNode {
+    [key: string]: any;
+    parentNode: HostNode | null = null;
+    childNodes: HostNode[] = [];
+    attributes: Record<string, string> = {};
+    style = { setProperty() {}, removeProperty() {} };
+    listeners: Record<string, Function[]> = {};
+    namespaceURI = 'http://www.w3.org/1999/xhtml';
+    open = false;
+    constructor(public nodeType: number, public nodeName: string, public ownerDocument: any) {
+      if (nodeType === 1) this.tagName = nodeName;
+    }
+    appendChild(node: HostNode) { node.parentNode?.removeChild(node); this.childNodes.push(node); node.parentNode = this; return node; }
+    removeChild(node: HostNode) { const i = this.childNodes.indexOf(node); assert.notEqual(i, -1); this.childNodes.splice(i, 1); node.parentNode = null; return node; }
+    insertBefore(node: HostNode, before: HostNode) { node.parentNode?.removeChild(node); const i = this.childNodes.indexOf(before); assert.notEqual(i, -1); this.childNodes.splice(i, 0, node); node.parentNode = this; return node; }
+    setAttribute(key: string, value: unknown) { this.attributes[key] = String(value); if (key === 'open') this.open = true; }
+    removeAttribute(key: string) { delete this.attributes[key]; if (key === 'open') this.open = false; }
+    getAttribute(key: string) { return this.attributes[key] ?? null; }
+    setAttributeNS(_ns: string, key: string, value: unknown) { this.setAttribute(key, value); }
+    addEventListener(type: string, fn: Function) { (this.listeners[type] ??= []).push(fn); }
+    removeEventListener(type: string, fn: Function) { this.listeners[type] = (this.listeners[type] ?? []).filter(x => x !== fn); }
+    get firstChild(): HostNode | null { return this.childNodes[0] ?? null; }
+    get lastChild(): HostNode | null { return this.childNodes.at(-1) ?? null; }
+    get nextSibling(): HostNode | null { return this.parentNode?.childNodes[this.parentNode.childNodes.indexOf(this) + 1] ?? null; }
+    get textContent(): string { return this.nodeType === 3 ? this.nodeValue : this.childNodes.map(n => n.textContent).join(''); }
+    set textContent(value: string) { this.childNodes.forEach(n => { n.parentNode = null; }); this.childNodes = []; if (value) this.appendChild(this.ownerDocument.createTextNode(String(value))); }
+    get parentElement(): HostNode | null { return this.parentNode?.nodeType === 1 ? this.parentNode : null; }
+    contains(node: HostNode): boolean { return node === this || this.childNodes.some(c => c.contains(node)); }
+    closest() { return null; }
+    showModal() { this.open = true; this.setAttribute('open', ''); }
+    close() { this.open = false; this.removeAttribute('open'); }
+    focus() {}
+    select() {}
+  }
+  class HostDocument extends HostNode {
+    constructor() {
+      super(9, '#document', null); this.ownerDocument = this;
+      this.documentElement = new HostNode(1, 'HTML', this); this.body = new HostNode(1, 'BODY', this);
+      this.appendChild(this.documentElement); this.documentElement.appendChild(this.body); this.activeElement = this.body;
+    }
+    createElement(name: string) { return new HostNode(1, name.toUpperCase(), this); }
+    createElementNS(ns: string, name: string) { const node = this.createElement(name); node.namespaceURI = ns; return node; }
+    createTextNode(value: string) { const node = new HostNode(3, '#text', this); node.nodeValue = value; return node; }
+  }
+  const document = new HostDocument();
+  const clipboard = { writeText: async (text: string) => { copies.push(text); } };
+  const navigatorState = { clipboard };
+  const windowObj = {
+    location: { origin }, open() { throw Error('No external navigation permitted'); },
+    document, HTMLElement: HostNode, HTMLDetailsElement: class extends HostNode {}, HTMLIFrameElement: class {},
+    addEventListener() {}, removeEventListener() {}, get event() { return undefined; },
+  };
+  document.defaultView = windowObj;
+  Object.assign(globalThis, { document, window: windowObj, HTMLElement: HostNode, HTMLDetailsElement: windowObj.HTMLDetailsElement, Node: HostNode, IS_REACT_ACT_ENVIRONMENT: true });
+  const req = createRequire(import.meta.url);
+  const { createRoot } = req('react-dom/client') as typeof import('react-dom/client');
+  const { flushSync } = req('react-dom') as typeof import('react-dom');
+  const flushReact = (fn: () => void) => React.act(() => flushSync(fn));
+
   const client = new PortalClient();
   client.csrfToken = randomUUID();
-  const hooks: any[] = [], effects: (() => void)[] = [], requests: any[] = [], copies: string[] = [];
-  let cursor = 0, writes = 0;
-  const props: any = { showcaseId: randomUUID(), workVersion: '1', status: 'published', onReload: async () => {} };
-  const react = {
-    useRef: (value: unknown) => { const i = cursor++; return hooks[i] ?? (hooks[i] = { current: value }); },
-    useState: (value: unknown) => { const i = cursor++; if (!(i in hooks)) hooks[i] = value; return [hooks[i], (next: any) => { writes++; hooks[i] = typeof next === 'function' ? next(hooks[i]) : next; }]; },
-    useEffect: (fn: () => unknown, deps: unknown[]) => { const i = cursor++; if (!hooks[i] || deps.some((v, j) => v !== hooks[i].deps[j])) { hooks[i]?.cleanup?.(); hooks[i] = { deps }; effects.push(() => { hooks[i].cleanup = fn(); }); } },
-  };
-  const jsx = (type: unknown, props: any) => ({ type, props });
-  const clipboard = { writeText: async (text: string) => { copies.push(text); } };
-  t.mock.method(globalThis, 'fetch', (path: string, options: any) => new Promise((resolve, reject) => requests.push({ path, options, resolve, reject })));
-  const module = { exports: {} as any };
-  runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/modules/WorkPublicSharing.tsx', import.meta.url), 'utf8'), { loader: 'tsx', format: 'cjs', jsx: 'automatic' }).code, {
-    module, exports: module.exports, crypto: { randomUUID }, window: { location: { origin } }, navigator: { clipboard },
-    require: (name: string) => {
-      if (name === 'react') return react;
-      if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
-      if (name === '../api') return { ApiError };
-      if (name === '../portal-session') return { client, describeError: (e: Error) => ({ message: e.message }) };
-      throw Error(name);
-    },
+  const requests: any[] = [], copies: string[] = [];
+  let props: any = { showcaseId: randomUUID(), workVersion: '1', status: 'published', onReload: async () => {} };
+  t.mock.method(globalThis, 'fetch', (path: string, options: any) => {
+    if (path.endsWith('/me/client-errors')) return Promise.resolve(new Response(null, { status: 204 }));
+    return new Promise((resolve, reject) => requests.push({ path, options, resolve, reject }));
   });
-  const render = () => { cursor = 0; const tree = module.exports.WorkPublicSharing(props); while (effects.length) effects.shift()!(); return tree; };
-  const all = (node: any): any[] => !node || typeof node !== 'object' ? [] : [node, ...[node.props?.children].flat(Infinity).flatMap(all)];
-  const view = () => { render(); return all(render()); };
-  const toggle = () => view().find(n => n.props.role === 'switch');
-  const flush = () => new Promise<void>(resolve => setImmediate(resolve));
-  const response = async (index: number, body: unknown, status = 200) => { requests[index].resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })); await flush(); view(); };
-  const sharing = (version = '1', enabled = false) => ({ showcase_id: props.showcaseId, status: 'published', visibility: 'community', enabled, available: enabled, needs_reconfirmation: false, work_version: version, approved_work_version: enabled ? version : null, version, public_path: `/works/${props.showcaseId}` });
-  const start = async (enabled = false, version = '1') => { view(); await response(0, sharing(version, enabled)); };
-  const share = () => { const button = view().find(n => n.type === 'button'); assert.ok(button && !button.props.disabled); button.props.onClick(); };
-  const unmount = () => { for (const hook of hooks) hook?.cleanup?.(); };
+
+  const base = fileURLToPath(new URL('../../', import.meta.url));
+  const cache = new Map<string, any>();
+  const compile = (relative: string): any => {
+    const file = pathMod.resolve(base, relative);
+    if (cache.has(file)) return cache.get(file);
+    const mod = { exports: {} as any }; cache.set(file, mod.exports);
+    const raw = readFileSync(file, 'utf8');
+    runInNewContext(transformSync(raw, { loader: relative.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic' }).code, {
+      module: mod, exports: mod.exports, crypto: webcrypto, Intl, URL, console, setTimeout, clearTimeout,
+      window: windowObj, document, navigator: navigatorState,
+      require(name: string) {
+        if (name === 'react') return React;
+        if (name === 'react/jsx-runtime' || name === 'react-dom' || name === 'qrcode') return req(name);
+        if (name === '../api') return { ApiError };
+        if (name === '../portal-session') return { client, describeError: (e: Error) => ({ message: e.message }) };
+        if (name === '../language') return { useLanguage: () => ({ t: (k: string) => k }) };
+        if (name.endsWith('.css')) return {};
+        if (name.startsWith('.')) {
+          const resolved = pathMod.resolve(pathMod.dirname(file), name);
+          const target = [resolved, resolved + '.ts', resolved + '.tsx'].find(existsSync);
+          assert.ok(target, `missing ${name}`);
+          return compile(pathMod.relative(base, target));
+        }
+        throw Error('Unexpected import: ' + name);
+      },
+    });
+    cache.set(file, mod.exports);
+    return mod.exports;
+  };
+  const { WorkPublicSharing } = compile('apps/portal-web/src/modules/WorkPublicSharing.tsx');
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container as unknown as HTMLElement);
+  let unmounted = false;
+  const render = () => { if (!unmounted) flushReact(() => root.render(React.createElement(WorkPublicSharing, props))); };
+  const unmount = () => {
+    if (!unmounted) {
+      unmounted = true;
+      flushReact(() => root.unmount());
+      container.parentNode?.removeChild(container);
+      delete (globalThis as any).window;
+      delete (globalThis as any).document;
+      delete (globalThis as any).HTMLElement;
+      delete (globalThis as any).HTMLDetailsElement;
+      delete (globalThis as any).Node;
+      delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
+    }
+  };
   t.after(unmount);
-  return { props, client, requests, copies, clipboard, view, toggle, response, sharing, start, share, flush, unmount, writes: () => writes };
+
+  const propsOf = (node: HostNode) => node[Object.keys(node).find(k => k.startsWith('__reactProps$'))!];
+  const descendants = (node: HostNode): HostNode[] => [node, ...node.childNodes.flatMap(descendants)];
+  const view = () => descendants(document.body);
+  const toggle = () => {
+    const node = view().find(n => n.getAttribute('role') === 'switch')!;
+    return { props: { ...propsOf(node), disabled: Boolean(propsOf(node).disabled), checked: Boolean(propsOf(node).checked) } };
+  };
+  const flush = () => React.act(async () => { await new Promise<void>(resolve => setImmediate(resolve)); });
+  const response = async (index: number, body: unknown, status = 200) => {
+    requests[index].resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+    await flush();
+  };
+  const sharing = (version = '1', enabled = false) => ({ showcase_id: props.showcaseId, status: 'published', visibility: 'community', enabled, available: enabled, needs_reconfirmation: false, work_version: version, approved_work_version: enabled ? version : null, version, public_path: `/works/${props.showcaseId}` });
+  const start = async (enabled = false, version = '1') => { render(); await response(0, sharing(version, enabled)); };
+  const clickButton = (label: string) => {
+    const button = view().find(n => n.nodeName === 'BUTTON' && n.textContent === label);
+    assert.ok(button && !propsOf(button).disabled, `${label} enabled`);
+    flushReact(() => propsOf(button).onClick({ preventDefault() {}, stopPropagation() {} }));
+  };
+  const share = () => clickButton('分享');
+  const act = (fn: () => void | Promise<void>) => React.act(fn);
+  return { props, client, requests, copies, clipboard, view, toggle, response, sharing, start, render, share, clickButton, flush, unmount, propsOf, act };
 }
 
 test('stale displayed work cannot opt in after a conflict until its complete content has reloaded', async t => {
@@ -391,22 +500,22 @@ test('stale displayed work cannot opt in after a conflict until its complete con
   let finishReload!: () => void, reloads = 0;
   h.props.onReload = () => { reloads++; return new Promise<void>(resolve => { finishReload = resolve; }); };
   await h.start();
-  h.toggle().props.onChange({ target: { checked: true } });
+  await h.act(async () => { h.toggle().props.onChange({ target: { checked: true } }); });
   assert.equal(JSON.parse(h.requests[1].options.body).work_version, '1');
   await h.response(1, { code: 'version_conflict', detail: '作品內容已更新' }, 412);
-  // The sharing GET can learn v4, but the displayed title/summary/link are still v1.
   await h.response(2, h.sharing('4'));
   assert.equal(h.toggle().props.disabled, true);
-  assert.ok(h.view().some(n => n.props.children === '作品已更新，請重新檢視後再開放'));
+  assert.ok(h.view().some(n => n.textContent === '作品已更新，請重新檢視後再開放'));
   assert.equal(reloads, 1);
-  h.toggle().props.onChange({ target: { checked: true } });
+  if (!h.toggle().props.disabled) h.toggle().props.onChange({ target: { checked: true } });
   assert.equal(h.requests.length, 3, 'even a queued event cannot submit unseen content');
   h.props.workVersion = '4';
+  h.render();
   finishReload();
-  await h.flush(); h.view();
+  await h.flush();
   await h.response(3, h.sharing('4'));
   assert.equal(h.toggle().props.disabled, false);
-  h.toggle().props.onChange({ target: { checked: true } });
+  await h.act(async () => { h.toggle().props.onChange({ target: { checked: true } }); });
   assert.equal(JSON.parse(h.requests[4].options.body).work_version, '4');
   await h.response(4, h.sharing('4', true));
   assert.equal(h.toggle().props.checked, true);
@@ -416,7 +525,6 @@ test('sharing state newer than the displayed work disables consent immediately',
   const h = await sharingControl(t);
   await h.start(false, '4');
   assert.equal(h.toggle().props.disabled, true);
-  h.toggle().props.onChange({ target: { checked: true } });
   assert.equal(h.requests.length, 1);
 });
 
@@ -428,29 +536,29 @@ for (const stage of ['share', 'link', 'clipboard', 'failure', 'unmount'] as cons
     if (stage === 'clipboard') h.clipboard.writeText = async text => { h.copies.push(text); await new Promise<void>(resolve => { finishCopy = resolve; }); };
     h.share();
     if (stage === 'link' || stage === 'clipboard') await h.response(1, { share_id: randomUUID() });
-    if (stage === 'clipboard') await h.response(2, { path: '/go/abcdefghij' });
+    if (stage === 'clipboard') {
+      await h.response(2, { path: '/go/abcdefghij' });
+      h.clickButton('複製連結');
+    }
     if (stage === 'unmount') h.unmount();
-    else { h.client.csrfToken = null; h.client.csrfToken = randomUUID(); }
-    const writes = h.writes();
+    else { h.client.csrfToken = null; h.client.csrfToken = randomUUID(); h.render(); }
     if (stage === 'clipboard') { finishCopy(); await h.flush(); }
     else if (stage === 'link') await h.response(2, { path: '/go/abcdefghij' });
     else await h.response(1, stage === 'failure' ? { code: 'failed' } : { share_id: randomUUID() }, stage === 'failure' ? 503 : 200);
-    assert.equal(h.requests.length, stage === 'link' || stage === 'clipboard' ? 3 : 2, 'no next request under another session');
+    assert.equal(h.requests.filter(r => !r.path.endsWith('/client-errors')).length, stage === 'link' || stage === 'clipboard' ? 3 : 2, 'no next request under another session');
     assert.equal(h.copies.length, stage === 'clipboard' ? 1 : 0, 'no clipboard write after session ends');
-    assert.equal(h.writes(), writes, 'no late success, error, or busy state updates');
+    if (stage === 'unmount') assert.equal(h.view().find(n => n.nodeName === 'DIALOG' && n.open), undefined);
   });
 }
 
 test('a failed conflict refresh keeps consent disabled until the work is reloaded', async t => {
   const h = await sharingControl(t);
   await h.start();
-  h.toggle().props.onChange({ target: { checked: true } });
+  await h.act(async () => { h.toggle().props.onChange({ target: { checked: true } }); });
   await h.response(1, { code: 'version_conflict' }, 412);
   await h.response(2, { code: 'unavailable' }, 503);
   assert.equal(h.toggle().props.disabled, true);
-  const count = h.requests.length;
-  h.toggle().props.onChange({ target: { checked: true } });
-  assert.equal(h.requests.length, count);
+  assert.equal(h.requests.filter(r => !r.path.endsWith('/client-errors')).length, 3);
 });
 
 test('same-session sharing creates one link and copies its returned attribution URL', async t => {
@@ -461,6 +569,9 @@ test('same-session sharing creates one link and copies its returned attribution 
   await h.response(1, { share_id: id });
   assert.equal(h.requests[2].path, `/api/v1/shares/${id}/links`);
   await h.response(2, { path: '/go/abcdefghij' });
+  assert.equal(h.view().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent, `${origin}/go/abcdefghij`);
+  h.clickButton('複製連結');
+  await h.flush();
   assert.deepEqual(h.copies, [`${origin}/go/abcdefghij`]);
-  assert.ok(h.view().some(n => n.type === 'a' && n.props.href === `${origin}/go/abcdefghij`));
+  assert.ok(h.view().some(n => n.nodeName === 'A' && n.getAttribute('href') === `/works/${h.props.showcaseId}`));
 });

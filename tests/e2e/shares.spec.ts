@@ -26,17 +26,22 @@ test('one share box publishes recorded original README, star action and member c
  await page.reload();await expect(page).toHaveURL(/#shares\/[0-9a-f-]+\?via=fixture%2Bcode$/);
  await expect(page.getByRole('heading',{name:'README',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'我也要分享',exact:true}).click();
- await expect(page.getByRole('status').filter({hasText:'已複製'})).toBeVisible();
+ const shareDialog=page.locator('.skill-share-dialog');
+ await expect(shareDialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+ await shareDialog.getByRole('button',{name:'複製連結',exact:true}).click();
+ await expect(shareDialog.getByRole('status')).toHaveText('已複製。');
+ await shareDialog.getByRole('button',{name:'關閉分享',exact:true}).click();
  await openFeatureSearch(page);
  await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'我的',exact:true}).click();
  await page.getByLabel('我的檢視').selectOption({label:'我的貢獻'});
  await expect(page).toHaveURL(/#me\/credit$/);
  await expect(page.getByLabel('我的檢視').locator('option').filter({hasText:'分享成效'})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'交給我的 Agent',exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'我的貢獻'}).getByRole('link',{name:'freetwai-test/shared-repo'})).toBeVisible();
+ // Scope to this repository's card: other specs on the same server may have given this member other shares.
+ await expect(page.getByRole('region',{name:'我的貢獻'}).getByRole('article').filter({has:page.getByRole('link',{name:'freetwai-test/shared-repo',exact:true})}).getByText('還沒有人點開',{exact:true})).toBeVisible();
+ await page.locator('.legacy-promotion > summary').click();
  await expect(page.getByRole('region',{name:'我的推廣連結'})).toBeVisible();
  await expect(page.getByRole('region',{name:'我的推廣連結'}).getByText('freetwai-test/shared-repo',{exact:true})).toBeVisible();
  await expect(page.getByText('查看推廣排行榜',{exact:true})).toBeVisible();
- await expect(page.getByRole('region',{name:'我的貢獻'}).getByRole('link',{name:'freetwai-test/shared-repo'})).toBeVisible();
- // Scope to this repository's card: other specs on the same server may have given this member other shares.
- await expect(page.getByRole('region',{name:'我的貢獻'}).getByRole('article').filter({has:page.getByRole('link',{name:'freetwai-test/shared-repo',exact:true})}).getByText('分享 1',{exact:true})).toBeVisible();
 });

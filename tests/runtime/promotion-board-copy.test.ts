@@ -96,7 +96,7 @@ function load(relative:string, imports:Record<string,unknown>){
  return module.exports;
 }
 const action=load('../../apps/portal-web/src/useLocalAction.ts',{});
-const {PromotionBoards}=load('../../apps/portal-web/src/modules/PromotionBoards.tsx',{'../useLocalAction':action,'./MemberAvatar':{MemberAvatar:()=>null},'./PromotionShare':{PromotionShare:()=>null}});
+const {PromotionBoards}=load('../../apps/portal-web/src/modules/PromotionBoards.tsx',{'../useLocalAction':action,'./MemberAvatar':{MemberAvatar:()=>null},'../share/ShareButton':{ShareButton:()=>null,promotionLink:()=>Promise.resolve({path:'/go/synthetic'})}});
 function fixture(t:TestContext,strict=false){
  const requests:any[]=[],copies:any[]=[],container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container as any);let mounted=true;
  const client={sessionGeneration:1,get:(path:string)=>new Promise((resolve,reject)=>requests.push({path,resolve,reject}))};
