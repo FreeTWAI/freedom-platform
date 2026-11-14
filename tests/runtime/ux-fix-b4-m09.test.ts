@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { buildSync } from 'esbuild';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerReactDomTeardown } from './react-dom-teardown.js';
 
 class HostNode {
   [key: string]: any;
@@ -130,6 +131,7 @@ function setupEnv(t: any) {
     IntersectionObserver: (globalThis as any).IntersectionObserver,
     IS_REACT_ACT_ENVIRONMENT: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
   };
+  const teardown = registerReactDomTeardown(t, prev);
   const storage = new Map<string, string>();
   const win: any = {
     document: doc,
@@ -158,17 +160,15 @@ function setupEnv(t: any) {
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as any);
-  t.after(() => {
-    root.unmount();
-    Object.assign(globalThis, prev);
-  });
-  return { container, root, ...entry.exports };
+  teardown.setRoot(root);
+  return { container, root, teardown, ...entry.exports };
 }
 
 test('UX-M-09: CommunityPanel, GitHubSocial, and ShowcasePanel use Traditional Chinese headings/labels and short link text', async (t) => {
   const {
     container,
     root,
+    teardown,
     CommunityPanel,
     GitHubSocialProvider,
     GitHubSourceLinks,
@@ -182,7 +182,7 @@ test('UX-M-09: CommunityPanel, GitHubSocial, and ShowcasePanel use Traditional C
 
   setSharingDraftAccount('me-user', client.sessionGeneration);
   const origGet = client.get.bind(client);
-  client.get = async (path: string) => {
+  client.get = teardown.trackFn(async (path: string) => {
     if (path.startsWith('/showcases')) {
       return {
         items: [{
@@ -200,10 +200,10 @@ test('UX-M-09: CommunityPanel, GitHubSocial, and ShowcasePanel use Traditional C
     }
     if (path.startsWith('/opportunities')) return { items: [] };
     return origGet(path);
-  };
-  t.after(() => { client.get = origGet; });
+  });
+  teardown.onRestore(() => { client.get = origGet; });
 
-  const fakeClient: any = {
+  const fakeClient: any = teardown.trackClient({
     csrfToken: 'test-csrf',
     async get(path: string) {
       if (path === '/community') {
@@ -222,7 +222,7 @@ test('UX-M-09: CommunityPanel, GitHubSocial, and ShowcasePanel use Traditional C
       }
       return {};
     },
-  };
+  });
   const session = { user: { user_id: 'me-user', email: 'me@local.test' }, csrf_token: 'test-csrf' };
   const portalValue = {
     session,
@@ -261,4 +261,52 @@ test('UX-M-09: CommunityPanel, GitHubSocial, and ShowcasePanel use Traditional C
   assert.equal(Boolean(rawUrlLink), false, 'ShowcaseCard link must not print raw URL text');
   const workLink = links.find((a) => a.getAttribute('href') === 'https://example.com/works/uuid-12345');
   assert.equal(workLink?.textContent.trim(), '查看作品 ↗');
+});
+
+test('GitHubBookSocial hides unknown star count, fork count, and null checked_at note', async (t) => {
+  const { container, root, teardown, LanguageProvider, GitHubSocialProvider, GitHubBookSocial } = setupEnv(t);
+  const fakeClient: any = teardown.trackClient({
+    get: async (path: string) => {
+      if (path === '/me/github') return { configured: true, connected: false, github_user: null };
+      if (path.includes('zero-counts') && path.includes('/metrics')) {
+        return { stargazers_count: 0, forks_count: 0, open_issues_count: null, subscribers_count: null, pushed_at: null, stale: false, error: null, archived: false, checked_at: null, language: 'TypeScript' };
+      }
+      if (path.includes('/metrics')) {
+        return { stargazers_count: null, forks_count: null, open_issues_count: null, subscribers_count: null, pushed_at: null, stale: true, error: null, archived: false, checked_at: null, language: null };
+      }
+      return {};
+    },
+  });
+  await React.act(async () => {
+    root.render(
+      React.createElement(LanguageProvider, null,
+        React.createElement(GitHubSocialProvider, { client: fakeClient, session: { user: { user_id: 'u1' }, csrf_token: 'c1' } as any },
+          React.createElement('div', null,
+            React.createElement(GitHubBookSocial, { bookId: 'social-post', repositoryUrl: 'https://github.com/example/repo' }),
+            React.createElement(GitHubBookSocial, {
+              bookId: 'cached-null',
+              repositoryUrl: 'https://github.com/example/cached',
+              originalCache: { fetched_at: null, stale: true, full_name: 'example/cached', url: 'https://github.com/example/cached', original_author: 'example', stars: null, social_metrics: { forks_count: null, open_issues_count: null, subscribers_count: null, pushed_at: null } },
+            }),
+            React.createElement(GitHubBookSocial, { bookId: 'zero-counts', repositoryUrl: 'https://github.com/example/zero' }),
+          ),
+        ),
+      ),
+    );
+    await new Promise((r) => setTimeout(r, 30));
+  });
+  const nodes = walk(container);
+  assert.equal(nodes.filter((n) => (n.attributes.class ?? '').includes('github-star-count')).length, 1);
+  assert.equal(nodes.filter((n) => (n.attributes.class ?? '').includes('github-fork-count')).length, 1);
+  assert.equal(nodes.find((n) => (n.attributes.class ?? '').includes('github-star-count'))?.textContent, '0');
+  assert.equal(nodes.find((n) => (n.attributes.class ?? '').includes('github-fork-count'))?.textContent, '0');
+  assert.equal(container.textContent.includes('☆ —'), false);
+  assert.equal(container.textContent.includes('上次取得的數據'), false);
+  assert.equal(container.textContent.includes('數據更新'), false);
+  const notes = nodes.filter((n) => (n.attributes.class ?? '').includes('github-metrics-note')).map((n) => n.textContent);
+  assert.deepEqual(notes, ['TypeScript']);
+  const starBtn = nodes.find((n) => (n.attributes.class ?? '').includes('github-star-control'));
+  assert.equal(starBtn?.attributes.title?.includes('— 次加星') ?? false, false);
+  const forkLink = nodes.find((n) => (n.attributes.class ?? '').includes('github-fork-link'));
+  assert.equal(forkLink?.attributes.title?.includes('— 次複製') ?? false, false);
 });

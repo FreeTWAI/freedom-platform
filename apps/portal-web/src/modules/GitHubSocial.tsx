@@ -66,8 +66,10 @@ export function GitHubSourceLinks({repositoryUrl}:{repositoryUrl:string}){
     </div></div>
   </div>;
 }
-function count(value:number|null|undefined){return typeof value==='number'&&Number.isFinite(value)?value.toLocaleString('zh-TW'):'—';}
-function date(value:string|null|undefined){return value&&!Number.isNaN(Date.parse(value))?new Date(value).toLocaleDateString('zh-TW'):'—';}
+function maybeCount(value:number|null|undefined){return typeof value==='number'&&Number.isFinite(value)?value.toLocaleString('zh-TW'):null;}
+function count(value:number|null|undefined){return maybeCount(value)??'—';}
+function maybeDate(value:string|null|undefined){return value&&!Number.isNaN(Date.parse(value))?new Date(value).toLocaleDateString('zh-TW'):null;}
+function date(value:string|null|undefined){return maybeDate(value)??'—';}
 
 export type OriginalSocialMetadata={fetched_at?:string|null;stale?:boolean;full_name?:string|null;url:string|null;original_author:string|null;stars:number|null;social_metrics?:{forks_count:number|null;open_issues_count:number|null;subscribers_count:number|null;pushed_at:string|null}};
 export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo,sourceCredit=false,originalCache}:{bookId:string;repositoryUrl:string;compact?:boolean;returnTo?:string;sourceCredit?:boolean;originalCache?:OriginalSocialMetadata}){
@@ -94,8 +96,11 @@ export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo,so
     try{window.location.assign(await store.connect(returnTo??(window.location.hash||'#skills')));}
     catch(cause){setConnectError(cause instanceof Error?cause.message:'無法連結 GitHub，請重試。');setConnecting(false);}
   }
+  const starText=maybeCount(value?.stargazers_count),forkText=maybeCount(value?.forks_count),checkedDate=maybeDate(value?.checked_at);
   const secondaryMetrics=<><div><dt>待處理問題／變更</dt><dd>{count(value?.open_issues_count)}</dd></div><div><dt>追蹤專案</dt><dd><a className="github-watch-link" href={repositoryUrl} target="_blank" rel="noopener noreferrer" aria-label="追蹤專案通知 ↗" title="前往 GitHub，選擇通知">{count(value?.subscribers_count)}</a></dd></div><div><dt>最近更新</dt><dd>{date(value?.pushed_at)}</dd></div></>;
-  const metricsNote=<p className="github-metrics-note">{metrics.loading&&!value?'正在讀取 GitHub 數據…':unknown?'GitHub 數據暫時無法讀取':`${old?'上次取得的數據':'數據更新'} · ${date(value?.checked_at)}`}{value?.language?` · ${value.language}`:''}</p>;
+  const noteLead=metrics.loading&&!value?'正在讀取 GitHub 數據…':unknown?'GitHub 數據暫時無法讀取':checkedDate?`${old?'上次取得的數據':'數據更新'} · ${checkedDate}`:'';
+  const noteText=[noteLead,value?.language||''].filter(Boolean).join(' · ');
+  const metricsNote=noteText?<p className="github-metrics-note">{noteText}</p>:null;
   const source=(!live||live.original_author)&&<div className="github-social-source"><a href={repositoryUrl} target="_blank" rel="noopener noreferrer">{sourceCredit?'原作':'原作者'} GitHub ↗</a><a href={new URL(repositoryUrl).origin+'/'+new URL(repositoryUrl).pathname.split('/')[1]} target="_blank" rel="noopener noreferrer">追蹤{sourceCredit?'來源帳號':'原作者'} ↗</a>{value?.archived&&<span className="badge">已封存</span>}</div>;
   const accountLoading=account.loading&&!account.value;
   const starEnabled=Boolean(account.error||account.value?.configured);
@@ -103,16 +108,16 @@ export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo,so
   const actionHint=store.member&&account.value?.configured&&!connected&&!connecting&&!account.error?'連結 GitHub，回來後再點星星。':actionLabel;
   const disabled=account.error?false:Boolean(accountLoading||!account.value?.configured||connecting||connected&&(star.loading||star.saving||!known));
   const starIcon=connected&&known&&star.value?.starred?'★':'☆';
-  const starContents=<><span className="github-star-icon" aria-hidden="true">{starIcon}</span><span className="github-star-count" id={starCountId}>{count(value?.stargazers_count)}</span></>;
-  const forkContents=<><GitHubForkIcon/><span className="github-fork-count">{count(value?.forks_count)}</span></>;
+  const starContents=<><span className="github-star-icon" aria-hidden="true">{starIcon}</span>{starText!==null&&<span className="github-star-count" id={starCountId}>{starText}</span>}</>;
+  const forkContents=<><GitHubForkIcon/>{forkText!==null&&<span className="github-fork-count">{forkText}</span>}</>;
   function starAction(){if(account.error)void store.loadAccount(true);else if(!connected)void connect();else if(known&&!star.loading&&!star.saving)void store.toggleStar(bookId);}
   const actionStatus=accountLoading||connecting||connected&&(!known||star.saving)?actionLabel:null;
   const expandedDetails=(!live||live.original_author)&&<div className="github-metrics-expanded">{source}{(!live||live.social_metrics)&&<dl className="github-book-metrics">{secondaryMetrics}</dl>}{(!live||live.social_metrics)&&!unknown&&!old&&metricsNote}</div>;
   return <div className={`github-book-social${compact?' github-book-social-compact':''}`} ref={ref} data-github-book={bookId} aria-label={`${sourceCredit?'原作':'原作者'} GitHub 數據與操作`}>
     {!compact&&source}
     <div className="github-social-overview"><div className="github-social-actions">
-      {!store.member?<a className="btn btn-ghost github-star-control" href={repositoryUrl} target="_blank" rel="noopener noreferrer" aria-label="前往 GitHub 加星 ↗" aria-describedby={starCountId} title="前往原作 GitHub 加星">{starContents}</a>:starEnabled&&<button className="btn btn-ghost skill-book-star github-star-control" aria-label={actionLabel} aria-description={actionHint} aria-describedby={starCountId} title={`${actionHint} · ${count(value?.stargazers_count)} 次加星`} aria-pressed={connected&&known?star.value!.starred!:undefined} aria-busy={star.saving||connecting||accountLoading} disabled={disabled} onClick={starAction}>{starContents}</button>}
-      <a className="github-fork-link github-count-control" href={`${repositoryUrl}/fork`} target="_blank" rel="noopener noreferrer" aria-label="複製專案 ↗" title={`複製專案 · ${count(value?.forks_count)} 次複製`}>{forkContents}</a>
+      {!store.member?<a className="btn btn-ghost github-star-control" href={repositoryUrl} target="_blank" rel="noopener noreferrer" aria-label="前往 GitHub 加星 ↗" aria-describedby={starText!==null?starCountId:undefined} title="前往原作 GitHub 加星">{starContents}</a>:starEnabled&&<button className="btn btn-ghost skill-book-star github-star-control" aria-label={actionLabel} aria-description={actionHint} aria-describedby={starText!==null?starCountId:undefined} title={starText!==null?`${actionHint} · ${starText} 次加星`:actionHint} aria-pressed={connected&&known?star.value!.starred!:undefined} aria-busy={star.saving||connecting||accountLoading} disabled={disabled} onClick={starAction}>{starContents}</button>}
+      <a className="github-fork-link github-count-control" href={`${repositoryUrl}/fork`} target="_blank" rel="noopener noreferrer" aria-label="複製專案 ↗" title={forkText!==null?`複製專案 · ${forkText} 次複製`:'複製專案'}>{forkContents}</a>
       {!live&&(metrics.error||value?.error)&&<button className="github-retry" onClick={()=>void store.loadMetrics(bookId,true)} disabled={metrics.loading}>重讀數據</button>}
       {connected&&star.error&&<button className="github-retry" onClick={()=>void store.loadStar(bookId,true)} disabled={star.loading||star.saving}>重讀加星狀態</button>}
       {Boolean(account.value?.configured)&&star.reauthorize&&<button type="button" className="btn btn-ghost btn-small" disabled={connecting||star.loading||star.saving} onClick={()=>void connect()}>連結／重新授權 GitHub</button>}

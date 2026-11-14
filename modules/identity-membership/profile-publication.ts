@@ -37,6 +37,11 @@ export async function saveProfilePublication(pool:Pool,input:Command){
       VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9) ON CONFLICT(user_id) DO UPDATE SET visibility=$3,display_name=$4,bio=$5,links=$6::jsonb,layout=$7::jsonb,include_cover=$8,cover_version=$9,
       aggregate_version=member_profile_publications.aggregate_version+1,updated_at=clock_timestamp() RETURNING aggregate_version`,
       [input.actor.user_id,input.actor.community_id,body.visibility,body.display_name,body.bio,JSON.stringify(body.links),JSON.stringify(body.layout),body.include_cover,body.include_cover?body.cover_version:null])).rows[0];
+    if(body.visibility==='public'){
+      const headline=Array.from(body.bio).slice(0,60).join('').trim()||null;
+      await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`member-share/${input.actor.user_id}`]);
+      await q.query('UPDATE member_card_shares SET headline=$3,aggregate_version=member_card_shares.aggregate_version+1,updated_at=now() WHERE user_id=$1 AND community_id=$2 AND headline IS DISTINCT FROM $3',[input.actor.user_id,input.actor.community_id,headline]);
+    }
     await journal(q,input.actor,'member_profile_publication',input.actor.user_id,row.aggregate_version,'save_profile_publication',{visibility:body.visibility});
     // Never retain publication text/links in replayable receipts.
     return {updated:true};

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { buildSync } from 'esbuild';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerReactDomTeardown } from './react-dom-teardown.js';
 
 class HostNode {
   [key: string]: any;
@@ -159,6 +160,7 @@ function setupEnv(t: any) {
     IntersectionObserver: (globalThis as any).IntersectionObserver,
     IS_REACT_ACT_ENVIRONMENT: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
   };
+  const teardown = registerReactDomTeardown(t, prev);
   const win: any = {
     document: doc,
     HTMLIFrameElement: class {},
@@ -180,11 +182,8 @@ function setupEnv(t: any) {
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as any);
-  t.after(() => {
-    root.unmount();
-    Object.assign(globalThis, prev);
-  });
-  return { doc, container, root, ...entry.exports };
+  teardown.setRoot(root);
+  return { doc, container, root, teardown, ...entry.exports };
 }
 
 function makeFakeClient(books: any[], configured = false) {
@@ -204,8 +203,8 @@ function makeFakeClient(books: any[], configured = false) {
 }
 
 test('UX-V-07: SkillsPanel shortens empty state <= 24 chars and hides unconfigured GitHub controls', async (t) => {
-  const { container, root, SkillsPanel, GitHubSocialProvider } = setupEnv(t);
-  const client = makeFakeClient(makeBooks(3), false);
+  const { container, root, teardown, SkillsPanel, GitHubSocialProvider } = setupEnv(t);
+  const client = teardown.trackClient(makeFakeClient(makeBooks(3), false));
   const session = { user: { user_id: 'me-user', email: 'me@local.test' }, csrf_token: 'test-csrf' };
 
   await React.act(async () => {
@@ -236,9 +235,9 @@ test('UX-V-07: SkillsPanel shortens empty state <= 24 chars and hides unconfigur
 });
 
 test('UX-V-07 / UX-M-06 / UX-M-09: RepositoryLibrary paginates at 20 + 更多 and SkillBookCard shows one action + 更多 without English Star/Fork', async (t) => {
-  const { container, root, RepositoryLibrary, SkillBookCard, GitHubSocialProvider, GitHubConnectionPanel } = setupEnv(t);
+  const { container, root, teardown, RepositoryLibrary, SkillBookCard, GitHubSocialProvider, GitHubConnectionPanel } = setupEnv(t);
   const books = makeBooks(25);
-  const client = makeFakeClient(books, false);
+  const client = teardown.trackClient(makeFakeClient(books, false));
   const session = { user: { user_id: 'me-user', email: 'me@local.test' }, csrf_token: 'test-csrf' };
 
   await React.act(async () => {

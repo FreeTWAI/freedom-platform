@@ -15,7 +15,7 @@ const widths=[{width:390,height:844},{width:820,height:900},{width:1280,height:9
 
 async function signup(page:Page,name:string){
   await page.goto('/');
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill(name);
   await page.getByLabel('電子郵件',{exact:true}).fill(`ecard-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-connections-password');
@@ -56,7 +56,9 @@ test('member builds an e-card and visitors see each design',async({page,browser}
   await expect(publicPage).toHaveAttribute('open','');
   await publicPage.getByLabel('顯示名稱',{exact:true}).fill('電子名片作者');
   await publicPage.getByLabel('一句話介紹',{exact:true}).fill('做開源的人');
-  await publicPage.getByRole('button',{name:'儲存',exact:true}).click();
+  await publicPage.getByRole('radio',{name:'任何人（免登入）'}).check();
+  await publicPage.getByRole('checkbox',{name:'我確認公開以上文字、連結與已勾選的封面'}).check();
+  await publicPage.getByRole('button',{name:'確認公開',exact:true}).click();
   await expect(publicPage.getByText('個人頁與可見範圍已儲存。',{exact:true})).toBeVisible();
   await openAccountSettings(page,'分享名片設定（免登入）');
   await expect(settings.getByText('做開源的人').first()).toBeVisible();
@@ -84,6 +86,7 @@ test('member builds an e-card and visitors see each design',async({page,browser}
   await socialForm.getByRole('textbox',{name:'連結網址',exact:true}).fill('https://example.com/site');
   await socialForm.getByRole('button',{name:'保存連結',exact:true}).click();
   await expect(social.getByText('社群連結已新增。')).toBeVisible();
+  await openAccountSettings(page,'分享名片設定（免登入）');
   await settings.getByRole('button',{name:'從我的社群連結加入',exact:true}).click();
   await expect(settings.locator('.ecard-link-list')).not.toContainText('我的網站');
   await settings.getByRole('button',{name:'把「我的網站」加入名片',exact:true}).click();
@@ -320,10 +323,12 @@ test('autosave makes the preview the shared card without a save button',async({p
     await expect(publicPage).toHaveAttribute('open','');
     await publicPage.getByLabel('顯示名稱',{exact:true}).fill('連結樹作者');
     await publicPage.getByLabel('一句話介紹',{exact:true}).fill('做開源的人');
-    await publicPage.getByRole('button',{name:'儲存',exact:true}).click();
+    await publicPage.getByRole('radio',{name:'任何人（免登入）'}).check();
+    await publicPage.getByRole('checkbox',{name:'我確認公開以上文字、連結與已勾選的封面'}).check();
+    await publicPage.getByRole('button',{name:'確認公開',exact:true}).click();
     await expect(publicPage.getByText('個人頁與可見範圍已儲存。',{exact:true})).toBeVisible();
     await openAccountSettings(page,'分享名片設定（免登入）');
-    await waitSaved(settings);
+    await expect(settings.getByText('做開源的人').first()).toBeVisible();
     await expect(settings.getByRole('link',{name:'開啟名片',exact:true})).toHaveAttribute('href',shareUrl);
     await guest.reload();
     await expect(guest.getByText('做開源的人')).toBeVisible();
@@ -446,13 +451,15 @@ test('platform-public profile links render with brand icons and match the public
   await account.getByRole('group',{name:'GitHub 帳號可見範圍',exact:true}).getByRole('checkbox',{name:'平台公開',exact:true}).check();
   await account.getByLabel('Discord 帳號',{exact:true}).fill('discorduser');
   await account.getByRole('group',{name:'Discord 帳號可見範圍',exact:true}).getByRole('checkbox',{name:'平台公開',exact:true}).check();
-  await account.getByRole('button',{name:'儲存修改',exact:true}).click();
+  await account.getByRole('button',{name:'儲存分享對象',exact:true}).click();
   await expect(page.getByText('修改已儲存。')).toBeVisible();
+  await openAccountSettings(page,'分享名片設定（免登入）');
   await expect(profile.getByRole('checkbox',{name:'顯示 LINE 在名片上'})).toBeChecked({timeout:20000});
   await expect(profile.getByRole('checkbox',{name:'顯示 GitHub 在名片上'})).toBeChecked();
   await expect(profile.getByRole('checkbox',{name:'顯示 Discord 在名片上'})).toBeChecked();
   await addSocial(page,'instagram','我的 IG','https://www.instagram.com/workshopcard','平台公開');
   await addSocial(page,'facebook','好友粉專','https://www.facebook.com/friends-only-page','平台好友');
+  await openAccountSettings(page,'分享名片設定（免登入）');
   await expect(profile.getByRole('checkbox',{name:'顯示 我的 IG 在名片上'})).toBeChecked({timeout:20000});
   await expect(profile).not.toContainText('好友粉專');
   const shareUrl=await enableShare(settings);
@@ -471,13 +478,17 @@ test('platform-public profile links render with brand icons and match the public
     await expect(guest.getByText('這是你的名片')).toHaveCount(0);
     await expect(guest.getByRole('button',{name:'加入自由工坊／登入'})).toBeVisible();
     for(const badge of ['line','github','discord','instagram'])await expect(guest.locator(`.ecard .brand-badge[data-platform="${badge}"]`)).toBeVisible();
+    await openAccountSettings(page,'誰能看到我');
     await account.getByRole('group',{name:'聯絡 E-mail可見範圍',exact:true}).getByRole('checkbox',{name:'平台公開',exact:true}).check();
-    await account.getByRole('button',{name:'儲存修改',exact:true}).click();
+    await account.getByRole('button',{name:'儲存分享對象',exact:true}).click();
+    await expect(page.getByText('修改已儲存。')).toBeVisible();
+    await openAccountSettings(page,'分享名片設定（免登入）');
     await expect(profile.getByText('Email 是你的登入帳號，預設不放上名片。')).toBeVisible({timeout:20000});
     await expect(profile.getByRole('checkbox',{name:'顯示 Email 在名片上'})).not.toBeChecked();
     await profile.getByRole('checkbox',{name:'顯示 Email 在名片上'}).check();
     await waitSaved(settings);
     await addSocial(page,'other','其他連結','https://example.org/custom','平台公開');
+    await openAccountSettings(page,'分享名片設定（免登入）');
     await expect(profile.getByRole('checkbox',{name:'顯示 其他連結 在名片上'})).toBeChecked({timeout:20000});
     for(const [label,url] of [['Facebook','https://www.facebook.com/workshop'],['LinkedIn','https://www.linkedin.com/in/workshop'],['YouTube','https://youtu.be/workshopclip'],['Threads','https://www.threads.net/@workshop'],['TikTok','https://www.tiktok.com/@workshop'],['X','https://x.com/workshop'],['個人網站','https://example.net/site']] as const)await addManual(settings,label,url);
     await expect(settings.getByRole('link',{name:'開啟名片',exact:true})).toHaveAttribute('href',shareUrl);

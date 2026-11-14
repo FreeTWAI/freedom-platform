@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { buildSync } from 'esbuild';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerReactDomTeardown } from './react-dom-teardown.js';
 
 class HostNode {
   [key: string]: any;
@@ -172,6 +173,7 @@ function setupEnv(t: any) {
     IntersectionObserver: (globalThis as any).IntersectionObserver,
     IS_REACT_ACT_ENVIRONMENT: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
   };
+  const teardown = registerReactDomTeardown(t, prev);
   const storage = new Map<string, string>();
   const win: any = {
     document: doc,
@@ -200,24 +202,21 @@ function setupEnv(t: any) {
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as any);
-  t.after(() => {
-    root.unmount();
-    Object.assign(globalThis, prev);
-  });
-  return { container, root, ...entry.exports };
+  teardown.setRoot(root);
+  return { container, root, teardown, ...entry.exports };
 }
 
 test('UX-M-06: ShowcasePanel shortens empty states <= 24 chars and caps opportunities at 20 + 更多', async (t) => {
-  const { container, root, ShowcasePanel, PortalContext, client, setSharingDraftAccount } = setupEnv(t);
+  const { container, root, teardown, ShowcasePanel, PortalContext, client, setSharingDraftAccount } = setupEnv(t);
   setSharingDraftAccount('me-user', client.sessionGeneration);
   const origGet = client.get.bind(client);
   let opportunities: any[] = [];
-  client.get = async (path: string) => {
+  client.get = teardown.trackFn(async (path: string) => {
     if (path.startsWith('/showcases')) return { items: [], next_offset: null };
     if (path.startsWith('/opportunities')) return { items: opportunities };
     return origGet(path);
-  };
-  t.after(() => { client.get = origGet; });
+  });
+  teardown.onRestore(() => { client.get = origGet; });
 
   const portalValue = {
     session: { user: { user_id: 'me-user', email: 'me@local.test' }, csrf_token: 'test-csrf' },
@@ -270,7 +269,7 @@ test('UX-M-06: ShowcasePanel shortens empty states <= 24 chars and caps opportun
 });
 
 test('UX-M-06: RepositoryLibrary collapses secondary filters behind 篩選 and SkillsPanel keeps <= 8 controls', async (t) => {
-  const { container, root, RepositoryLibrary, SkillsPanel, GitHubSocialProvider } = setupEnv(t);
+  const { container, root, teardown, RepositoryLibrary, SkillsPanel, GitHubSocialProvider } = setupEnv(t);
   const books = Array.from({ length: 3 }, (_, i) => ({
     id: `book-${i + 1}`,
     book_id: `book-${i + 1}`,
@@ -282,7 +281,7 @@ test('UX-M-06: RepositoryLibrary collapses secondary filters behind 篩選 and S
     official_guild_keys: [],
     guide: { beginner: { category: '行銷', purpose: '寫貼文', audience: '個人', first_result: '完成一篇' }, author_name: '作者', source_evidence: [] },
   }));
-  const fakeClient: any = {
+  const fakeClient: any = teardown.trackClient({
     csrfToken: 'test-csrf',
     sessionGeneration: 1,
     async get(path: string) {
@@ -293,7 +292,7 @@ test('UX-M-06: RepositoryLibrary collapses secondary filters behind 篩選 and S
       if (path === '/github/account') return { configured: false, connected: false, github_user: null };
       return { items: [] };
     },
-  };
+  });
   const session = { user: { user_id: 'me-user', email: 'me@local.test' }, csrf_token: 'test-csrf' };
 
   await React.act(async () => {
@@ -329,13 +328,13 @@ test('UX-M-06: RepositoryLibrary collapses secondary filters behind 篩選 and S
 });
 
 test('UX-M-06: CommunityPanel keeps first view <= 8 controls and <= 120 static Chinese chars behind 更多', async (t) => {
-  const { container, root, CommunityPanel, LanguageProvider } = setupEnv(t);
+  const { container, root, teardown, CommunityPanel, LanguageProvider } = setupEnv(t);
   const projectLinks = Array.from({ length: 23 }, (_, i) => ({
     title: `工坊專案 ${i + 1}`,
     url: `https://example.com/p-${i + 1}`,
     description: `說明 ${i + 1}`,
   }));
-  const fakeClient: any = {
+  const fakeClient: any = teardown.trackClient({
     async get(path: string) {
       if (path === '/community') {
         return {
@@ -349,7 +348,7 @@ test('UX-M-06: CommunityPanel keeps first view <= 8 controls and <= 120 static C
       }
       return { items: [] };
     },
-  };
+  });
 
   await React.act(async () => {
     root.render(

@@ -100,7 +100,7 @@ const {MemberShare}=compile('apps/portal-web/src/modules/MemberShare.tsx');
 const {MemberCardShareActions}=compile('apps/portal-web/src/modules/MemberCardShareActions.tsx');
 const ID='30000000-0000-4000-8000-000000000001',OTHER='30000000-0000-4000-8000-000000000002';
 const profile={source:'contact:github',platform:'github',label:'GitHub',handle:'fixture',url:'https://example.invalid/fixture',shown:true};
-const initialSettings=()=>({enabled:true,include_avatar:false,aggregate_version:1,share_path:'/member-cards/'+'a'.repeat(43),design:'calm',headline:'已保存的介紹',links:[],show_profile_links:true,profile_link_prefs:{},profile_links:[{...profile}]});
+const initialSettings=()=>({enabled:true,include_avatar:false,aggregate_version:1,share_path:'/member-cards/'+'a'.repeat(43),design:'calm',headline:'已保存的介紹' as string|null,links:[],show_profile_links:true,profile_link_prefs:{},profile_links:[{...profile}]});
 // This is a minimal DOM-shaped host for real React/ReactDOM, not a browser.
 // It invokes only handlers on mounted, enabled, visible controls and enforces modal containment.
 // Transport, clipboard, system sharing, timers and navigation are local fakes.
@@ -152,13 +152,9 @@ test('read-only headline links to #me/settings?view=page and lacks duplicate inp
  const h=fixture(t);await h.start();
  assert.equal(h.all(n=>n.nodeName==='INPUT'&&Boolean(n.parentNode?.textContent.includes('一句話介紹'))).length,0);
  assert.equal(h.headlineText(),'已保存的介紹');assert.equal(h.headlineLink()?.textContent,'到公開個人頁編輯');
- await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'公開頁介紹'});
- assert.equal(h.headlineText(),'公開頁介紹');assert(preview(h).textContent.includes('公開頁介紹'));
- h.render(h.client,'no-row');await h.start();
- await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'',aggregate_version:null});
- assert.equal(h.headlineText(),'已保存的介紹');
- h.render(h.client,'cleared-row');await h.start();
- await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'',aggregate_version:'2'});
+ assert.equal(h.pending('GET','/me/profile-publication').length,0);
+ assert(preview(h).textContent.includes('已保存的介紹'));
+ h.render(h.client,'cleared-row');await h.start({...initialSettings(),headline:null,aggregate_version:2});
  assert.equal(h.headlineText(),'尚未設定');assert(!preview(h).textContent.includes('已保存的介紹'));
 });
 for(const change of ['design','profile-field'])test(`${change}: pending save blocks sharing without changing the queued save`,async t=>{
@@ -209,16 +205,22 @@ for(const flags of [{pending:true,blocked:false},{pending:false,blocked:true},{p
  const inactive=flags.pending||flags.blocked;assert.equal(!!props(button).disabled,inactive);
  if(inactive){assert.equal(props(button).onClick,undefined);assert.equal(descendants(document.body).some(n=>n.nodeName==='DIALOG'),false);assert.equal(writes.length,0);}else{assert.equal(props(button).disabled,undefined);flush(()=>props(button).onClick());assert.equal(writes.length,1);assert.equal(writes[0][0],'/promotion/links');}
 });
-test('freedom-profile-updated syncs <=60-char bio to member-card-share and skips >60-char bio',async t=>{
+test('freedom-profile-updated reloads server headline from member-card-share without client-side bio copy',async t=>{
  const h=fixture(t);await h.start();
- await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'已保存的介紹',aggregate_version:'1'});
+ assert.equal(h.pending('GET','/me/profile-publication').length,0);
  assert.equal(h.pending('POST','/me/member-card-share').length,0);
  await React.act(async()=>{window.dispatchEvent({type:'freedom-profile-updated'});});
- await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'新公開介紹',aggregate_version:'2'});
- const save=h.pending('POST','/me/member-card-share')[0];
- assert(save);assert.equal(save.body.headline,'新公開介紹');
- await h.settle(save,{...initialSettings(),...save.body,aggregate_version:2});
+ assert.equal(h.pending('GET','/me/profile-publication').length,0);
+ await h.settle(h.pending('GET','/me/member-card-share').at(-1),{...initialSettings(),headline:'新公開介紹',aggregate_version:2});
+ assert.equal(h.pending('POST','/me/member-card-share').length,0);
+ assert.equal(h.headlineText(),'新公開介紹');
+ assert(preview(h).textContent.includes('新公開介紹'));
  await React.act(async()=>{window.dispatchEvent({type:'freedom-profile-updated'});});
- await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'字'.repeat(61),aggregate_version:'3'});
- assert.equal(h.pending('POST','/me/member-card-share').length,1);
+ await h.settle(h.pending('GET','/me/member-card-share').at(-1),{...initialSettings(),headline:null,aggregate_version:3});
+ assert.equal(h.headlineText(),'尚未設定');
+ assert(!preview(h).textContent.includes('新公開介紹'));
+ h.design('工坊誌');
+ const save=h.pending('POST','/me/member-card-share')[0];
+ assert(save);assert.equal('headline' in save.body,false);
+ await h.settle(save,{...initialSettings(),...save.body,headline:null,aggregate_version:4});
 });

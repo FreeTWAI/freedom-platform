@@ -296,17 +296,69 @@ export async function publicEventBanner(pool:Pool,id:string,store?:ObjectStore){
  return (await readDomainMedia(()=>bannerSnapshot(pool,id),{purpose:'community.event-banner',targetId:id,variant:'banner'},store)).bytes;
 }
 
+export type GuestRegistrationEvent={
+  state:string;
+  visibility:string;
+  registration_mode:string;
+  registration_policy:string;
+  starts_at:string|Date;
+  capacity:number|null;
+  attending_count?:number|null;
+  waitlist_enabled?:boolean;
+};
+export type GuestRegistrationDecision={allowed:true}|{allowed:false;status:403|404|409|422|503;code:string;message:string};
+/** Decides whether guest registration can be offered or accepted for an event under current flags. */
+export function evaluateGuestEventRegistration(input:{
+  emailEnabled:boolean;
+  participationEnabled?:boolean;
+  event?:GuestRegistrationEvent|null;
+  referralCode?:string|null;
+  referralValid?:boolean;
+  ignoreCapacity?:boolean;
+  allowWaitlist?:boolean;
+  now?:number;
+}):GuestRegistrationDecision{
+  if(input.event===undefined){
+    return input.emailEnabled?{allowed:true}:{allowed:false,status:503,code:'event_email_unavailable',message:'活動郵件服務暫時無法使用。'};
+  }
+  const e=input.event;
+  if(!e||e.state!=='published'||!['referral','open'].includes(e.visibility)){
+    return {allowed:false,status:404,code:'not_found',message:'找不到這場公開活動。'};
+  }
+  if(e.registration_mode!=='platform'){
+    return {allowed:false,status:409,code:'external_registration',message:'請到原站報名。'};
+  }
+  if(e.registration_policy!=='guest_allowed'){
+    return {allowed:false,status:403,code:'event_member_required',message:'請登入本社群帳號後報名。'};
+  }
+  if(Date.parse(String(e.starts_at))<=(input.now??Date.now())){
+    return {allowed:false,status:409,code:'event_closed',message:'活動已開始或取消，無法報名。'};
+  }
+  if(e.visibility==='referral'&&(!input.referralCode||input.referralValid===false)){
+    return {allowed:false,status:422,code:'share_code_required',message:'請從會員分享的活動連結報名。'};
+  }
+  if(!input.ignoreCapacity&&e.capacity!==null&&Number(e.attending_count??0)>=e.capacity){
+    if(!(input.allowWaitlist&&input.participationEnabled&&e.waitlist_enabled)){
+      return {allowed:false,status:409,code:'event_full',message:'活動名額已滿；候補須由本人另行選擇。'};
+    }
+  }
+  if(!input.emailEnabled){
+    return {allowed:false,status:503,code:'event_email_unavailable',message:'活動郵件服務暫時無法使用。'};
+  }
+  return {allowed:true};
+}
+function requireGuestRegistration(decision:GuestRegistrationDecision){
+  if(!decision.allowed)throw new Problem(decision.status,decision.code,decision.message);
+}
+
 export type EventEmailSender=(to:string,subject:string,body:string)=>Promise<void>;
 export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:EventEmailSender,origin:string,participationEnabled=false){
   const body=z.object({name:text(80),email:z.email().max(200),referral_code:shareCode.nullable().default(null)}).strict().parse(raw);
   const email=body.email.trim().toLowerCase();
   const registration=await transaction(pool,async q=>{
     const row=(await q.query('SELECT * FROM community_events WHERE event_id=$1 FOR UPDATE',[id])).rows[0];
-    requireCondition(row&&row.state==='published'&&['referral','open'].includes(row.visibility)&&!(await q.query('SELECT is_verification_test_account($1) AS hidden',[row.organizer_ref])).rows[0].hidden,404,'not_found','找不到這場公開活動。');
-    requireCondition(row.registration_mode==='platform',409,'external_registration','請到原站報名。');
-    requireCondition(row.registration_policy!=='community_member',403,'event_member_required','請登入本社群帳號後報名。');
-    requireCondition(Date.parse(row.starts_at)>Date.now(),409,'event_closed','活動已開始或取消，無法報名。');
-    requireCondition(row.visibility!=='referral'||body.referral_code,422,'share_code_required','請從會員分享的活動連結報名。');
+    const hidden=!row||(await q.query('SELECT is_verification_test_account($1) AS hidden',[row.organizer_ref])).rows[0].hidden;
+    requireGuestRegistration(evaluateGuestEventRegistration({emailEnabled:Boolean(send),event:hidden?null:row,referralCode:body.referral_code,ignoreCapacity:true}));
     const referrer=await referralOwner(q,id,body.referral_code);
     if(participationEnabled)await reconcileEventWaitlist(q,id);
     await q.query("UPDATE community_event_guest_rsvps SET state='cancelled' WHERE event_id=$1 AND state='pending' AND created_at<=clock_timestamp()-interval '10 minutes'",[id]);
@@ -315,7 +367,8 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
       // The same normalized guest's live invitation already reserves this seat.
       const invitation=(await q.query("SELECT invitation_id FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2 AND status='invited' AND expires_at>clock_timestamp()",[id,email])).rows[0];
       const mineReserved=Boolean(invitation);
-      requireCondition(row.capacity===null||await countEventSeats(q,id)-(mineReserved?1:0)<row.capacity,409,'event_full','活動名額已滿；候補須由本人另行選擇。');
+      const seats=await countEventSeats(q,id)-(mineReserved?1:0);
+      requireGuestRegistration(evaluateGuestEventRegistration({emailEnabled:Boolean(send),event:{...row,attending_count:seats},referralCode:body.referral_code}));
       // Credit belongs to this fresh attempt, not any later same-email request.
       // Persist it in admission so a provider rollback and explicit retry retain it.
       existing=(await q.query(`INSERT INTO community_event_guest_rsvps(event_id,email,name,state,referred_by_user_id,created_at,credited_invitation_id) VALUES($1,$2,$3,'pending',$4,clock_timestamp(),$5)

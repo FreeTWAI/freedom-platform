@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { buildSync } from 'esbuild';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerReactDomTeardown } from './react-dom-teardown.js';
 
 class HostNode {
   [key: string]: any;
@@ -134,6 +135,7 @@ function setupEnv(t: any) {
     IntersectionObserver: (globalThis as any).IntersectionObserver,
     IS_REACT_ACT_ENVIRONMENT: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
   };
+  const teardown = registerReactDomTeardown(t, prev);
   const win: any = {
     document: doc,
     HTMLIFrameElement: class {},
@@ -155,26 +157,23 @@ function setupEnv(t: any) {
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as any);
-  t.after(() => {
-    root.unmount();
-    Object.assign(globalThis, prev);
-  });
-  return { container, root, ...entry.exports };
+  teardown.setRoot(root);
+  return { container, root, teardown, ...entry.exports };
 }
 
 test('UX-M-10: SkillBookIntro hides duplicate 前往 GitHub 加星 ↗ link where 查看原作 Repo ↗ exists', async (t) => {
-  const { container, root, SkillBookIntro, GitHubSocialProvider, GitHubBookSocial, client } = setupEnv(t);
+  const { container, root, teardown, SkillBookIntro, GitHubSocialProvider, GitHubBookSocial, client } = setupEnv(t);
   const origGet = client.get.bind(client);
-  client.get = async (path: string) => {
+  client.get = teardown.trackFn(async (path: string) => {
     if (path.includes('/original-cache')) return { cache: null };
     if (path.includes('/badges')) return { items: [] };
     if (path.includes('/install')) return { supported: false };
     return { items: [] };
-  };
-  t.after(() => { client.get = origGet; });
+  });
+  teardown.onRestore(() => { client.get = origGet; });
 
   const repoUrl = 'https://github.com/example/social-post';
-  const fakeSocialClient: any = {
+  const fakeSocialClient: any = teardown.trackClient({
     csrfToken: 'test-csrf',
     async get(path: string) {
       if (path === '/me/github') throw new Error('github unavailable');
@@ -183,7 +182,7 @@ test('UX-M-10: SkillBookIntro hides duplicate 前往 GitHub 加星 ↗ link wher
       }
       return {};
     },
-  };
+  });
   const session = { user: { user_id: 'me-user', email: 'me@local.test' }, csrf_token: 'test-csrf' };
   const book = {
     id: 'social-post',

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { buildSync } from 'esbuild';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerReactDomTeardown } from './react-dom-teardown.js';
 
 class HostNode {
   [key: string]: any;
@@ -136,6 +137,7 @@ function setupEnv(t: any) {
     IntersectionObserver: (globalThis as any).IntersectionObserver,
     IS_REACT_ACT_ENVIRONMENT: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
   };
+  const teardown = registerReactDomTeardown(t, prev);
   const storage = new Map<string, string>();
   const win: any = {
     document: doc,
@@ -164,23 +166,20 @@ function setupEnv(t: any) {
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as any);
-  t.after(() => {
-    root.unmount();
-    Object.assign(globalThis, prev);
-  });
-  return { container, root, ...entry.exports };
+  teardown.setRoot(root);
+  return { container, root, teardown, ...entry.exports };
 }
 
 test('UX-M-08: ShowcasePanel puts primary action before paragraphs and SkillsPanel moves prose behind 說明', async (t) => {
-  const { container, root, ShowcasePanel, SkillsPanel, GitHubSocialProvider, PortalContext, client, setSharingDraftAccount } = setupEnv(t);
+  const { container, root, teardown, ShowcasePanel, SkillsPanel, GitHubSocialProvider, PortalContext, client, setSharingDraftAccount } = setupEnv(t);
   setSharingDraftAccount('me-user', client.sessionGeneration);
   const origGet = client.get.bind(client);
-  client.get = async (path: string) => {
+  client.get = teardown.trackFn(async (path: string) => {
     if (path.startsWith('/showcases')) return { items: [], next_offset: null };
     if (path.startsWith('/opportunities')) return { items: [] };
     return origGet(path);
-  };
-  t.after(() => { client.get = origGet; });
+  });
+  teardown.onRestore(() => { client.get = origGet; });
 
   const portalValue = {
     session: { user: { user_id: 'me-user', email: 'me@local.test' }, csrf_token: 'test-csrf' },
@@ -202,7 +201,7 @@ test('UX-M-08: ShowcasePanel puts primary action before paragraphs and SkillsPan
   assert.equal(firstActionIdx > 0, true, 'ShowcasePanel renders primary button');
   assert.equal(firstParaIdx > firstActionIdx, true, 'ShowcasePanel has no paragraph before primary button 發布作品');
 
-  const fakeClient: any = {
+  const fakeClient: any = teardown.trackClient({
     csrfToken: 'test-csrf',
     sessionGeneration: 1,
     async get(path: string) {
@@ -213,7 +212,7 @@ test('UX-M-08: ShowcasePanel puts primary action before paragraphs and SkillsPan
       if (path === '/me/github') return { configured: false, connected: false, github_user: null };
       return { items: [] };
     },
-  };
+  });
   const session = { user: { user_id: 'me-user', email: 'me@local.test' }, csrf_token: 'test-csrf' };
 
   await React.act(async () => {
