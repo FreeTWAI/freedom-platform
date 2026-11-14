@@ -1,7 +1,7 @@
 import {createTaskRead} from './task-board-loading';
 import type {GuildSummary} from './Onboarding';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
-import {requireItems,type PortalClient} from '../api';
+import {ApiError,requireItems,type PortalClient} from '../api';
 import { BrandPoster } from './CommunityBrand';
 import {EventFields,blankEvent,eventPayload,type EventDraft} from './EventsPanel';
 import {PreviewProfileMenu} from './PreviewProfileMenu';
@@ -11,7 +11,20 @@ import {QuickStart} from './QuickStart';
 import {useLanguage} from '../language';
 
 type WelcomeProps={client:PortalClient;name:string;entryLabel?:string;onStart:()=>void;onCompleted:()=>void;onLogout:()=>void};
-const guildsFrom=(value:unknown)=>requireItems<GuildSummary>(value,'公會');
+const isGuildRow=(row:unknown):row is GuildSummary=>{
+  if(!row||typeof row!=='object'||Array.isArray(row))return false;
+  const g=row as Record<string,unknown>;
+  return typeof g.guild_key==='string'&&g.guild_key.trim().length>0
+    &&typeof g.name==='string'
+    &&(g.purpose===undefined||typeof g.purpose==='string')
+    &&(g.tags===undefined||(Array.isArray(g.tags)&&g.tags.every(tag=>typeof tag==='string')))
+    &&Array.isArray(g.skill_books)&&g.skill_books.every(book=>Boolean(book)&&typeof book==='object'&&((book as {title?:unknown}).title===undefined||typeof (book as {title?:unknown}).title==='string'));
+};
+const guildsFrom=(value:unknown)=>{
+  const items=requireItems<GuildSummary>(value,'公會');
+  if(!items.every(isGuildRow))throw new ApiError({message:'公會 回應格式不正確'});
+  return items;
+};
 // Reuse the existing session-fenced read lane. No completed cache or polling.
 function usePreviewRead<T>(client:PortalClient,path:string,decode:(value:unknown)=>T){
   const generation=client.sessionGeneration;

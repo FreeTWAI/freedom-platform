@@ -75,16 +75,14 @@ test('new member completes required positioning, chooses primary guild and gets 
   const blocked=await page.request.get('/api/v1/retail/catalog');expect(blocked.status()).toBe(403);
   await page.goto('/#retail');await expect(page.getByRole('heading',{name:'你喜歡怎麼做事？'})).toBeVisible();
   await completeOrientation(page);
-  // An attempted deep link while gated must not steal the first completed member landing.
-  await expect(page).toHaveURL(/#home$/);
+  // LEFT-4: a guest who opens a deep link, signs in and finishes onboarding lands on that link.
+  await expect(page).toHaveURL(/^https?:\/\/[^/]+\/#guilds\/guild_commerce_sales\/tools\/retail-kit$/);
+  await expect(page.getByRole('heading',{name:'零售工具',level:1,exact:true})).toBeVisible();
+  await navigate(page,'會員首頁');
   await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
   await expect(page.locator('.member-card')).toContainText('工坊新夥伴');
   await expect(page.locator('.member-card')).toContainText('主要公會');
   await expect(page.locator('.member-card .positioning-title')).not.toHaveText('探索自己的方向');
-  // Once onboarding is complete, ordinary deep links still open their requested module.
-  await page.goto('/#retail');
-  await expect(page.getByRole('heading',{name:'零售工具',level:1,exact:true})).toBeVisible();
-  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/retail-kit$/);
   await navigate(page, '我的名片');await openAccountSettings(page,'誰能看到我');
   await expect(page.getByRole('heading',{name:'我的',level:1,exact:true})).toBeVisible();
   await expect(page.getByLabel('聯絡 E-mail',{exact:true})).toHaveValue(email);
@@ -96,13 +94,13 @@ test('new member completes required positioning, chooses primary guild and gets 
   await audiences.getByRole('checkbox',{name:'公會夥伴',exact:true}).check();
   await expect(audiences.getByRole('checkbox',{name:'不公開',exact:true})).not.toBeChecked();
   const profileRequest=page.waitForRequest(request=>request.url().endsWith('/api/v1/me/account')&&request.method()==='POST');
-  await page.getByRole('button',{name:'儲存修改',exact:true}).click();
+  await page.getByRole('button',{name:'儲存分享對象',exact:true}).click();
   const profileBody=(await profileRequest).postDataJSON();
   expect(profileBody.contacts.email).toEqual({audiences:[]});
   expect(profileBody.contacts.discord).toEqual({value:'new.member',audiences:['friends','guild']});
   await expect(page.getByText('修改已儲存。')).toBeVisible();
   // The save notice precedes the account refresh; navigation remains guarded until it settles.
-  await expect(page.getByRole('button',{name:'儲存修改',exact:true})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'儲存分享對象',exact:true})).toBeEnabled();
   await navigate(page, '職業公會');
   await expect(page).toHaveURL(/#guilds$/);
   await expect(page.getByRole('heading',{name:'公會',level:1,exact:true})).toBeVisible();
@@ -145,7 +143,7 @@ test('new member completes required positioning, chooses primary guild and gets 
   await restoredAudiences.getByRole('checkbox',{name:'不公開',exact:true}).check();
   await expect(restoredAudiences.getByRole('checkbox',{name:'平台公開',exact:true})).not.toBeChecked();
   await expect(restoredAudiences.getByRole('checkbox',{name:'公會夥伴',exact:true})).not.toBeChecked();
-  await page.getByRole('button',{name:'儲存修改',exact:true}).click();
+  await page.getByRole('button',{name:'儲存分享對象',exact:true}).click();
   await expect(page.getByText('修改已儲存。')).toBeVisible();
   await page.reload();await openAccountSettings(page,'誰能看到我');
   await expect(page.getByRole('group',{name:'Discord 帳號可見範圍',exact:true}).getByRole('checkbox',{name:'不公開',exact:true})).toBeChecked();

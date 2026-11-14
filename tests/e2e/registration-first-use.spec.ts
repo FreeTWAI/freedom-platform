@@ -156,40 +156,37 @@ test('checking a committed join after a lost reply continues without a second wr
   expect(writes).toBe(1);
 });
 
-// A 200 response is not enough: bad card data must stay inside its read lane.
-// These cases also put a request budget on retry: only the failed section rereads.
+// UX-V-04 removed the welcome screen's task preview this used to check; the guild directory is the welcome screen's remaining list.
 for(const malformed of ['null-row','non-text-title'] as const){
-  test(`malformed items is a local retryable error: ${malformed}`,async({page})=>{
+  test(`malformed guild directory is a local retryable error: ${malformed}`,async({page})=>{
     await page.setViewportSize({width:390,height:844});
     const paths=['/api/v1/events','/api/v1/task-board/preview','/api/v1/community','/api/v1/guilds/directory'];
     const reads=new Map<string,number>(),pageErrors:string[]=[];let invalid=true;
     page.on('pageerror',error=>pageErrors.push(error.message));
-    await page.route(url=>paths.includes(url.pathname),route=>{
+    await page.route(url=>paths.includes(url.pathname),async route=>{
       if(route.request().method()!=='GET')return route.continue();
       const path=new URL(route.request().url()).pathname;
       reads.set(path,(reads.get(path)??0)+1);
-      if(path==='/api/v1/task-board/preview'&&invalid)return route.fulfill({json:{items:[
-        malformed==='null-row'?null:{work_item_id:'synthetic-task',title:{unexpected:'object'},objective:'測試說明'},
-      ]}});
+      if(path==='/api/v1/guilds/directory'&&invalid){
+        const response=await route.fetch();
+        const body=await response.json() as {items:Record<string,unknown>[]};
+        const first=malformed==='null-row'?null:{...body.items[0],name:{unexpected:'object'}};
+        return route.fulfill({response,status:200,json:{...body,items:[first,...body.items.slice(1)]}});
+      }
       return route.continue();
     });
     await createAccount(page);
-    const preview=page.locator('.welcome-preview'),target=preview.getByRole('region',{name:'可參與的工作',exact:true});
-    await expect(target.getByRole('alert')).toBeVisible();
-    await expect(target.getByText('目前沒有開放認領的工作。',{exact:true})).toHaveCount(0);
-    for(const title of ['近期活動','可參與的工作','免費技能書']){
-      const region=preview.getByRole('region',{name:title,exact:true});
-      await expect(region).toHaveAttribute('aria-busy','false');
-      if(title!=='可參與的工作')await expect(region.getByRole('alert')).toHaveCount(0);
-    }
-    const selected=preview.locator('.quick-guild-option input').first();
-    await selected.check();const before=new Map(reads);
+    const preview=page.locator('.welcome-preview'),quick=preview.getByRole('region',{name:'快速加入公會',exact:true});
+    await expect(quick.getByRole('alert')).toBeVisible();
+    await expect(quick.locator('.quick-guild-option')).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+    const before=new Map(reads);
     invalid=false;
-    await target.getByRole('button',{name:'重新載入 · 可參與的工作',exact:true}).click();
-    await expect(target).toHaveAttribute('aria-busy','false');
-    await expect(target.getByRole('alert')).toHaveCount(0);
-    await expect(selected).toBeChecked();
-    for(const path of paths)expect(reads.get(path)??0,`read budget: ${path}`).toBe((before.get(path)??0)+(path==='/api/v1/task-board/preview'?1:0));
+    await quick.getByRole('button',{name:'重讀公會',exact:true}).click();
+    await expect(quick.getByRole('alert')).toHaveCount(0);
+    await expect(quick.locator('.quick-guild-option').first()).toBeVisible();
+    expect(reads.get('/api/v1/guilds/directory')??0,'read budget: /api/v1/guilds/directory').toBe((before.get('/api/v1/guilds/directory')??0)+1);
+    for(const path of ['/api/v1/events','/api/v1/task-board/preview','/api/v1/community'])expect(reads.get(path)??0,`read budget: ${path}`).toBe(0);
     expect(pageErrors).toEqual([]);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   });

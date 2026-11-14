@@ -5,7 +5,7 @@ import postcss from 'postcss';
 
 const read=(name:string)=>readFileSync(new URL('../../apps/portal-web/src/'+name,import.meta.url),'utf8');
 
-test('disabled primary button keeps its filled style muted without a bright or dashed outline',()=>{
+test('disabled primary button follows the shared opaque disabled button rule',()=>{
   const css=read('rpg-theme.css');
   const rules:{selector:string;values:Record<string,string>}[]=[];
   postcss.parse(css).walkRules(rule=>{
@@ -26,17 +26,18 @@ test('disabled primary button keeps its filled style muted without a bright or d
 
   const matchingPrimaryRules=rules.filter(rule=>appliesToDisabledPrimary(rule.selector));
   assert.ok(matchingPrimaryRules.length>=1,'expected a disabled primary rule');
-  for(const rule of matchingPrimaryRules){
-    assert.notEqual(rule.values['border-style'],'dashed',`${rule.selector} must not give .btn-primary a dashed border`);
-    assert.notEqual(rule.values['border-color'],'var(--muted)',`${rule.selector} must not give .btn-primary a bright muted outline`);
-    assert.notEqual(rule.values.background,'var(--bg)',`${rule.selector} must not clear .btn-primary background fill`);
-  }
+  const sharedDisabled=rules.find(rule=>rule.selector===':root .btn:disabled');
+  assert.ok(sharedDisabled,'expected :root .btn:disabled rule');
+  assert.deepEqual(sharedDisabled.values,{
+    background:'var(--bg)',
+    color:'var(--muted)',
+    'border-color':'var(--muted)',
+    'border-style':'dashed',
+    opacity:'1',
+    'box-shadow':'none',
+    cursor:'not-allowed'
+  });
 
   const primaryDisabled=rules.find(rule=>rule.selector.includes('.btn-primary:disabled'));
-  assert.ok(primaryDisabled,'expected explicit .btn-primary:disabled rule');
-  const opacity=Number(primaryDisabled.values.opacity);
-  assert.ok(Number.isFinite(opacity)&&opacity>0&&opacity<=0.65,'disabled primary button must use reduced opacity');
-  assert.equal(primaryDisabled.values['border-color'],'transparent');
-  assert.equal(primaryDisabled.values['border-style'],'solid');
-  assert.equal(primaryDisabled.values.cursor,'not-allowed');
+  assert.equal(primaryDisabled,undefined,'must not split .btn-primary:disabled from the shared rule');
 });

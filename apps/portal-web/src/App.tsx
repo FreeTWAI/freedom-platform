@@ -362,6 +362,14 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   const leaveCurrentSession = (notice?: string) => {
     if (sessionGeneration.current === renderedSessionGeneration) toLogin(notice)
   }
+  // Explicit sign-out scrubs the pending return ref, URL hash, and top-level hash state so the next member lands on home.
+  // Session expiry keeps leaveCurrentSession directly so the same member can re-authenticate and return to their page.
+  const finishExplicitSignOut = () => {
+    pendingMemberReturnRef.current = null
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    setLocationHash('')
+    leaveCurrentSession()
+  }
   const eventLogin=(mode:'login'|'register'='login')=>{
     const destination=eventReturnPath();if(!destination)return;
     // Scrub unallowlisted query/fragment data before creating any auth history entry.
@@ -457,14 +465,14 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     {!onboarding ? <div className="centered"><div className="card stack"><h1>自由工坊</h1>{gateError ? <><p role="alert">{gateError}</p><button className="btn btn-primary" onClick={() => void loadOnboarding()}>重新載入定位進度</button></> : <p role="status">正在確認你的定位旅程…</p>}</div></div>
     : onboarding.required && !onboarding.completed && site?.commerce_checkout_enabled===true && locationHash==='#reservations' ? <div className="app-frame"><main className="main stack"><BrandPoster compact/><div className="card stack"><h1>我的訂單</h1><PageLoadBoundary label="我的訂單"><HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={()=>{}} replaceLocation={()=>{}} checkoutOrders={{userId:session.user.user_id,csrfToken:session.csrf_token,readOnly:true,onSessionExpired:()=>leaveCurrentSession('登入已過期，請重新登入。')}}/></PageLoadBoundary><div className="actions"><a className="btn btn-small btn-ghost" href="/#home">返回工坊</a></div></div></main></div>
     : onboarding.required && !onboarding.completed ? exploring&&!onboardingStarted(session.user.user_id)
-      ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={publicEventId?'原本的活動報名':entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
-      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(window.location.hash&&!safePortalReturn(window.location.hash))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
+      ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={publicEventId?'原本的活動報名':entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => finishExplicitSignOut()).catch(error => setGateError(describeError(error).message))}/>
+      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(window.location.hash&&!safePortalReturn(window.location.hash))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => finishExplicitSignOut()).catch(error => setGateError(describeError(error).message))}/>
     : sharedCardToken ? <PublicMemberPage client={client} token={sharedCardToken} session={session} onLogin={()=>{}} onReturn={returnToWorkshop} onEdit={editOwnCard}/> : <>
     <AuthorClaimProvider client={client}><DevelopmentAccessProvider client={client} session={session}>
     <Workspace key={`${session.user.user_id}:${client.sessionGeneration}`}
       site={site}
       session={session}
-      onLoggedOut={() => leaveCurrentSession()}
+      onLoggedOut={() => finishExplicitSignOut()}
       onSessionExpired={() => leaveCurrentSession('登入已過期，請重新登入。')}
     />
     <AdminReportsEntry client={client}/>
