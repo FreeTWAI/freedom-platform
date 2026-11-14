@@ -637,6 +637,40 @@ test('UX-F-06: publishing from any home route stays on home and emits freedom-sh
   assert.equal(exploreMods.dispatched.length, 0);
 });
 
+test('a note shared from a guild tool records the tool as the share source', async () => {
+  const harness = createHookHarness();
+  const { ShareBoxLauncher, openShareComposer, win } = loadShareModules(harness);
+  win.location.hash = '#guilds/guild_games/tools/guest-draft';
+  const client = new PortalClient();
+  const posted: { path: string; body: unknown; key?: string }[] = [];
+  client.post = (async (path: string, body: unknown, options?: { idempotencyKey?: string }) => {
+    posted.push({ path, body, key: options?.idempotencyKey });
+    if (path === '/social-posts/notes') return { post_id: '00000000-0000-4000-8000-000000000011', share_id: '00000000-0000-4000-8000-000000000012' };
+    if (path === '/shares') return { share_id: '00000000-0000-4000-8000-000000000012', created: false, url: '/#shares/00000000-0000-4000-8000-000000000012' };
+    throw new Error(`unexpected post ${path}`);
+  }) as PortalClient['post'];
+  const render = () => harness.render(() =>
+    harness.reactStub.createElement(ShareBoxLauncher, { client, userId: 'u-tool', onChoose() {}, storesEnabled: false }),
+  );
+  render();
+  const composePromise = openShareComposer({ text: '工具裡寫的筆記', source: { guild_key: 'guild_games', tool_id: 'guest-draft' } });
+  let tree = render();
+  const postChip = collectNodes(tree).find(n => n.type === 'button' && nodeText(n) === '貼文');
+  if (postChip) { postChip.props.onClick(); tree = render(); }
+  const textarea = collectNodes(tree).find(n => n.type === 'textarea')!;
+  textarea.props.onChange({ target: { value: '工具裡寫的筆記' } });
+  tree = render();
+  const dialog = collectNodes(tree).find(n => n.type === 'dialog')!;
+  collectNodes(dialog).find(n => n.type === 'button' && nodeText(n) === '發布')!.props.onClick();
+  const result = await composePromise;
+  assert.equal(result.status, 'published');
+  // Publishing the note made the share; the second call only endorses it again with the tool as source.
+  assert.deepEqual(posted.map(p => p.path), ['/social-posts/notes', '/shares']);
+  assert.deepEqual(JSON.parse(JSON.stringify(posted[1].body)), { kind: 'post', ref_id: '00000000-0000-4000-8000-000000000011', source: { guild_key: 'guild_games', tool_id: 'guest-draft' } });
+  assert.equal(posted[1].key, `${posted[0].key}-share`);
+  assert.equal((result as { share_id?: string }).share_id, '00000000-0000-4000-8000-000000000012');
+});
+
 test('UX-F-06: freedom-share-published carries title and kind from publish answer or ShareBox preview/manual title', async () => {
   // 1) Link/repository share where publish answer omits title and kind -> falls back to ShareBox preview.
   {

@@ -61,7 +61,11 @@ export function ShareBox({pending,retainedImage,retainedMode,client,request,valu
         if(image){if(image.size>2*1024*1024||!['image/png','image/jpeg','image/webp'].includes(image.type))throw Error('圖片限 2 MB 的 PNG、JPEG 或 WebP。');const bytes=new Uint8Array(await image.arrayBuffer());let binary='';for(const b of bytes)binary+=String.fromCharCode(b);attached={mime_type:image.type,data_base64:btoa(binary)};}
         const post=await client.post<{post_id:string;share_id?:string;title?:string}>('/social-posts/notes',{...(p.body as object),...(attached?{image:attached}:{})},{idempotencyKey:p.key});
         if(!post.share_id)throw Error('發布失敗，請重試。');
-        result={share_id:post.share_id,url:`/#shares/${post.share_id}`,title:post.title,kind:'post'};
+        // Publishing the note already made its share. A share opened from a guild tool also names the
+        // tool as its source: endorsing the same share again records it (no second credit).
+        result=request.source
+          ?{...await client.post<{share_id:string;url:string}>('/shares',{kind:'post',ref_id:post.post_id,source:request.source},{idempotencyKey:p.key+'-share'}),title:post.title,kind:'post'}
+          :{share_id:post.share_id,url:`/#shares/${post.share_id}`,title:post.title,kind:'post'};
       }else{
         result=await client.post<{share_id:string;url:string;title?:string;kind?:string}>('/shares',{...(p.body as object),...(request.source?{source:request.source}:{})},{idempotencyKey:p.key+'-share'});
       }
