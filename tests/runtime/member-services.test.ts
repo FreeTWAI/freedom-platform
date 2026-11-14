@@ -81,7 +81,7 @@ async function counts() {
   return (await pool.query(`SELECT (SELECT count(*)::int FROM contributions) AS contributions,
     (SELECT count(*)::int FROM outbox) AS outbox, (SELECT count(*)::int FROM transition_journal) AS journal`)).rows[0] as { contributions: number; outbox: number; journal: number };
 }
-function board(data: { boards: { kind: string; items: { user_id: string; display_name: string; points: number }[] }[] }, kind = 'member_service') {
+function board(data: { boards: { kind: string; items: { user_id: string; display_name: string; points: number }[] }[] }, kind = 'service') {
   return data.boards.find(item => item.kind === kind)!;
 }
 function assertLogo(html: string) {
@@ -626,7 +626,7 @@ test('a member_service link scores the sharer, including the owner, and a non-uu
   const week = await request('/promotion/leaderboards?period=week', maker);
   const serviceBoard = board(week.data);
   assert.equal(serviceBoard.items.find((item: { user_id: string }) => item.user_id === reviewer.user.user_id)?.points, 1);
-  assert.equal(serviceBoard.items.find((item: { user_id: string }) => item.user_id === maker.user.user_id)?.points, 1);
+  assert.equal(serviceBoard.items.find((item: { user_id: string }) => item.user_id === maker.user.user_id)?.points, 2);
   const listed = await request('/member-services', maker);
   const card = listed.data.items.find((item: { service_id: string }) => item.service_id === id);
   assert.equal(card.total_points, 2);

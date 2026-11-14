@@ -11,7 +11,7 @@ import { authRateLimit } from '../identity-membership/members.js';
 import type { Actor } from '../identity-membership/service.js';
 import { shareAdapter } from './adapters/registry.js';
 import { manualShareLink } from './adapters/link.js';
-import { existingTitle,existingReadableSql,hiddenEventReadableSql } from './adapters/existing.js';
+import { existingTitle,existingReadableSql,feedShareSql,hiddenEventReadableSql } from './adapters/existing.js';
 import { endorseShare, creditEventRegistrations } from './credit.js';
 import { createPromotionLinkRow } from '../community/promotion.js';
 import { readPublicWork } from '../opportunity-project-work/public-sharing.js';
@@ -149,7 +149,7 @@ export async function shareLink(pool:Pool,input:Command,id:string) {
 }
 export async function listShares(q:PoolClient,actor:Actor,raw:unknown) {
   const query=z.object({limit:z.coerce.number().int().min(1).max(50).default(20),offset:z.coerce.number().int().min(0).max(10000).default(0)}).strict().parse(raw);
-  const rows=(await q.query<ShareRow & {readable:boolean}>(`SELECT s.*,${existingReadableSql('s','$2')} AS readable FROM shares s WHERE s.community_id=$1 AND s.state='published' AND ($5::uuid IS NULL OR EXISTS(SELECT 1 FROM share_endorsements e WHERE e.share_id=s.share_id AND e.user_id=$5 AND e.withdrawn_at IS NULL)) AND (s.first_sharer_user_id IS NULL OR NOT is_verification_test_account(s.first_sharer_user_id)) ORDER BY s.created_at DESC,s.share_id LIMIT $3 OFFSET $4`,[actor.community_id,actor.user_id,query.limit,query.offset,actor.agent?actor.user_id:null])).rows;
+  const rows=(await q.query<ShareRow & {readable:boolean}>(`SELECT s.*,${existingReadableSql('s','$2')} AS readable FROM shares s WHERE s.community_id=$1 AND s.state='published' AND ${feedShareSql('s')} AND ($5::uuid IS NULL OR EXISTS(SELECT 1 FROM share_endorsements e WHERE e.share_id=s.share_id AND e.user_id=$5 AND e.withdrawn_at IS NULL)) AND (s.first_sharer_user_id IS NULL OR NOT is_verification_test_account(s.first_sharer_user_id)) ORDER BY s.created_at DESC,s.share_id LIMIT $3 OFFSET $4`,[actor.community_id,actor.user_id,query.limit,query.offset,actor.agent?actor.user_id:null])).rows;
   const items=rows.filter(s=>s.readable).map(s=>({share_id:s.share_id,kind:s.kind,title:s.title,url:`/#shares/${s.share_id}`}));
   return {items,next_offset:rows.length===query.limit?query.offset+query.limit:null};
 }

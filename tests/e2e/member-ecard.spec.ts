@@ -231,8 +231,8 @@ test('sharing a member card from 我的名片 scores one guest click',async({pag
   await page.locator('.legacy-promotion > summary').click();
   await page.locator('.promotion-rankings > summary').click();
   await expect(page.getByRole('button',{name:'本週',exact:true})).toHaveAttribute('aria-pressed','true');
-  const board=page.getByRole('article',{name:'名片點擊排行榜',exact:true});
-  await expect(board).toContainText('在我的名片分享名片連結，每次點擊 +1。');
+  const board=page.getByRole('article',{name:'連結',exact:true});
+  await expect(board).toContainText('分享連結（含平台與名片），或有人透過你的連結點進來。');
   await expect(board).toContainText('名片推廣作者');
   await expect(board).toContainText('我的名次：第 1 名・1 分');
 });

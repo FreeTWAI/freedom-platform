@@ -144,8 +144,13 @@ test('S3: myShareResults merges shares, credits, and standalone links with visib
   assert.equal(eventLink.status, 200, eventLink.text);
 
   // (c) Standalone links without a shares row: public note post + member_service
-  const note = await req('/social-posts/notes', alice, { text: '筆記 C\n內容' });
-  assert.equal(note.status, 201);
+  const notePostId = randomUUID();
+  await pool.query(
+    `INSERT INTO community_social_posts(post_id,community_id,author_user_id,kind,url,platform,title,note,state)
+     VALUES($1,$2,$3,'note',NULL,'other','筆記 C','筆記 C\n內容','active')`,
+    [notePostId, DEMO_COMMUNITY, alice.actor.user_id],
+  );
+  const note = { data: { post_id: notePostId } };
   const noteState = await req(`/social-posts/${note.data.post_id}/public-sharing`, alice);
   await req(`/social-posts/${note.data.post_id}/public-sharing`, alice, {
     enabled: true, post_revision: noteState.data.post_revision, media_version: noteState.data.media_version,
@@ -354,8 +359,13 @@ test('S3: myShareResults orders all four result kinds newest-first by greatest(c
   const eventId = randomUUID();
   const eventShareId = randomUUID();
   const serviceId = randomUUID();
-  const note = await req('/social-posts/notes', alice, { text: '排序測試筆記\n內容' });
-  assert.equal(note.status, 201);
+  const notePostId = randomUUID();
+  await pool.query(
+    `INSERT INTO community_social_posts(post_id,community_id,author_user_id,kind,url,platform,title,note,state)
+     VALUES($1,$2,$3,'note',NULL,'other','排序測試筆記','排序測試筆記\n內容','active')`,
+    [notePostId, DEMO_COMMUNITY, alice.actor.user_id],
+  );
+  const note = { data: { post_id: notePostId } };
   const noteState = await req(`/social-posts/${note.data.post_id}/public-sharing`, alice);
   await req(`/social-posts/${note.data.post_id}/public-sharing`, alice, {
     enabled: true, post_revision: noteState.data.post_revision, media_version: noteState.data.media_version,

@@ -172,8 +172,9 @@ test('tester-map lands on the public map with its own preview and reuses platfor
   const workshop = await platformLink(maker);
   await click(workshop.code);
   const boards = await request('/promotion/leaderboards?period=all', maker);
-  assert.equal(boards.data.boards.length, 6);
-  assert.equal(boards.data.boards.find((board: { kind: string }) => board.kind === 'platform').me.points, 2);
+  assert.equal(boards.data.boards.length, 7);
+  assert.equal(boards.data.boards.find((board: { kind: string }) => board.kind === 'link').me.points, 1);
+  assert.equal(boards.data.boards.find((board: { kind: string }) => board.kind === 'all').me.points, 1);
   const unknown = await ownLink(maker.user.user_id, 'platform', 'tester-map/other');
   assert.equal(await promotionGo(pool, unknown.code, undefined, origin, clock), null);
   await click(unknown.code);
@@ -836,7 +837,7 @@ for (const { entry, expires, existing } of [
 
 for (const [route, relation] of [
   ['links/mine', 'promotion_links'],
-  ['leaderboards', 'promotion_clicks'],
+  ['leaderboards', 'share_credit_events'],
 ] as const) {
   test(`promotion ${route} rejects session expiry during a real HTTP relation lock wait`, async () => {
     let httpApp = app;
@@ -917,30 +918,52 @@ test('leaderboards use Taipei periods, competition ranks and the same member vis
   const empty = await request('/promotion/leaderboards', maker);
   assert.equal(empty.data.period, 'week');
   assert.equal(empty.data.since, '2026-10-04T16:00:00.000Z');
-  assert.deepEqual(empty.data.boards.map((board: { kind: string }) => board.kind), ['member_card', 'platform', 'skill_book', 'social_post', 'member_service', 'event']);
+  assert.deepEqual(empty.data.boards.map((board: { kind: string }) => board.kind), ['all', 'repository', 'link', 'event', 'work', 'post', 'service']);
   assert.ok(empty.data.boards.every((board: { items: unknown[]; me: unknown }) => board.items.length === 0 && board.me === null));
   assert.equal((await request('/promotion/leaderboards?period=all', maker)).data.since, null);
 
+  const bulkCredits = async (communityId: string, shareId: string, userId: string, count: number, at: Date) => {
+    for (let i = 0; i < count; i++) {
+      await pool.query(
+        `INSERT INTO share_credit_events(community_id,share_id,user_id,role,basis,units,source_ref,created_at)
+         VALUES($1,$2,$3,'spreader','qualified_click_day',1,$4,$5)`,
+        [communityId, shareId, userId, `bulk:${shareId}:${userId}:${i}:${at.toISOString()}:${randomUUID()}`, at],
+      );
+    }
+  };
+  const rankShareId = randomUUID();
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,title,state)
+     VALUES($1,$2,'link','rank-link','https://freetwai.com/','Rank Link','published')`,
+    [rankShareId, DEMO_COMMUNITY],
+  );
   const names = [['Ada', 5], ['Bea', 3], ['Cara', 3], ['Dan', 1]] as const;
   for (const [name, score] of names) {
     const id = await addUser(`${name}@member.test`, name);
-    const link = await ownLink(id, 'platform', 'workshop');
-    await bulkClicks(link.linkId, id, 'platform', score, clock);
+    await bulkCredits(DEMO_COMMUNITY, rankShareId, id, score, clock);
   }
   const tiedLow = 'c0000000-0000-4000-8000-000000000001', tiedHigh = 'c0000000-0000-4000-8000-000000000002';
   for (const id of [tiedLow, tiedHigh]) {
     await addUser(`${id}@member.test`, '同名', { id });
-    const link = await ownLink(id, 'platform', 'workshop');
-    await bulkClicks(link.linkId, id, 'platform', 2, clock);
+    await bulkCredits(DEMO_COMMUNITY, rankShareId, id, 2, clock);
   }
-  const board = (await request('/promotion/leaderboards?period=week', maker)).data.boards[1];
+  const board = (await request('/promotion/leaderboards?period=week', maker)).data.boards.find((b: { kind: string }) => b.kind === 'link');
   assert.deepEqual(board.items.map((item: { display_name: string; rank: number; points: number }) => [item.display_name, item.rank, item.points]), [
     ['Ada', 1, 5], ['Bea', 2, 3], ['Cara', 2, 3], ['同名', 4, 2], ['同名', 4, 2], ['Dan', 6, 1],
   ]);
   assert.deepEqual(board.items.filter((item: { display_name: string }) => item.display_name === '同名').map((item: { user_id: string }) => item.user_id), [tiedLow, tiedHigh]);
   assert.equal(board.me, null);
 
-  await pool.query('TRUNCATE promotion_clicks, promotion_links');
+  await pool.query('TRUNCATE promotion_clicks, promotion_links, shares CASCADE');
+  const postShareId = randomUUID();
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,state)
+     VALUES($1,$2,'post',$3,$4,'community_social_posts',$5,'Rank Post','published')`,
+    [postShareId, DEMO_COMMUNITY, `post:${postShareId}`, `https://freetwai.com/#${postShareId}`, randomUUID()],
+  );
+  await bulkCredits(DEMO_COMMUNITY, postShareId, maker.user.user_id, 1, clock);
+  await bulkCredits(DEMO_COMMUNITY, postShareId, maker.user.user_id, 1, new Date('2026-10-04T15:59:00.000Z'));
+  await bulkCredits(DEMO_COMMUNITY, postShareId, maker.user.user_id, 1, new Date('2026-09-30T15:59:00.000Z'));
   const mine = await ownLink(maker.user.user_id, 'skill_book', 'book:social-post');
   await bulkClicks(mine.linkId, maker.user.user_id, 'skill_book', 1, clock);
   await bulkClicks(mine.linkId, maker.user.user_id, 'skill_book', 1, new Date('2026-10-04T15:59:00.000Z'));
@@ -949,27 +972,29 @@ test('leaderboards use Taipei periods, competition ranks and the same member vis
   for (let i = 0; i < 11; i++) {
     const id = await addUser(`rank${i}@member.test`, `N${String(i).padStart(2, '0')}`);
     ids.push(id);
-    const link = await ownLink(id, 'skill_book', 'book:social-post');
-    await bulkClicks(link.linkId, id, 'skill_book', 5, clock);
+    await bulkCredits(DEMO_COMMUNITY, postShareId, id, 5, clock);
   }
   await pool.query('INSERT INTO member_avatars(user_id,community_id,image_bytes,aggregate_version) VALUES($1,$2,$3,4)', [ids[0], DEMO_COMMUNITY, Buffer.from([1])]);
-  const hidden = await addUser('rank-hidden@example.invalid', '驗收帳號');
-  const hiddenLink = await ownLink(hidden, 'skill_book', 'book:social-post');
-  await bulkClicks(hiddenLink.linkId, hidden, 'skill_book', 9, clock);
+  const hidden = await addUser('rank-hidden@member.test', '驗收帳號');
+  await bulkCredits(DEMO_COMMUNITY, postShareId, hidden, 9, clock);
+  await pool.query("UPDATE users SET email='rank-hidden@example.invalid' WHERE user_id=$1", [hidden]);
   await pool.query('INSERT INTO member_avatars(user_id,community_id,image_bytes,aggregate_version) VALUES($1,$2,$3,2)', [hidden, DEMO_COMMUNITY, Buffer.from([1])]);
-  const inactive = await addUser('inactive@member.test', '停用', { active: false });
-  const inactiveLink = await ownLink(inactive, 'skill_book', 'book:social-post');
-  await bulkClicks(inactiveLink.linkId, inactive, 'skill_book', 9, clock);
+  const inactive = await addUser('inactive@member.test', '停用');
+  await bulkCredits(DEMO_COMMUNITY, postShareId, inactive, 9, clock);
+  await pool.query('UPDATE users SET active=false WHERE user_id=$1', [inactive]);
   const pending = await addUser('pending@member.test', '未完成', { onboarding: true });
-  const pendingLink = await ownLink(pending, 'skill_book', 'book:social-post');
-  await bulkClicks(pendingLink.linkId, pending, 'skill_book', 9, clock);
+  await bulkCredits(DEMO_COMMUNITY, postShareId, pending, 9, clock);
   const otherCommunity = randomUUID();
   await pool.query('INSERT INTO communities(community_id,name) VALUES($1,$2)', [otherCommunity, '其他社群']);
   const outsider = await addUser('outsider@member.test', '其他社群的人', { community: otherCommunity });
-  const outsiderCode = randomBytes(7).toString('base64url');
-  const outsiderLink = (await pool.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code,created_at) VALUES($1,$2,'skill_book','book:social-post',$3,$4) RETURNING link_id`, [otherCommunity, outsider, outsiderCode, clock])).rows[0].link_id as string;
-  await pool.query(`INSERT INTO promotion_clicks(link_id,click_day,visitor_key,network_key,community_id,user_id,kind,created_at) VALUES($1,$2,$3,$4,$5,$6,'skill_book',$7)`, [outsiderLink, '2026-10-05', 'v:' + 'd'.repeat(64), 'e'.repeat(64), otherCommunity, outsider, clock]);
-  const week = (await request('/promotion/leaderboards?period=week', maker)).data.boards.find((board: { kind: string }) => board.kind === 'skill_book');
+  const outsiderShareId = randomUUID();
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,state)
+     VALUES($1,$2,'post',$3,$4,'community_social_posts',$5,'Other Post','published')`,
+    [outsiderShareId, otherCommunity, `post:${outsiderShareId}`, `https://freetwai.com/#${outsiderShareId}`, randomUUID()],
+  );
+  await bulkCredits(otherCommunity, outsiderShareId, outsider, 5, clock);
+  const week = (await request('/promotion/leaderboards?period=week', maker)).data.boards.find((board: { kind: string }) => board.kind === 'post');
   assert.equal(week.items.length, 10);
   assert.equal(week.items[0].display_name, 'N00');
   assert.equal(week.items[0].avatar_url, `/api/v1/members/${ids[0]}/avatar?v=4`);
@@ -978,12 +1003,12 @@ test('leaderboards use Taipei periods, competition ranks and the same member vis
   assert.equal(week.me.rank, 12);
   assert.equal(week.me.points, 1);
   assert.ok(!JSON.stringify(week).includes(hidden) && !JSON.stringify(week).includes('驗收帳號') && !JSON.stringify(week).includes('停用') && !JSON.stringify(week).includes('未完成') && !JSON.stringify(week).includes('其他社群的人'));
-  const month = (await request('/promotion/leaderboards?period=month', maker)).data.boards.find((board: { kind: string }) => board.kind === 'skill_book');
+  const month = (await request('/promotion/leaderboards?period=month', maker)).data.boards.find((board: { kind: string }) => board.kind === 'post');
   assert.equal(month.me.points, 2);
-  const all = (await request('/promotion/leaderboards?period=all', maker)).data.boards.find((board: { kind: string }) => board.kind === 'skill_book');
+  const all = (await request('/promotion/leaderboards?period=all', maker)).data.boards.find((board: { kind: string }) => board.kind === 'post');
   assert.equal(all.me.points, 3);
   const self = await signIn('rank-hidden@example.invalid');
-  const own = (await request('/promotion/leaderboards?period=week', self)).data.boards.find((board: { kind: string }) => board.kind === 'skill_book');
+  const own = (await request('/promotion/leaderboards?period=week', self)).data.boards.find((board: { kind: string }) => board.kind === 'post');
   assert.equal(own.me.points, 9);
   assert.equal(own.items.find((item: { user_id: string }) => item.user_id === hidden).avatar_url, `/api/v1/members/${hidden}/avatar?v=2`);
   const mineList = await request('/promotion/links/mine?period=all', maker);
@@ -994,7 +1019,7 @@ test('leaderboards use Taipei periods, competition ranks and the same member vis
   assert.equal(mineList.data.items[0].title, 'Hao 社群貼文技能書');
   assert.equal(mineList.data.items[0].available, true);
   const plan = (await pool.query('EXPLAIN ' + promotionLeaderboardSql, [DEMO_COMMUNITY, clock, maker.user.user_id])).rows.map(row => row['QUERY PLAN']).join('\n');
-  assert.match(plan, /Group Key:.*kind.*user_id/);
+  assert.match(plan, /Group Key:.*(?:kind.*user_id|user_id.*kind)/);
   assert.equal(/Group Key:.*image_bytes/.test(plan), false);
 });
 
@@ -1411,7 +1436,7 @@ test('a member card link is owner-only, scores a visitor, and dies when the card
   await click(created.data.code, REAL, maker.cookie);
   await click(created.data.code, REAL);
   assert.equal(await pointsOf(created.data.code), 1);
-  const board = (await request('/promotion/leaderboards?period=week', maker)).data.boards.find((item: { kind: string }) => item.kind === 'member_card');
+  const board = (await request('/promotion/leaderboards?period=week', maker)).data.boards.find((item: { kind: string }) => item.kind === 'link');
   assert.equal(board.items.find((item: { user_id: string }) => item.user_id === maker.user.user_id)?.points, 1);
   assert.equal(board.me.points, 1);
 
@@ -1519,12 +1544,13 @@ test('S1: revoked link or deactivated owner link is refused at /go and scores ze
     actor: makerActor, body: { enabled: true, work_version: String(work.aggregate_version) },
     expected: String(work.aggregate_version), operation: 'sharing', key: randomUUID(),
   }, work.showcase_id);
-  const workShareId = randomUUID();
-  await pool.query(
-    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,first_sharer_user_id,state)
-     VALUES($1,$2,'work',$3,$4,'showcases',$5,'S1 公開作品',$6,'published')`,
-    [workShareId, DEMO_COMMUNITY, `work:${work.showcase_id}`, `/#showcase/${work.showcase_id}`, work.showcase_id, maker.user.user_id],
+  // Publishing the work already gave it its original share; the links below use that share.
+  const workShare = await pool.query(
+    `SELECT share_id FROM shares WHERE community_id=$1 AND kind='work' AND canonical_key=$2 AND state='published'`,
+    [DEMO_COMMUNITY, `work:${work.showcase_id}`],
   );
+  assert.equal(workShare.rowCount, 1);
+  const workShareId: string = workShare.rows[0].share_id;
 
   const eventId = randomUUID();
   await eventRow(eventId, maker.user.user_id, 'open', 'S1 公開活動', '活動說明');
@@ -1690,4 +1716,126 @@ test('S2: note posts with a public page get credited links; private, disabled, o
     headers: { Origin: origin, Cookie: maker.cookie },
   })).json() as { items: { code: string; available: boolean }[] };
   assert.equal(mineStale.items.find(i => i.code === created.code)?.available, false);
+});
+
+test('leaderboards sum share_credit_events across roles, subtract reversals, aggregate all kinds, and respect Taipei week boundaries', async () => {
+  const maker = await signIn();
+  const aliceId = await addUser('ledger-alice@member.test', 'Alice');
+  const bobId = await addUser('ledger-bob@member.test', 'Bob');
+  clock = new Date('2026-10-04T16:30:00.000Z'); // Taipei Monday 2026-10-05 00:30
+
+  const repoId = randomUUID();
+  await pool.query(
+    `INSERT INTO canonical_repositories(repo_id,provider,provider_repo_id,full_name,current_url,fetch_state)
+     VALUES($1,'github',90001,'fixture/ledger','https://github.com/fixture/ledger','ready')`,
+    [repoId],
+  );
+  const makeShare = async (
+    kind: 'repository' | 'link' | 'event' | 'work' | 'post' | 'service',
+    refTable: string | null,
+    firstSharer = aliceId,
+  ) => {
+    const shareId = randomUUID();
+    const refId = refTable ? randomUUID() : null;
+    await pool.query(
+      `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,repo_id,ref_table,ref_id,title,first_sharer_user_id,state)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'published')`,
+      [shareId, DEMO_COMMUNITY, kind, `${kind}:${shareId}`, `https://freetwai.com/#${shareId}`, kind === 'repository' ? repoId : null, refTable, refId, `${kind} title`, firstSharer],
+    );
+    return shareId;
+  };
+  const credit = async (
+    shareId: string,
+    userId: string,
+    role: 'sharer' | 'co_sharer' | 'original_author' | 'spreader',
+    basis: 'created' | 'shared_again' | 'claim_verified' | 'qualified_click_day' | 'star_confirmed' | 'registration',
+    at: Date,
+    actorUserId: string | null = null,
+  ) => {
+    if (role === 'sharer' || role === 'co_sharer') {
+      await pool.query(
+        `INSERT INTO share_endorsements(share_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+        [shareId, userId],
+      );
+    }
+    const row = (await pool.query(
+      `INSERT INTO share_credit_events(community_id,share_id,user_id,role,basis,units,source_ref,actor_user_id,created_at)
+       VALUES($1,$2,$3,$4,$5,1,$6,$7,$8) RETURNING event_id`,
+      [DEMO_COMMUNITY, shareId, userId, role, basis, `test:${randomUUID()}`, actorUserId, at],
+    )).rows[0];
+    assert.ok(row?.event_id, `expected share_credit_events insert for ${role}/${basis}`);
+    return row.event_id as string;
+  };
+  const reverse = async (eventId: string, at: Date) => {
+    await pool.query(
+      `INSERT INTO share_credit_events(community_id,share_id,user_id,role,basis,units,source_ref,actor_user_id,reverses_event_id,created_at)
+       SELECT community_id,share_id,user_id,role,basis,-1,source_ref,actor_user_id,event_id,$2
+       FROM share_credit_events WHERE event_id=$1`,
+      [eventId, at],
+    );
+  };
+
+  const repoShare = await makeShare('repository', null, aliceId);
+  const makerLinkShare = await makeShare('link', null, maker.user.user_id);
+  const bobLinkShare = await makeShare('link', null, bobId);
+  const eventShare = await makeShare('event', 'community_events', aliceId);
+  const workShare = await makeShare('work', 'showcases', bobId);
+  const postShare = await makeShare('post', 'community_social_posts', aliceId);
+  const serviceShare = await makeShare('service', 'member_services', aliceId);
+
+  // Maker earns 1 point on Sunday 23:59:59 Taipei (outside week, inside month/all) and 1 on Monday 00:00:00 Taipei (inside week).
+  await credit(makerLinkShare, maker.user.user_id, 'spreader', 'qualified_click_day', new Date('2026-10-04T15:59:59.000Z'));
+  await credit(makerLinkShare, maker.user.user_id, 'sharer', 'created', new Date('2026-10-04T16:00:00.000Z'));
+  // Alice earns across multiple roles and kinds this week, with one reversal subtracting 1 point.
+  const revRepo = await credit(repoShare, aliceId, 'sharer', 'created', clock);
+  await credit(repoShare, aliceId, 'original_author', 'claim_verified', clock);
+  await credit(repoShare, aliceId, 'sharer', 'star_confirmed', clock, bobId);
+  await reverse(revRepo, clock); // repository net for Alice = 2
+  await credit(eventShare, aliceId, 'spreader', 'registration', clock); // event = 1
+  await credit(workShare, aliceId, 'co_sharer', 'shared_again', clock); // work = 1
+  await credit(postShare, aliceId, 'spreader', 'qualified_click_day', clock); // post = 1
+  await credit(serviceShare, aliceId, 'sharer', 'created', clock); // service = 1
+  // Bob earns 3 on post and gets a reversal this week for a prior-week link event (link net in week = -1, excluded from link board, subtracted on all board).
+  const bobOldLink = await credit(bobLinkShare, bobId, 'sharer', 'created', new Date('2026-10-04T12:00:00.000Z'));
+  await reverse(bobOldLink, clock);
+  await credit(postShare, bobId, 'co_sharer', 'shared_again', clock);
+  await credit(postShare, bobId, 'spreader', 'qualified_click_day', clock);
+  await credit(postShare, bobId, 'spreader', 'registration', clock); // post = 3, all week = 3 - 1 = 2
+
+  // Raw promotion_clicks row without ledger entry (e.g. unmapped target) does not count on boards, while mine still reads clicks.
+  const raw = await ownLink(maker.user.user_id, 'skill_book', 'book:unmapped');
+  await bulkClicks(raw.linkId, maker.user.user_id, 'skill_book', 1, clock);
+
+  const weekRes = await request('/promotion/leaderboards?period=week', maker);
+  assert.equal(weekRes.status, 200);
+  assert.deepEqual(
+    weekRes.data.boards.map((b: { kind: string }) => b.kind),
+    ['all', 'repository', 'link', 'event', 'work', 'post', 'service'],
+  );
+  const byKind = (res: typeof weekRes, kind: string) =>
+    res.data.boards.find((b: { kind: string }) => b.kind === kind) as {
+      kind: string;
+      items: { user_id: string; rank: number; points: number }[];
+      me: { rank: number; points: number } | null;
+    };
+
+  assert.equal(byKind(weekRes, 'repository').items.find(i => i.user_id === aliceId)?.points, 2);
+  assert.equal(byKind(weekRes, 'link').items.find(i => i.user_id === maker.user.user_id)?.points, 1);
+  assert.equal(byKind(weekRes, 'link').me?.points, 1);
+  assert.equal(byKind(weekRes, 'link').items.some(i => i.user_id === bobId), false);
+  assert.equal(byKind(weekRes, 'event').items.find(i => i.user_id === aliceId)?.points, 1);
+  assert.equal(byKind(weekRes, 'work').items.find(i => i.user_id === aliceId)?.points, 1);
+  assert.equal(byKind(weekRes, 'post').items.find(i => i.user_id === bobId)?.points, 3);
+  assert.equal(byKind(weekRes, 'service').items.find(i => i.user_id === aliceId)?.points, 1);
+  // all board: Alice = 2 + 1 + 1 + 1 + 1 = 6; Bob = 3 - 1 = 2; Maker = 1
+  assert.deepEqual(
+    byKind(weekRes, 'all').items.map(i => [i.user_id, i.points]),
+    [[aliceId, 6], [bobId, 2], [maker.user.user_id, 1]],
+  );
+  assert.equal(byKind(weekRes, 'all').me?.points, 1);
+
+  const monthRes = await request('/promotion/leaderboards?period=month', maker);
+  assert.equal(byKind(monthRes, 'link').me?.points, 2);
+  assert.equal(byKind(monthRes, 'all').me?.points, 2);
+  assert.equal(byKind(monthRes, 'all').items.find(i => i.user_id === bobId)?.points, 3);
 });

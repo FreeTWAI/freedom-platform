@@ -5,6 +5,10 @@ import { readEvent } from '../../community/events.js';
 import { readMemberServiceShare } from '../../community/member-services.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
 import type { PreparedShare, ShareAdapter, ShareKind } from '../types.js';
+/** Platform and member-card shares anchor click credit only; they are not feed items. */
+export function feedShareSql(s:string) {
+  return `NOT (${s}.kind='link' AND (${s}.canonical_key='platform' OR ${s}.canonical_key LIKE 'member-card:%'))`;
+}
 /** Batched form of existingTitle's audience checks. Alias and parameter are fixed by callers. */
 export function existingReadableSql(s:'s',member:'$2') {
   const eventAudience=`(e.visibility<>'guild' OR e.organizer_ref=${member} OR EXISTS(

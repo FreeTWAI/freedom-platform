@@ -6,21 +6,26 @@ import {promotionLink, ShareButton} from '../share/ShareButton';
 import './PromotionBoards.css';
 
 type Period = 'week' | 'month' | 'all';
-type Kind = 'member_card' | 'platform' | 'skill_book' | 'social_post' | 'member_service' | 'event' | 'share';
+type BoardKind = 'all' | 'repository' | 'link' | 'event' | 'work' | 'post' | 'service';
+type LinkKind = 'member_card' | 'platform' | 'skill_book' | 'social_post' | 'member_service' | 'event' | 'share';
 type Item = {rank: number; user_id: string; display_name: string; avatar_url: string | null; points: number};
-type Board = {kind: Kind; items: Item[]; me: {rank: number; points: number} | null};
+type Board = {kind: BoardKind; items: Item[]; me: {rank: number; points: number} | null};
 type Boards = {period: Period; since: string | null; boards: Board[]};
-type Mine = {period: Period; items: {kind: Kind; target: string; code: string; path: string; title: string; period_points: number; available: boolean}[]};
+type Mine = {period: Period; items: {kind: LinkKind; target: string; code: string; path: string; title: string; period_points: number; available: boolean}[]};
 
 const PERIODS: {id: Period; label: string}[] = [{id: 'week', label: '本週'}, {id: 'month', label: '本月'}, {id: 'all', label: '累計'}];
-const COPY: Record<Kind, {title: string; how: string; label: string}> = {
-  share: {title: '分享連結', label: '分享', how: '由分享頁建立連結。'},
-  member_card: {title: '名片點擊排行榜', label: '名片', how: '在我的名片分享名片連結，每次點擊 +1。'},
-  platform: {title: '平台推廣排行榜', label: '平台', how: '分享自由工坊連結，每次點擊 +1。'},
-  skill_book: {title: '技能推廣排行榜', label: '技能', how: '從技能書架分享技能書，每次點擊 +1。'},
-  social_post: {title: '社群推廣排行榜', label: '社群', how: '在社群分享專區分享貼文，每次點擊 +1。'},
-  member_service: {title: '業務推廣排行榜', label: '業務', how: '在社員服務分享區分享社員的服務，每次點擊 +1。'},
-  event: {title: '活動推廣排行榜', label: '活動', how: '分享社群活動，每次點擊 +1。'},
+const BOARD_COPY: Record<BoardKind, {title: string; how: string}> = {
+  all: {title: '全部', how: '加總各類分享、點擊、加星與報名的淨計入分數。'},
+  repository: {title: '開源專案', how: '分享開源專案、有人點進來或加星。'},
+  link: {title: '連結', how: '分享連結（含平台與名片），或有人透過你的連結點進來。'},
+  event: {title: '活動', how: '主辦或分享活動，或有人點進來或報名。'},
+  work: {title: '作品', how: '發表或分享作品，或有人透過你的連結點進來。'},
+  post: {title: '貼文', how: '發表或分享貼文，或有人透過你的連結點進來。'},
+  service: {title: '服務', how: '發佈或分享社員服務，或有人透過你的連結點進來。'},
+};
+const LINK_LABELS: Record<LinkKind, string> = {
+  share: '分享', member_card: '名片', platform: '平台', skill_book: '技能',
+  social_post: '社群', member_service: '業務', event: '活動',
 };
 const SINCE_FORMAT = new Intl.DateTimeFormat('zh-TW', {timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', weekday: 'short'});
 function periodNote(period: Period, since: string | null): string {
@@ -89,7 +94,7 @@ export function PromotionBoards({client,resultsOnly=false,boardsOnly=false}: {cl
       <h2>我的推廣連結</h2>
       <p className="promotion-howto">右側數字是{PERIODS.find(item => item.id === range.period)!.label}的點擊分數。</p>
       {loading ? <p className="promotion-empty">正在讀取你的連結…</p> : error ? <p className="promotion-empty">尚未取得連結紀錄，請重新載入。</p> : shown.length === 0 ? <p className="promotion-empty">還沒有建立分享連結。</p> : <ul>
-        {shown.map(item => <li key={item.code} className={item.available ? undefined : 'is-unavailable'}><span className="promotion-kind">{COPY[item.kind].label}</span><span className="promotion-link-title">{item.available ? item.title : '已無法開啟'}</span>{item.available && <button type="button" className="btn btn-ghost" disabled={copyAction.pending !== null} aria-busy={copyAction.pending === item.path} onClick={() => void copy(item.path)}>複製</button>}<strong>{item.period_points}</strong></li>)}
+        {shown.map(item => <li key={item.code} className={item.available ? undefined : 'is-unavailable'}><span className="promotion-kind">{LINK_LABELS[item.kind]}</span><span className="promotion-link-title">{item.available ? item.title : '已無法開啟'}</span>{item.available && <button type="button" className="btn btn-ghost" disabled={copyAction.pending !== null} aria-busy={copyAction.pending === item.path} onClick={() => void copy(item.path)}>複製</button>}<strong>{item.period_points}</strong></li>)}
       </ul>}
       {mine.length > 10 && <button type="button" className="btn btn-ghost" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '收合' : '顯示全部'}</button>}
     </section>}
@@ -97,9 +102,9 @@ export function PromotionBoards({client,resultsOnly=false,boardsOnly=false}: {cl
       <summary>查看推廣排行榜</summary>
       <p className="promotion-howto">感謝每一次出於需要的分享。點擊不代表閱讀完成、採用或成交，也不衡量一個人的貢獻。</p>
     {boards && <div className="promotion-boards">
-      {boards.map(board => <article className="card promotion-board" key={board.kind} aria-label={COPY[board.kind].title}>
-        <h2>{COPY[board.kind].title}</h2>
-        <p className="promotion-howto">{COPY[board.kind].how}</p>
+      {boards.map(board => <article className="card promotion-board" key={board.kind} aria-label={BOARD_COPY[board.kind].title}>
+        <h2>{BOARD_COPY[board.kind].title}</h2>
+        <p className="promotion-howto">{BOARD_COPY[board.kind].how}</p>
         {board.items.length === 0 ? <p className="promotion-empty">這段期間還沒有計入的點擊。</p> : <ol>
           {board.items.map(item => <li key={item.user_id}><span className="promotion-person"><span className="promotion-rank"><span className="sr-only">第 </span>{item.rank}<span className="sr-only"> 名</span></span><MemberAvatar nickname={item.display_name} avatarUrl={item.avatar_url} className="promotion-avatar"/> <span>{item.display_name}</span></span><strong>{item.points}</strong></li>)}
         </ol>}
@@ -109,7 +114,7 @@ export function PromotionBoards({client,resultsOnly=false,boardsOnly=false}: {cl
     </details>
     <details className="promotion-rules">
       <summary>計分規則</summary>
-      <p>同一位訪客每天點同一個連結只算 1 分；本人點擊、連結預覽機器人不計分；分數只顯示在排行榜，不計入會員經驗、獎勵或驗收。</p>
+      <p>分享原創或別人的作品、有人透過你的連結點進來（每人每天一次）、有人加星或報名各計 1 分；本人點擊、機器人與測試帳號不計分，撤回或確認檢舉會扣回；分數只顯示在排行榜，不計入會員經驗、獎勵或驗收。</p>
     </details>
   </section>;
 }

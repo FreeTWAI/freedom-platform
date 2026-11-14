@@ -18,6 +18,7 @@ import { readPublicCards } from '../identity-membership/member-sharing.js';
 import { readPublicWork, PUBLIC_WORK_VISIBLE } from '../opportunity-project-work/public-sharing.js';
 import { publicSocialPostIds } from './public-social-posts.js';
 import type { Actor } from '../identity-membership/service.js';
+import type { ShareKind } from '../shares/types.js';
 
 const SHARE_TARGET_JOIN = `LEFT JOIN showcases s ON sh.kind='work' AND s.showcase_id=sh.ref_id AND s.community_id=sh.community_id
   LEFT JOIN users u ON sh.kind='work' AND u.user_id=s.owner_ref
@@ -312,12 +313,18 @@ export async function listMyPromotionLinks(pool: Pool|PoolClient, actor: Actor, 
 }
 
 type Scored = { user_id: string; display_name: string; points: number; rank: number; avatar_url: string | null };
+type LeaderboardRow = { kind: ShareKind; user_id: string; display_name: string; points: number; aggregate_version: string | null; has_avatar: boolean };
+const SHARE_BOARD_KINDS = ['repository', 'link', 'event', 'work', 'post', 'service'] as const satisfies readonly ShareKind[];
+export type LeaderboardKind = 'all' | ShareKind;
 
-// Clicks are scored first so the avatar bytea is never a GROUP BY key.
+// Ledger units are summed first so the avatar bytea is never a GROUP BY key.
 export const promotionLeaderboardSql = `WITH scored AS (
-  SELECT kind,user_id,count(*)::int AS points FROM promotion_clicks
-  WHERE community_id=$1 AND ($2::timestamptz IS NULL OR created_at>=$2)
-  GROUP BY kind,user_id)
+  SELECT sh.kind,e.user_id,sum(e.units)::int AS points
+  FROM share_credit_events e
+  JOIN shares sh USING (share_id,community_id)
+  WHERE e.community_id=$1 AND ($2::timestamptz IS NULL OR e.created_at>=$2)
+  GROUP BY sh.kind,e.user_id
+  HAVING sum(e.units)<>0)
 SELECT s.kind,s.user_id,u.display_name,s.points,a.aggregate_version,a.present AS has_avatar
 FROM scored s
 JOIN users u ON u.user_id=s.user_id AND u.community_id=$1
@@ -325,20 +332,35 @@ LEFT JOIN member_avatar_presence a ON a.user_id=u.user_id AND a.community_id=u.c
 WHERE u.active AND (NOT u.onboarding_required OR u.onboarding_completed_at IS NOT NULL)
   AND (u.user_id=$3 OR NOT is_verification_test_account(u.user_id))`;
 
+function rankLeaderboard(kind: LeaderboardKind, entries: Omit<Scored, 'rank'>[], actorUserId: string) {
+  const scored: Scored[] = entries
+    .filter(entry => entry.points > 0)
+    .map(entry => ({ ...entry, rank: 0 }))
+    .sort((a, b) => b.points - a.points || a.display_name.localeCompare(b.display_name, 'zh-Hant') || a.user_id.localeCompare(b.user_id));
+  scored.forEach((row, index) => { row.rank = index === 0 || row.points !== scored[index - 1].points ? index + 1 : scored[index - 1].rank; });
+  const mine = scored.find(row => row.user_id === actorUserId);
+  return { kind, items: scored.slice(0, 10).map(({ user_id, display_name, avatar_url, rank, points }) => ({ rank, user_id, display_name, avatar_url, points })), me: mine ? { rank: mine.rank, points: mine.points } : null };
+}
+
 export async function promotionLeaderboards(pool: Pool|PoolClient, actor: Actor, periodRaw: string | undefined, now = new Date()) {
   const period = periodSchema.parse(periodRaw ?? 'week');
   const since = periodStart(period, now);
-  const rows = (await pool.query(promotionLeaderboardSql, [actor.community_id, since, actor.user_id])).rows as { kind: PromotionKind; user_id: string; display_name: string; points: number; aggregate_version: string | null; has_avatar: boolean }[];
-  // New shares expose evidence counts in /me/credit, never a new score board.
-  const boards = PROMOTION_KINDS.filter(kind=>kind!=='share').map(kind => {
-    const scored: Scored[] = rows.filter(row => row.kind === kind).map(row => ({
-      user_id: row.user_id, display_name: row.display_name, points: row.points, rank: 0,
-      avatar_url: avatarUrl(row.user_id, row.aggregate_version ?? 1, row.has_avatar),
-    })).sort((a, b) => b.points - a.points || a.display_name.localeCompare(b.display_name, 'zh-Hant') || a.user_id.localeCompare(b.user_id));
-    scored.forEach((row, index) => { row.rank = index === 0 || row.points !== scored[index - 1].points ? index + 1 : scored[index - 1].rank; });
-    const mine = scored.find(row => row.user_id === actor.user_id);
-    return { kind, items: scored.slice(0, 10).map(({ user_id, display_name, avatar_url, rank, points }) => ({ rank, user_id, display_name, avatar_url, points })), me: mine && mine.points > 0 ? { rank: mine.rank, points: mine.points } : null };
-  });
+  const rows = (await pool.query(promotionLeaderboardSql, [actor.community_id, since, actor.user_id])).rows as LeaderboardRow[];
+  const byUser = new Map<string, Omit<Scored, 'rank'>>();
+  const byKind = new Map<ShareKind, Omit<Scored, 'rank'>[]>();
+  for (const row of rows) {
+    const avatar_url = avatarUrl(row.user_id, row.aggregate_version ?? 1, row.has_avatar);
+    const kindList = byKind.get(row.kind) ?? [];
+    kindList.push({ user_id: row.user_id, display_name: row.display_name, avatar_url, points: row.points });
+    byKind.set(row.kind, kindList);
+    const total = byUser.get(row.user_id);
+    if (total) total.points += row.points;
+    else byUser.set(row.user_id, { user_id: row.user_id, display_name: row.display_name, avatar_url, points: row.points });
+  }
+  const boards = [
+    rankLeaderboard('all', [...byUser.values()], actor.user_id),
+    ...SHARE_BOARD_KINDS.map(kind => rankLeaderboard(kind, byKind.get(kind) ?? [], actor.user_id)),
+  ];
   return { period, since: since?.toISOString() ?? null, boards };
 }
 
