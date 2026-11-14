@@ -236,3 +236,33 @@ test('UX-V-04: QuickStart shows 4 recommended guilds + 查看全部公會 expand
 
   await act(async () => { root.unmount(); });
 });
+
+test('WelcomePreview rejects malformed guild directory rows and shows retryable directory error', async () => {
+  for (const bad of [
+    null,
+    {...makeGuild(1), guild_key: ''},
+    {...makeGuild(1), name: {unexpected: 'object'}},
+    {...makeGuild(1), purpose: {unexpected: 'object'}},
+    {...makeGuild(1), tags: 'not-an-array'},
+    {...makeGuild(1), skill_books: null},
+  ]) {
+    const client = new PortalClient();
+    client.get = (async () => ({items: [bad, makeGuild(2)]})) as any;
+    const container = doc.createElement('div');
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(WelcomePreview, {
+        client,
+        name: '新夥伴',
+        onStart: () => {},
+        onCompleted: () => {},
+        onLogout: () => {},
+      }));
+    });
+    await act(async () => { await Promise.resolve(); });
+    const html = serialize(container);
+    assert.equal(html.includes('重讀公會'), true, `expected retry button for malformed row: ${JSON.stringify(bad)}`);
+    assert.equal(html.includes('推薦公會 2'), false);
+    await act(async () => { root.unmount(); });
+  }
+});

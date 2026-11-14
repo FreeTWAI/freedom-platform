@@ -480,16 +480,13 @@ test(`PUBLIC-POST-16 shared controls and concise sharing retain readable states:
       }
       await probe.evaluate(node=>node.remove());
     }
-    await copy.click();
-    const shareModal=author.page.locator('.skill-share-dialog');
-    await expect(shareModal.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=${post.post_id}`));
-    const modalCopy=shareModal.getByRole('button',{name:'複製連結',exact:true});
-    const modalNative=shareModal.getByRole('button',{name:'分享',exact:true});
+    await expect(dialog.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=${post.post_id}`));
+    const modalCopy=dialog.getByRole('button',{name:'複製連結',exact:true});
+    const modalNative=dialog.getByRole('button',{name:'分享',exact:true});
     await expect(modalCopy).toBeInViewport();await expect(modalNative).toBeInViewport();
-    expect(await shareModal.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
-    await modalCopy.click();await expect(shareModal.getByLabel('手動複製分享內容',{exact:true})).toBeFocused();
+    expect(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+    await modalCopy.click();await expect(dialog.getByLabel('手動複製分享內容',{exact:true})).toBeFocused();
     await modalNative.click();expect(await sharing(author,post.post_id)).toMatchObject({enabled:false,available:false,version:'1'});
-    await shareModal.getByRole('button',{name:'關閉分享',exact:true}).click();
     await author.page.keyboard.press('Escape');await expect(trigger).toBeFocused();
     // Preserve each original adjacent transition on this same mounted post/dialog.
     const next=sharedControlMatrix[index+1];
@@ -500,13 +497,12 @@ test(`PUBLIC-POST-16 shared controls and concise sharing retain readable states:
       await expect(dialog.locator('.social-share-audience')).toHaveText('僅限登入且有閱覽權限的會員。');
       await expect(copy).toBeInViewport();
       expect(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
-      await copy.click();
-      await expect(shareModal.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=${post.post_id}`));
+      await expect(dialog.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=${post.post_id}`));
       await expect(modalCopy).toBeInViewport();await expect(modalNative).toBeInViewport();
-      expect(await shareModal.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+      expect(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
       expect(await sharing(author,post.post_id)).toMatchObject({enabled:false,available:false,version:'1'});
-      await shareModal.getByRole('button',{name:'關閉分享',exact:true}).click();
-      await author.page.keyboard.press('Escape');await expect(trigger).toBeFocused();
+      await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
+      await expect(trigger).toBeFocused();
     }
 });
 }

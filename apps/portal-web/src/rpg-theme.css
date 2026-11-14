@@ -20,5 +20,4 @@ input,select,textarea{border:1px solid #505765;background:#0e1116;color:var(--in
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 
 .btn:where(:not(.btn-primary,.btn-ghost,.btn-module)):is(:hover,:focus-visible):not(:disabled){background:var(--control-hover);color:var(--control-ink);border-color:var(--focus)}
-:root .btn:not(.btn-primary):disabled{background:var(--bg);color:var(--muted);border-color:var(--muted);border-style:dashed;opacity:1;box-shadow:none;cursor:not-allowed}
-:root .btn-primary:disabled{opacity:.55;border-color:transparent;border-style:solid;box-shadow:none;cursor:not-allowed}
+:root .btn:disabled{background:var(--bg);color:var(--muted);border-color:var(--muted);border-style:dashed;opacity:1;box-shadow:none;cursor:not-allowed}
