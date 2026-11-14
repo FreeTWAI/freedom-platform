@@ -26,7 +26,14 @@ test('at <=640px the page reserves bottom space for the floating launcher and hi
 
   const hideRules=findRules(css,(selector,media)=>media==='(max-width:640px)'&&selector.endsWith('.floating-messages[aria-expanded=false]'));
   assert.equal(hideRules.length,1);
-  assert.equal(hideRules[0].values.display,'none');
+  assert.equal(hideRules[0].values.visibility,'hidden');
+  assert.equal(hideRules[0].values['pointer-events'],'none');
+  assert.equal(hideRules[0].values.transition,'none');
+  const delayRules=findRules(css,(selector,media)=>media===null&&selector==='.floating-messages[aria-expanded=false]');
+  assert.deepEqual(delayRules,[{media:null,selector:'.floating-messages[aria-expanded=false]',values:{transition:'visibility 0s linear .4s'}}]);
+  const reducedRules=findRules(css,(selector,media)=>media==='(prefers-reduced-motion:reduce)'&&selector==='.floating-messages[aria-expanded=false]');
+  assert.equal(reducedRules.length,1);
+  assert.equal(reducedRules[0].values.transition,'visibility 0s linear .4s');
   for(const required of ['dialog[open]','[role=dialog]:not(#floating-message-panel):not([hidden])','[aria-modal=true]:not(#floating-message-panel):not([hidden])','textarea:focus','input:not([type=checkbox])','[contenteditable]:not([contenteditable=false]):focus']){
     assert.ok(hideRules[0].selector.includes(required),`missing ${required}`);
   }
