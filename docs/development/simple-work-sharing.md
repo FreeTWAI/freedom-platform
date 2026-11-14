@@ -69,7 +69,7 @@ Agent／聊天 AI／CLI 上傳保留在進階工具中；其既有 100 則短文
 
 ## 檔案入口
 
-- [SimpleSkillSubmission.tsx](../../apps/portal-web/src/modules/SimpleSkillSubmission.tsx)：表單、預覽、公開、草稿恢復及成功入口。
+- [SkillSubmission.tsx](../../apps/portal-web/src/modules/SkillSubmission.tsx)：唯一的投稿流程：表單、預覽、公開、草稿恢復及成功入口。
 - [ShareBox.tsx](../../apps/portal-web/src/share/ShareBox.tsx)、[share-targets.ts](../../apps/portal-web/src/share/share-targets.ts)：唯一的分享框與它的選項（分享作品、分享開源資源、找人合作等）；[WorkSharing.css](../../apps/portal-web/src/modules/WorkSharing.css)：沿用主題的簡約樣式。
 - [App.tsx](../../apps/portal-web/src/App.tsx)：一般作品分享與合作需求。
 - [投稿 service](../../modules/skill-submissions/service.ts)、[投稿 routes](../../apps/platform-api/src/routes/skill-submissions.ts)。
