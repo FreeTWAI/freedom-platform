@@ -281,3 +281,13 @@ export async function enablePrivateAiViews(page: Page) {
     await route.fulfill({ response, json: { ...await response.json(), private_ai_enabled: true } });
   });
 }
+
+/** Signed-out landing secondary resources, demo shortcuts, roles and tools sit inside 更多. */
+export async function openLoginMore(page: Page) {
+  const more = page.locator('details.login-more');
+  await expect(more.locator(':scope > summary')).toBeVisible();
+  if (!await more.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await more.locator(':scope > summary').click();
+  }
+  await expect(more).toHaveJSProperty('open', true);
+}

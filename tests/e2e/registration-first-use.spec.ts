@@ -55,42 +55,44 @@ test('submitting masks a revealed password and a failed response keeps editable 
 });
 
 test('newcomer sections arrive independently and reuse one guild-directory read',async({page})=>{
-  const held=barrier();let directories=0,events=0,books=0,failEvents=true;
-  await page.route(url=>url.pathname==='/api/v1/guilds/directory',route=>{directories++;return route.continue();});
-  await page.route(url=>url.pathname==='/api/v1/community',route=>{books++;return route.continue();});
-  await page.route(url=>url.pathname==='/api/v1/events',async route=>{
-    if(route.request().method()!=='GET')return route.continue();
-    events++;await held.promise;
-    if(failEvents)return route.fulfill({status:503,json:{code:'temporarily_unavailable'}});
-    return route.continue();
-  });
+  const held=barrier();let directories=0,events=0,tasks=0,books=0;
+  await page.route(url=>url.pathname==='/api/v1/guilds/directory',async route=>{directories++;await held.promise;return route.continue();});
+  await page.route(url=>url.pathname==='/api/v1/events',route=>{if(route.request().method()==='GET')events++;return route.continue();});
+  await page.route(url=>url.pathname==='/api/v1/task-board/preview',route=>{if(route.request().method()==='GET')tasks++;return route.continue();});
+  await page.route(url=>url.pathname==='/api/v1/community',route=>{if(route.request().method()==='GET')books++;return route.continue();});
   try{
-    await createAccount(page);const preview=page.locator('.welcome-preview');
-    const eventSection=preview.getByRole('region',{name:'近期活動',exact:true});
-    await expect(preview.locator('.quick-guild-option').first()).toBeVisible();
-    await expect(preview.getByRole('region',{name:'免費技能書',exact:true}).locator('article').first()).toBeVisible();
-    await expect(eventSection.getByRole('status')).toBeVisible();expect(directories).toBe(1);
-    const selected=preview.locator('.quick-guild-option input').first();await selected.check();
-    const bookReads=books;held.release();await expect(eventSection.getByRole('alert')).toBeVisible();
-    await expect(eventSection.getByText('目前沒有即將舉辦的活動。',{exact:true})).toHaveCount(0);
-    failEvents=false;await eventSection.getByRole('button',{name:'重新載入 · 近期活動',exact:true}).click();
-    await expect(eventSection.getByRole('alert')).toHaveCount(0);await expect(eventSection).toHaveAttribute('aria-busy','false');
-    expect(events).toBe(2);expect(directories).toBe(1);expect(books).toBe(bookReads);await expect(selected).toBeChecked();
+    await createAccount(page);const preview=page.locator('.welcome-preview'),quick=preview.getByRole('region',{name:'快速加入公會',exact:true});
+    await expect(quick.getByRole('status')).toHaveText('正在載入全部公會…');
+    await expect(preview.locator('.welcome-optional summary')).toHaveText('想先探索其他參與方式？');
+    await preview.locator('.welcome-optional summary').click();
+    await expect(preview.getByRole('button',{name:'提交公開活動',exact:true})).toBeVisible();
+    for(const title of ['近期活動','可參與的工作','免費技能書'])await expect(preview.getByRole('region',{name:title,exact:true})).toHaveCount(0);
+    held.release();
+    await expect(quick.locator('.quick-guild-option').first()).toBeVisible();
+    const selected=quick.locator('.quick-guild-option input').first();await selected.check();
+    await preview.getByRole('button',{name:'提交公開活動',exact:true}).click();
+    await expect(preview.getByRole('heading',{name:'提交公開活動',exact:true})).toBeVisible();
+    await preview.getByRole('button',{name:'返回',exact:true}).click();
+    expect(directories).toBe(1);expect(events).toBe(0);expect(tasks).toBe(0);expect(books).toBe(0);await expect(selected).toBeChecked();
   }finally{held.release();}
 });
 
 test('a guild directory failure can retry without refetching confirmed resource sections',async({page})=>{
-  let fail=true,directories=0,books=0;
+  let fail=true,directories=0,events=0,tasks=0,books=0;
   await page.route(url=>url.pathname==='/api/v1/guilds/directory',route=>{
     directories++;return fail?route.fulfill({status:503,json:{code:'temporarily_unavailable'}}):route.continue();
   });
-  await page.route(url=>url.pathname==='/api/v1/community',route=>{books++;return route.continue();});
+  await page.route(url=>url.pathname==='/api/v1/events',route=>{if(route.request().method()==='GET')events++;return route.continue();});
+  await page.route(url=>url.pathname==='/api/v1/task-board/preview',route=>{if(route.request().method()==='GET')tasks++;return route.continue();});
+  await page.route(url=>url.pathname==='/api/v1/community',route=>{if(route.request().method()==='GET')books++;return route.continue();});
   await createAccount(page);const preview=page.locator('.welcome-preview'),quick=preview.getByRole('region',{name:'快速加入公會',exact:true});
   await expect(quick.getByRole('alert')).toBeVisible();
-  await expect(preview.getByRole('region',{name:'免費技能書',exact:true}).locator('article').first()).toBeVisible();
-  const before=books;fail=false;await quick.getByRole('button',{name:'重讀公會',exact:true}).click();
+  for(const title of ['近期活動','可參與的工作','免費技能書'])await expect(preview.getByRole('region',{name:title,exact:true})).toHaveCount(0);
+  await preview.locator('.welcome-optional summary').click();
+  await expect(preview.getByRole('button',{name:'開始／繼續定位 →',exact:true})).toBeVisible();
+  fail=false;await quick.getByRole('button',{name:'重讀公會',exact:true}).click();
   await expect(quick.locator('.quick-guild-option').first()).toBeVisible();
-  expect(directories).toBe(2);expect(books).toBe(before);
+  expect(directories).toBe(2);expect(events).toBe(0);expect(tasks).toBe(0);expect(books).toBe(0);
 });
 
 async function chooseQuickGuild(page:Page){
@@ -156,44 +158,75 @@ test('checking a committed join after a lost reply continues without a second wr
 
 // A 200 response is not enough: bad card data must stay inside its read lane.
 // These cases also put a request budget on retry: only the failed section rereads.
-for(const section of [
-  {title:'可參與的工作',path:'/api/v1/task-board/preview',key:'items',empty:'目前沒有開放認領的工作。',item:{work_item_id:'synthetic-task',title:'合成工作',objective:'測試說明'}},
-  {title:'免費技能書',path:'/api/v1/community',key:'skill_books',empty:'正在整理技能書。',item:{id:'synthetic-book',title:'合成技能書',description:'測試說明',repository_url:'https://github.com/example/fixture'}},
-] as const){
-  for(const malformed of ['null-row','non-text-title'] as const){
-    test(`malformed ${section.key} is a local retryable error: ${malformed}`,async({page})=>{
-      await page.setViewportSize({width:390,height:844});
-      const paths=['/api/v1/events','/api/v1/task-board/preview','/api/v1/community','/api/v1/guilds/directory'];
-      const reads=new Map<string,number>(),pageErrors:string[]=[];let invalid=true;
-      page.on('pageerror',error=>pageErrors.push(error.message));
-      await page.route(url=>paths.includes(url.pathname),route=>{
-        if(route.request().method()!=='GET')return route.continue();
-        const path=new URL(route.request().url()).pathname;
-        reads.set(path,(reads.get(path)??0)+1);
-        if(path===section.path&&invalid)return route.fulfill({json:{[section.key]:[
-          malformed==='null-row'?null:{...section.item,title:{unexpected:'object'}},
-        ]}});
-        return route.continue();
-      });
-      await createAccount(page);
-      const preview=page.locator('.welcome-preview'),target=preview.getByRole('region',{name:section.title,exact:true});
-      await expect(target.getByRole('alert')).toBeVisible();
-      await expect(target.getByText(section.empty,{exact:true})).toHaveCount(0);
-      for(const title of ['近期活動','可參與的工作','免費技能書']){
-        const region=preview.getByRole('region',{name:title,exact:true});
-        await expect(region).toHaveAttribute('aria-busy','false');
-        if(title!==section.title)await expect(region.getByRole('alert')).toHaveCount(0);
-      }
-      const selected=preview.locator('.quick-guild-option input').first();
-      await selected.check();const before=new Map(reads);
-      invalid=false;
-      await target.getByRole('button',{name:`重新載入 · ${section.title}`,exact:true}).click();
-      await expect(target).toHaveAttribute('aria-busy','false');
-      await expect(target.getByRole('alert')).toHaveCount(0);
-      await expect(selected).toBeChecked();
-      for(const path of paths)expect(reads.get(path)??0,`read budget: ${path}`).toBe((before.get(path)??0)+(path===section.path?1:0));
-      expect(pageErrors).toEqual([]);
-      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+for(const malformed of ['null-row','non-text-title'] as const){
+  test(`malformed items is a local retryable error: ${malformed}`,async({page})=>{
+    await page.setViewportSize({width:390,height:844});
+    const paths=['/api/v1/events','/api/v1/task-board/preview','/api/v1/community','/api/v1/guilds/directory'];
+    const reads=new Map<string,number>(),pageErrors:string[]=[];let invalid=true;
+    page.on('pageerror',error=>pageErrors.push(error.message));
+    await page.route(url=>paths.includes(url.pathname),route=>{
+      if(route.request().method()!=='GET')return route.continue();
+      const path=new URL(route.request().url()).pathname;
+      reads.set(path,(reads.get(path)??0)+1);
+      if(path==='/api/v1/task-board/preview'&&invalid)return route.fulfill({json:{items:[
+        malformed==='null-row'?null:{work_item_id:'synthetic-task',title:{unexpected:'object'},objective:'測試說明'},
+      ]}});
+      return route.continue();
     });
-  }
+    await createAccount(page);
+    const preview=page.locator('.welcome-preview'),target=preview.getByRole('region',{name:'可參與的工作',exact:true});
+    await expect(target.getByRole('alert')).toBeVisible();
+    await expect(target.getByText('目前沒有開放認領的工作。',{exact:true})).toHaveCount(0);
+    for(const title of ['近期活動','可參與的工作','免費技能書']){
+      const region=preview.getByRole('region',{name:title,exact:true});
+      await expect(region).toHaveAttribute('aria-busy','false');
+      if(title!=='可參與的工作')await expect(region.getByRole('alert')).toHaveCount(0);
+    }
+    const selected=preview.locator('.quick-guild-option input').first();
+    await selected.check();const before=new Map(reads);
+    invalid=false;
+    await target.getByRole('button',{name:'重新載入 · 可參與的工作',exact:true}).click();
+    await expect(target).toHaveAttribute('aria-busy','false');
+    await expect(target.getByRole('alert')).toHaveCount(0);
+    await expect(selected).toBeChecked();
+    for(const path of paths)expect(reads.get(path)??0,`read budget: ${path}`).toBe((before.get(path)??0)+(path==='/api/v1/task-board/preview'?1:0));
+    expect(pageErrors).toEqual([]);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  });
+}
+
+for(const malformed of ['null-row','non-text-title'] as const){
+  test(`malformed skill_books is a local retryable error: ${malformed}`,async({page})=>{
+    await page.setViewportSize({width:390,height:844});
+    const paths=['/api/v1/community/preview','/api/v1/public/events'];
+    const reads=new Map<string,number>(),pageErrors:string[]=[];let invalid=true;
+    page.on('pageerror',error=>pageErrors.push(error.message));
+    await page.route(url=>paths.includes(url.pathname),route=>{
+      if(route.request().method()!=='GET')return route.continue();
+      const path=new URL(route.request().url()).pathname;
+      reads.set(path,(reads.get(path)??0)+1);
+      if(path==='/api/v1/community/preview'&&invalid)return route.fulfill({json:{skill_books:[
+        malformed==='null-row'?null:{id:'synthetic-book',title:{unexpected:'object'},description:'測試說明',repository_url:'https://github.com/example/fixture'},
+      ]}});
+      return route.continue();
+    });
+    const form=await registration(page);
+    await form.getByLabel('電子郵件',{exact:true}).fill('entry-resources@example.test');
+    await page.locator('details.login-more > summary').click();
+    const resources=page.locator('.entry-resources');
+    await resources.locator('details > summary').click();
+    await expect(resources.getByRole('alert')).toHaveText('資源暫時無法載入。');
+    await expect(resources.getByText('目前沒有可預覽的技能書。',{exact:true})).toHaveCount(0);
+    await expect(resources.locator('.entry-resource-list')).toHaveAttribute('aria-busy','false');
+    await expect(form.getByLabel('電子郵件',{exact:true})).toHaveValue('entry-resources@example.test');
+    const before=new Map(reads);
+    invalid=false;
+    await resources.getByRole('button',{name:'重新讀取資源',exact:true}).click();
+    await expect(resources.locator('.entry-resource-list')).toHaveAttribute('aria-busy','false');
+    await expect(resources.getByRole('alert')).toHaveCount(0);
+    await expect(resources.locator('.entry-resource-list article').first()).toBeVisible();
+    for(const path of paths)expect(reads.get(path)??0,`read budget: ${path}`).toBe((before.get(path)??0)+(path==='/api/v1/community/preview'?1:0));
+    expect(pageErrors).toEqual([]);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  });
 }
