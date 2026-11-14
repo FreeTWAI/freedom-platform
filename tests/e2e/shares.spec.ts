@@ -143,6 +143,9 @@ test('GitHub preview and publish failures keep the repository draft and allow re
  });
  await signInHome(page);
  const box=await openBox(page),url='https://github.com/freetwai-test/shared-repo';
+ // An earlier case may already have shared this URL; the failed publish must add nothing.
+ const shareRows=async()=>(await e2eAuthPool.query("SELECT count(*)::int AS n FROM shares WHERE canonical_url=$1",[url])).rows[0].n as number;
+ const before=await shareRows();
  await box.getByLabel('貼上連結',{exact:true}).fill(url);
  await expect(box.getByText('GitHub 暫時無法確認，請再試一次。',{exact:true})).toBeVisible();
  await expect(box.getByLabel('分享標題',{exact:true})).toHaveCount(0);
@@ -152,8 +155,7 @@ test('GitHub preview and publish failures keep the repository draft and allow re
  await box.getByRole('button',{name:'發布',exact:true}).click();
  await expect(box.getByText('GitHub 暫時無法確認，請再試一次。',{exact:true})).toBeVisible();
  await expect(box.getByLabel('貼上連結',{exact:true})).toHaveValue(url);
- const count=await e2eAuthPool.query("SELECT count(*)::int AS n FROM shares WHERE canonical_url=$1",[url]);
- expect(count.rows[0].n).toBe(0);
+ expect(await shareRows()).toBe(before);
  await box.getByRole('button',{name:'再試一次',exact:true}).click();
  await expect(page).toHaveURL(/#home$/);
  await expect(page.locator('.home-timeline > article').first()).toBeFocused();

@@ -144,6 +144,8 @@ test('share dialog works across all 6 targets, skill intros, note public toggle 
     const library = page.locator('.community-library');
     await library.getByLabel('搜尋技能書', { exact: true }).fill('社群貼文');
     const skillCard = library.locator('article[data-book-id="social-post"]');
+    // The card keeps 分享技能 and the star behind 更多 (details.skill-card-more).
+    await skillCard.locator('details.skill-card-more > summary').click();
     const skillBtn = skillCard.getByRole('button', { name: '分享技能', exact: true });
     expect((await skillBtn.boundingBox())!.width).toBeLessThan(PHONE.width * 0.5);
     await skillBtn.click();

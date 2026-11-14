@@ -16,11 +16,13 @@
 .skill-share .field { width: 100%; }
 .skill-share input { width: 100%; min-width: 0; font-size: 16px; }
 .skill-library-actions > .skill-share,
+.skill-card-more-body > .skill-share,
 .share-actions > .skill-share,
 .experience-actions > .skill-share,
 .work-public-link-row > .skill-share,
 .social-share-dialog .skill-share { flex: 0 1 auto; width: auto; }
 .skill-library-actions > .skill-share > .btn,
+.skill-card-more-body > .skill-share > .btn,
 .share-actions > .skill-share > .btn,
 .experience-actions > .skill-share > .btn,
 .work-public-link-row > .skill-share > .btn,
