@@ -5,6 +5,10 @@ import {COOKING_RULES,recipeOf} from '../../apps/portal-web/src/games/cooking/ca
 import {ingredientVisual,ingredientLayers,ingredientPolygonPoints} from '../../apps/portal-web/src/games/cooking/ingredient-visuals.js';
 import {COOKING_RUN_KEY} from '../../apps/portal-web/src/games/cooking/storage.js';
 import type {CookingRun} from '../../apps/portal-web/src/games/cooking/domain.js';
+// Building the first 3D kitchen frame in software WebGL is the slowest step on CI. Pearl milk tea, the
+// heaviest scene, took 1.8 s locally (3.4 s at 6x CPU throttling), yet once missed the 5 s default on a
+// slow runner (Verify 43686831270). Visibility still passes the moment the scene shows.
+const sceneReady={timeout:20_000};
 
 // Successful pinned runs discard outputPath files. Buffer attachments survive
 // in the JSON report carried by the existing default-shard artifact.
@@ -157,7 +161,7 @@ for(const fixture of [
   await page.setViewportSize({width:fixture.width,height:900});await page.emulateMedia({reducedMotion:fixture.motion});
   const started=new Date('2026-11-07T12:00:00Z');await page.clock.install({time:started});
   await page.goto(`/play?game=kitchen&practice=1&recipe=${recipe.id}&seed=42`);
-  await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
   const game=page.locator('.ck-game'),meter=page.locator('.ck-meter-copy'),canvas=page.locator('.ck-kitchen-canvas canvas'),host=page.locator('.ck-kitchen-canvas');
   await expect(canvas).toHaveCount(1);
   await page.clock.pauseAt(new Date(started.getTime()+60_000));
@@ -278,7 +282,7 @@ for(const fixture of [
   // Return through the real renderer control and progress to the last intact
   // piece. This exposes late-count support/knife errors hidden by a first cut.
   await page.getByRole('button',{name:'立體料理台',exact:true}).click();
-  await expect(canvas).toHaveCount(1);await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await expect(canvas).toHaveCount(1);await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
   for(let count=2;count<step.goal-1;count++){
     await advance();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
     await expect(meter).toHaveText(`${count+1} / ${step.goal}`);
@@ -294,7 +298,7 @@ for(const fixture of [
     await expectFaces(step.goal-1);await mushroomGuide('svg',step.goal-1);
     await capturePreparationScreenshot(game,testInfo,`${recipe.id}-svg-late-cut-stage.png`);
     await page.getByRole('button',{name:'立體料理台',exact:true}).click();
-    await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(canvas).toHaveCount(1);
+    await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await expect(canvas).toHaveCount(1);
     await advance();await expect(meter).toHaveText(`${step.goal-1} / ${step.goal}`);
   }
   await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();
@@ -316,7 +320,7 @@ for(const mode of ['native','rejected'] as const)test(`preparation art fullscree
   const started=new Date('2026-11-07T12:00:00Z');await page.clock.install({time:started});
   await page.goto(`/play?game=kitchen&practice=1&recipe=${recipe.id}&seed=42`);
   const presentation=page.locator('.fullscreen-game'),game=page.locator('.ck-game'),meter=page.locator('.ck-meter-copy'),canvas=page.locator('.ck-kitchen-canvas canvas'),host=page.locator('.ck-kitchen-canvas');
-  await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(canvas).toHaveCount(1);
+  await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await expect(canvas).toHaveCount(1);
   const originalCanvas=await canvas.elementHandle();
   const advance=()=>page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
   async function expectPresentation(){
@@ -386,7 +390,7 @@ for(const mode of ['native','rejected'] as const)test(`preparation art fullscree
   expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');await expect(meter).toHaveText(`2 / ${step.goal}`);await expectFaces(2);
   await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expectPresentation();
   await expect(meter).toHaveText(`2 / ${step.goal}`);await expectFaces(2);
-  await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible();await advance();
+  await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await advance();
   await expectPresentation();await expectNativeResources('reentered');await expect(meter).toHaveText(`2 / ${step.goal}`);
   await capturePreparationScreenshot(canvas,testInfo,`pumpkin-soup-${mode}-fullscreen-reentered-native-two-cuts.png`);
   await page.getByRole('button',{name:'暫停',exact:true}).click();const restored=await savedRun();
@@ -404,7 +408,7 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
   await page.setViewportSize(viewport);
   const started=new Date('2026-11-08T12:00:00Z');await page.clock.install({time:started});
   await page.goto('/play?game=kitchen&practice=1&recipe=fish-and-chips&seed=42');
-  await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
   await page.clock.pauseAt(new Date(started.getTime()+60_000));
   await page.getByRole('button',{name:'開始料理',exact:true}).click();
   const fullscreen=page.locator('.fullscreen-game'),stage=page.locator('[data-game-stage]');
@@ -488,7 +492,7 @@ test('immersive kitchen: 320x568 viewport fallback keeps controls separate',asyn
   await page.setViewportSize({width:320,height:568});
   await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});Element.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
   await page.goto('/play?game=kitchen&practice=1&recipe=fish-and-chips&seed=42');
-  await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
   await page.getByRole('button',{name:'開始料理',exact:true}).click();
   await expect(page.locator('.fullscreen-game--viewport')).toBeVisible();
   const geometry=await page.evaluate(()=>{const a=document.querySelector('.ck-visual-tools button')!.getBoundingClientRect(),b=document.querySelector('.fullscreen-game__bar')!.getBoundingClientRect();return {modeRight:a.right,barLeft:b.left,barRight:b.right,width:innerWidth};});
@@ -510,14 +514,14 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
  test.setTimeout(60_000);
  const recipe=recipeOf(id)!,errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.setViewportSize(viewport);await page.clock.install();
- await page.goto(`/play?game=kitchen&practice=1&recipe=${id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible();
+ await page.goto(`/play?game=kitchen&practice=1&recipe=${id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
  await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
  await page.getByRole('button',{name:'開始料理',exact:true}).click();
  const game=page.locator('.ck-game'),stage=page.locator('.fullscreen-game');
  await expect.poll(()=>page.evaluate(()=>({width:innerWidth,height:innerHeight}))).toEqual(viewport);
  const shot=async(kind:string,state:string)=>{await page.clock.runFor(40);await captureFailureFrame(stage,testInfo,`front-${id}-${kind}-${state}-${viewport.width}x${viewport.height}.png`);};
  for(const [index,s] of recipe.steps.entries()){
-  await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene',s.kind);await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene',s.kind);await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
   await page.clock.runFor(160);
   if(viewport.width===390){
    const spacing=await game.evaluate(el=>{const scene=el.querySelector('.ck-live-scene')!.getBoundingClientRect(),dock=el.querySelector('.ck-game-controls')!.getBoundingClientRect(),mission=el.querySelector('.ck-stage-mission')!.getBoundingClientRect();return {above:scene.top-mission.bottom,below:dock.top-scene.bottom,bottom:dock.bottom,viewport:innerHeight};});
@@ -553,13 +557,13 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
 for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440,height:900}])test(`native rice scoop intermediate evidence at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
  const recipe=recipeOf('egg-fried-rice')!,slice=recipe.steps[0],pan=recipe.steps.find(s=>s.kind==='pan')!,errors:string[]=[];
  page.on('pageerror',error=>errors.push(error.message));await page.setViewportSize(viewport);await page.clock.install();
- await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');await expect(page.locator('.ck-visual-3d')).toBeVisible();
+ await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
  await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'開始料理',exact:true}).click();
  await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene','slice');
  for(let i=0;i<slice.goal;i++){await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();}
  await page.getByRole('button',{name:/^下一步：/}).click();await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene','pan');
  const slider=page.getByRole('slider'),bounds=(await slider.boundingBox())!;await slider.click({position:{x:8+(bounds.width-16)*pan.heat/100,y:bounds.height/2}});await page.clock.runFor(pan.durationMs*.55);
- const stage=page.locator('.fullscreen-game'),native=page.locator('.ck-kitchen-canvas canvas');await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(native).toBeVisible();
+ const stage=page.locator('.fullscreen-game'),native=page.locator('.ck-kitchen-canvas canvas');await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await expect(native).toBeVisible();
  const frames:Array<{name:string;requestedVirtualMs:number;pageClockMs:number;sha256:string;nativeSha256:string}>=[];
  const capture=async(name:string,requestedVirtualMs:number)=>{await expect(native).toBeVisible();const pageClockMs=await page.evaluate(()=>performance.now());const prefix=`scoop-${viewport.width}x${viewport.height}-${name}`;
   const body=await captureReviewFrame(stage,testInfo,`${prefix}.jpg`),canvas=await captureReviewFrame(native,testInfo,`${prefix}-native.jpg`);
