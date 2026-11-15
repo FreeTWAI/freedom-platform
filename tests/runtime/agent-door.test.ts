@@ -303,7 +303,7 @@ test('contract --check detects a changed allowlist and a changed generated artif
  const {tmpdir}=await import('node:os');const {join,dirname}=await import('node:path');const {spawnSync}=await import('node:child_process');
  const dir=mkdtempSync(join(tmpdir(),'agent-contract-test-'));
  try{
-  const files=['scripts/build-agent-contract.mjs','apps/platform-api/src/agent-allowlist.ts','contracts/agent/v1/openapi.json','apps/portal-web/src/modules/agent-operations.ts','modules/client-connections/agent-contract.ts'];
+  const files=['scripts/build-agent-contract.mjs','apps/platform-api/src/agent-allowlist.ts','contracts/agent/v1/openapi.json','apps/portal-web/src/modules/agent-operations.ts','modules/client-connections/agent-contract.ts','apps/portal-web/public/agent/sdk/v1/agent-client.mjs','apps/portal-web/public/agent/sdk/v1/agent-operations.mjs'];
   for(const file of files){mkdirSync(dirname(join(dir,file)),{recursive:true});copyFileSync(file,join(dir,file));}
   writeFileSync(join(dir,'package.json'),'{"type":"module"}');
   symlinkSync(process.cwd()+'/node_modules',join(dir,'node_modules'));
@@ -315,6 +315,8 @@ test('contract --check detects a changed allowlist and a changed generated artif
   assert.equal(check().status,0);
   appendFileSync(join(dir,files[2]),' ');assert.equal(check().status,1);
   copyFileSync(files[2],join(dir,files[2]));
+  appendFileSync(join(dir,files[5]),' ');assert.equal(check().status,1);
+  copyFileSync(files[5],join(dir,files[5]));
   const schemaFile=join(dir,'apps/platform-api/src/agent-schemas.ts');
   writeFileSync(schemaFile,readFileSync(schemaFile,'utf8').replace('max(100)','max(99)'));assert.equal(check().status,1);
   copyFileSync('apps/platform-api/src/agent-schemas.ts',schemaFile);

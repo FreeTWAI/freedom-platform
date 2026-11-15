@@ -34,7 +34,7 @@ export function agentGuide(origin:string){
  '只用 Authorization: Bearer $FREEDOM_AGENT_TOKEN。不可同時帶 Cookie。',
  'POST 加 Content-Type: application/json 與 Idempotency-Key（8–128 字元，英數字、_、-）。同一操作重試必須沿用原 key 和內容；不需要 CSRF。候補及活動編輯、通知、取消另加 If-Match: "最新活動 aggregate_version"。',
  '## JavaScript',
- `從 FreeTWAI/freedom-platform 複製 \`packages/sdk/agent-client.mjs\` 與 \`packages/sdk/agent-operations.mjs\`：\n\`\`\`js\nimport { createAgentClient } from './agent-client.mjs';\nconst agent = createAgentClient({ baseUrl: '${origin}/api/v1', token: process.env.FREEDOM_AGENT_TOKEN });\nconst guilds = await agent.call('guilds.list');\n\`\`\``,
+ `從 FreeTWAI/freedom-platform 複製 \`packages/sdk/agent-client.mjs\` 與 \`packages/sdk/agent-operations.mjs\`（型別定義為 \`packages/sdk/agent-client.d.mts\`）：\n可直接下載（\`curl -O ${origin}/agent/sdk/v1/agent-client.mjs && curl -O ${origin}/agent/sdk/v1/agent-operations.mjs\`），或在 Deno 與瀏覽器直接 \`import\` \`${origin}/agent/sdk/v1/agent-client.mjs\`。\n\`\`\`js\nimport { createAgentClient } from './agent-client.mjs';\nconst agent = createAgentClient({ baseUrl: '${origin}/api/v1', token: process.env.FREEDOM_AGENT_TOKEN });\nconst guilds = await agent.call('guilds.list');\n\`\`\`\n寫入操作請呼叫 \`newIdempotencyKey()\` 產生 \`idempotencyKey\`，重試時沿用同一個 key。`,
  '## 操作',
  ];
  for(const op of agentOperations.filter(op=>op.granted!==false)){

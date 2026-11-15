@@ -42,7 +42,9 @@
 - **MCP 端點**：`POST /api/v1/mcp`（Streamable HTTP、JSON 回應，支援協定 `2025-06-18` 與 `2025-11-25`，請求體上限 32,768 bytes）。
 - **變更清單**：`GET /api/v1/agent/events?after=<next_cursor>` 輪詢本人變更（事件類型：`event.updated`、`event.approved`、`rsvp.confirmed`、`rsvp.waitlist_promoted`、`message.received`、`share.credited`；不含私訊正文，事件保留 30 天）。
 - **寫入與限制**：所有非 `GET` 呼叫須帶 `Idempotency-Key`（8–128 字元，`[A-Za-z0-9_-]`）；需要版本鎖定的操作須先讀取項目取得最新 `aggregate_version` 並送 `If-Match`。首次公開發布回傳 `202 pending_member`，須由本人在瀏覽器確認後以原 key 與內容重送。每把金鑰每日（UTC）上限 20 件公開內容、100 次回應，輔助查詢每 24 小時 100 次；連續 10 次計入的 4xx（不含 409、429）會暫停金鑰。
-- **JavaScript SDK**：從本 Repo 複製 `packages/sdk/agent-client.mjs` 與 `packages/sdk/agent-operations.mjs`：
+- **JavaScript SDK**：從本 Repo 複製 `packages/sdk/agent-client.mjs` 與 `packages/sdk/agent-operations.mjs`（TypeScript 型別見 Repo 內的 `packages/sdk/agent-client.d.mts`）：
+  - 也可直接從平台網址取得（`curl -O https://freetwai.com/agent/sdk/v1/agent-client.mjs && curl -O https://freetwai.com/agent/sdk/v1/agent-operations.mjs`），或在 Deno 與瀏覽器直接 `import` `https://freetwai.com/agent/sdk/v1/agent-client.mjs`。
+  - 寫入操作（非 `GET`）請呼叫 `newIdempotencyKey()` 產生 `idempotencyKey`，並在重試時沿用同一個 key。
 
 ```js
 import { createAgentClient } from './agent-client.mjs';

@@ -26,6 +26,11 @@ export interface AgentDiscoveryDocument {
     jwks_url: string;
     template: string;
   };
+  sdk: {
+    client_url: string;
+    operations_url: string;
+    types: string;
+  };
   development_map_url: string;
 }
 
@@ -66,6 +71,11 @@ export function agentDiscovery(origin: string): AgentDiscoveryDocument {
       guide_url: `${base}/guild-tool.md`,
       jwks_url: `${base}/.well-known/guild-tool-jwks.json`,
       template: 'https://github.com/FreeTWAI/freedom-platform/tree/main/templates/guild-tool',
+    },
+    sdk: {
+      client_url: `${base}/agent/sdk/v1/agent-client.mjs`,
+      operations_url: `${base}/agent/sdk/v1/agent-operations.mjs`,
+      types: 'packages/sdk/agent-client.d.mts',
     },
     development_map_url: `${base}/.well-known/freedom-development.json`,
   };

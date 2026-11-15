@@ -58,6 +58,8 @@
     "packages/sdk/agent-operations.mjs",
     "packages/sdk/agent-client.mjs",
     "packages/sdk/agent-client.d.mts",
+    "apps/portal-web/public/agent/sdk/v1/agent-client.mjs",
+    "apps/portal-web/public/agent/sdk/v1/agent-operations.mjs",
     "tests/runtime/sdk-agent-client.test.ts"
   ],
   "public_exports": [

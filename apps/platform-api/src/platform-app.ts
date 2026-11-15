@@ -255,6 +255,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     console.warn(JSON.stringify({event:status>=500?'server_error':'slow_request',method:c.req.method,route,status,duration_ms}));
   });
   app.use('/guild-tool/v2/client.js',async(c,next)=>{c.header('Access-Control-Allow-Origin','*');await next();});
+  app.use('/agent/sdk/v1/*',async(c,next)=>{c.header('Access-Control-Allow-Origin','*');await next();});
   app.use('/api/v1/me/onboarding/*',onboardingDiagnostics());
   app.use('*',async(c,next)=>{
     const headers=platformResponseHeaders(c.req.path,brokerFormOrigin,paymentFormOrigin,runtime.shortVideosEnabled===true,['/','/play','/play/'].includes(c.req.path)?await frameOrigins(pool,origin):[]);

@@ -48,6 +48,7 @@ test('agentDiscovery returns public machine-readable discovery metadata without 
     'openapi_url',
     'operation_count',
     'scopes',
+    'sdk',
   ]);
   assert.equal(doc.format, 'freedom.agent-discovery/v1');
   assert.equal(doc.name, '自由工坊 Freedom Workshop');
@@ -68,6 +69,11 @@ test('agentDiscovery returns public machine-readable discovery metadata without 
     guide_url: `${origin}/guild-tool.md`,
     jwks_url: `${origin}/.well-known/guild-tool-jwks.json`,
     template: 'https://github.com/FreeTWAI/freedom-platform/tree/main/templates/guild-tool',
+  });
+  assert.deepEqual(doc.sdk, {
+    client_url: `${origin}/agent/sdk/v1/agent-client.mjs`,
+    operations_url: `${origin}/agent/sdk/v1/agent-operations.mjs`,
+    types: 'packages/sdk/agent-client.d.mts',
   });
 
   const granted = agentOperations.filter((op) => op.granted !== false);
@@ -122,9 +128,18 @@ test('GET /.well-known/freedom-agent.json returns 200 JSON discovery metadata fo
   assert.equal(response.status, 200);
   assert.match(response.headers.get('content-type') ?? '', /application\/json/);
 
-  const body = (await response.json()) as { format?: string; api_base?: string };
+  const body = (await response.json()) as {
+    format?: string;
+    api_base?: string;
+    sdk?: { client_url: string; operations_url: string; types: string };
+  };
   assert.equal(body.format, 'freedom.agent-discovery/v1');
   assert.equal(body.api_base, `${reqOrigin}/api/v1`);
+  assert.deepEqual(body.sdk, {
+    client_url: `${reqOrigin}/agent/sdk/v1/agent-client.mjs`,
+    operations_url: `${reqOrigin}/agent/sdk/v1/agent-operations.mjs`,
+    types: 'packages/sdk/agent-client.d.mts',
+  });
 });
 
 test('llmsIndex and agentGuide advertise /.well-known/freedom-agent.json', () => {
