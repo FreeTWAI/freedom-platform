@@ -6,16 +6,16 @@ import { moduleCommand, type PlatformEnv } from '../module-context.js';
 import { Problem, requireCondition } from '../../../../packages/shared/problem.js';
 import { readWithMemberSession } from '../../../../packages/db/member-session.js';
 import { authRateLimit } from '../../../../modules/identity-membership/members.js';
-import { normalizeSubmission } from '../../../../modules/skill-submissions/payload.js';
 import {
-  agentCreateSubmission, agentUploadSubmission, createKey, findUploadGrant, findUploadKey, issueSubmission, listKeys, listSubmissions,
+  agentCreateSubmission, createKey, findUploadGrant, findUploadKey, issueSubmission, listKeys, listSubmissions,
   createManualSubmission, reviseManualSubmission, publishSubmission, readOwnIllustration, readSubmission, revokeKey, revokeSubmission, rotateGrant,
-  upgradeSubmission,
+  upgradeSubmission, uploadSkillSubmission,
 } from '../../../../modules/skill-submissions/service.js';
 
 export const AGENT_CREATE_MAX_BYTES = 8192;
 export const AGENT_UPLOAD_MAX_BYTES = 800 * 1024;
 const AGENT_BASE = '/agent-api/v1/skill-submissions';
+const MEMBER_BASE = '/api/v1/me/skill-submissions';
 const UUID_SEGMENT = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 // Exact agent POST routes. The app-level JSON middleware must skip these so the
@@ -25,6 +25,12 @@ export function isAgentSkillUploadPath(method: string, path: string): boolean {
   if (path === AGENT_BASE) return true;
   if (!path.startsWith(AGENT_BASE + '/')) return false;
   return UUID_SEGMENT.test(path.slice(AGENT_BASE.length + 1));
+}
+export function isMemberSkillUploadPath(method: string, path: string): boolean {
+  if (method !== 'POST') return false;
+  if (path === `${MEMBER_BASE}/upload`) return true;
+  if (!path.startsWith(`${MEMBER_BASE}/`) || !path.endsWith('/upload')) return false;
+  return UUID_SEGMENT.test(path.slice(MEMBER_BASE.length + 1, -'/upload'.length));
 }
 export function agentSkillBodyLimit(path: string): number {
   return path === AGENT_BASE ? AGENT_CREATE_MAX_BYTES : AGENT_UPLOAD_MAX_BYTES;
@@ -83,6 +89,11 @@ export function createSkillSubmissionRoutes(pool: Pool, origin: string, readToke
     withEtag(c, result);
     return c.json(result, 201);
   });
+  app.post('/me/skill-submissions/upload', async c => {
+    const result = await uploadSkillSubmission(pool, { kind: 'member_insert', input: await moduleCommand(c) }, runtime?.skillImageAssets) as { aggregate_version?: string };
+    withEtag(c, result);
+    return c.json(result, 201);
+  });
   app.post('/me/skill-submissions', async c => {
     const result = await issueSubmission(pool, await moduleCommand(c), origin);
     withEtag(c, result.submission);
@@ -95,6 +106,11 @@ export function createSkillSubmissionRoutes(pool: Pool, origin: string, readToke
   });
   app.post('/me/skill-submissions/:id/manual', async c => {
     const result = await reviseManualSubmission(pool, await moduleCommand(c), c.req.param('id'));
+    withEtag(c, result);
+    return c.json(result);
+  });
+  app.post('/me/skill-submissions/:id/upload', async c => {
+    const result = await uploadSkillSubmission(pool, { kind: 'member_fill', input: await moduleCommand(c), id: c.req.param('id') }, runtime?.skillImageAssets) as { aggregate_version?: string };
     withEtag(c, result);
     return c.json(result);
   });
@@ -163,13 +179,10 @@ export function createAgentSkillSubmissionRoutes(pool: Pool, origin: string, net
     const raw = await readAgentSkillSubmissionBody(c.req.raw, AGENT_UPLOAD_MAX_BYTES);
     // Validation and image re-encoding run outside the transaction; the grant,
     // key and member are rechecked under lock before anything is stored.
-    let normalized;
-    try { normalized = await normalizeSubmission(raw); }
-    catch (error) {
-      if (error instanceof z.ZodError) throw new Problem(422, 'validation_failed', `請修正 JSON 後，用同一個授權再上傳一次（授權尚未被消耗）。${agentFields(error)}`);
-      throw error;
-    }
-    return c.json(await agentUploadSubmission(pool, grant, normalized, origin,runtime?.skillImageAssets));
+    return c.json(await uploadSkillSubmission(pool, {
+      kind: 'grant', grant, raw, origin,
+      onZodError: error => new Problem(422, 'validation_failed', `請修正 JSON 後，用同一個授權再上傳一次（授權尚未被消耗）。${agentFields(error)}`),
+    }, runtime?.skillImageAssets));
   });
   app.all('*', c => c.json({ type: 'about:blank', title: 'Not found', status: 404, code: 'agent_route_not_found', detail: 'Agent 只能建立與上傳私人技能草稿。' }, 404));
   return app;

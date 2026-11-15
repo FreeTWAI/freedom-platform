@@ -46,6 +46,9 @@ export function agentGuide(origin:string){
  }
  lines.push('## 活動分享', 'POST /api/v1/events 只需 title、starts_at（含時區）、location，發布後立即開放。每位會員 24 小時最多 5 場。選 guild_key 後限該公會；不能藉 Agent 擴大可見範圍。匯入先 POST /api/v1/shares/preview，內容 {kind:"event",url:"https://來源網址"}；核對後 POST /api/v1/shares，內容 {kind:"event",url:"https://來源網址",event:{title,starts_at,location}}。來源讀取失敗時手動補齊，外部報名只計興趣。', '主辦者可用 events.update、events.announce、events.cancel 編輯、通知與取消自己的活動；每場活動每個台北日最多通知 3 次，本人與 Agent 合計。', '## 不授予 Agent 的端點', ...agentOperations.filter(op=>op.granted===false).map(op=>`${op.method} ${op.route} — ${op.title}；無 Agent scope。`));
  lines.push('## 貼文與作品的分享','發布連結貼文（posts.link）的回應帶 share_id。以這個 share_id 呼叫 shares.links，取得記在會員名下的推廣連結。文字貼文（posts.note）和公開作品（works.create）的回應也帶 share_id；它們預設沒有對外公開頁；會員在瀏覽器開啟公開頁之前，shares.links 會拒絕（貼文回 404，作品回 422 work_not_public）。');
+ lines.push('## 技能書草稿','代理也能附封面圖與分享介紹；發布仍由你按。');
+ lines.push('## 共創誌草稿','指定的共創誌編輯可用 share scope 透過 journal.submit（POST /api/v1/me/community-journal/submissions）送交私人草稿，並以 read scope 透過 journal.status、journal.read 查看待審列表與內容；發布、捨棄、撤回與金鑰管理仍由會員本人在網頁操作。');
+ lines.push('## 商店與供貨讀取','具 read scope 的 Agent 可直接讀取本人的零售目錄、商店、上架與供貨請求（retail.catalog、retail.stores、retail.listings、supplier.products、supplier.requests），不需要另外配對讀取連線。');
  lines.push('## 變更與限制',
  '`GET /api/v1/agent/events?after=<next_cursor>` 只讀本人變更。保存 next_cursor，下次從該值讀取；事件可能延後到下一頁出現，依事件 id 去重。回應無訊息正文。候補獲邀不等於報名成功，仍須接受邀請。share.credited 來自分享核心的實際貢獻紀錄，包括已確認的分享與活動報名歸因；撤回不產生新的貢獻事件。點閱統計請讀取分享頁。',
  '金鑰 90 天到期；會員可查看最後使用時間、今日發布量，續期會換新金鑰並撤銷舊金鑰。首次公開發布回覆 202 pending_member，尚未發布；請會員在瀏覽器檢查確切內容並確認，再用相同 key、內容重試。後續不再需要金鑰首次確認，仍遵守原功能的審核規則。',

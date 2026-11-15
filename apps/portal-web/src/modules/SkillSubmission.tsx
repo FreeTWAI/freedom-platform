@@ -661,7 +661,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
             <div className="actions"><a className="btn btn-ghost" href="/downloads/freedom-skill-client.tgz" download>下載上傳工具</a><a href={SKILL_UPLOAD_GUIDE} target="_blank" rel="noopener noreferrer">安裝說明 ↗</a></div>
             <pre className="skill-upload-command"><code>{`npm install -g ${origin}/downloads/freedom-skill-client.tgz`}</code></pre>
             <p className="field-hint">金鑰只能建立並上傳你自己的技能草稿；不能送出公開、不能修改帳號，也不是通用 Agent 授權。最長 90 天。</p>
-            <p className="field-hint">也可以只用一把 Agent 金鑰：到 <a href="#automation/agent">自動化 → 我的 Agent</a> 建立時勾「分享」，Agent 就能交私人草稿；發布仍由你按。</p>
+            <p className="field-hint">也可以只用一把 Agent 金鑰：到 <a href="#automation/agent">自動化 → 我的 Agent</a> 建立時勾「分享」，Agent 就能交私人草稿，也能附封面圖和分享介紹；發布仍由你按。</p>
             <form className="skill-upload-key-form" onSubmit={event => void issueKey(event)}>
               <label className="field">金鑰名稱<input required maxLength={80} value={keyDraft.label} placeholder="例如：我的筆電" onChange={event => setKeyDraft(curr => ({ ...curr, label: event.target.value }))}/></label>
               <label className="field">有效天數<input required type="number" min={1} max={90} value={keyDraft.expires_in_days} onChange={event => setKeyDraft(curr => ({ ...curr, expires_in_days: event.target.value }))}/></label>

@@ -10,7 +10,7 @@ import { tokenHash, type Actor } from '../identity-membership/service.js';
 import { authRateLimit } from '../identity-membership/members.js';
 import { importProjectWithinTransaction, projectInput, withdrawProjectSharing, type GitHubRead } from '../opensource-marketing/service.js';
 import type { NormalizedSubmission } from './payload.js';
-import { submissionPageContent } from './payload.js';
+import { normalizeSubmission, submissionPageContent } from './payload.js';
 import { validSkillPageContent } from '../community/skill-page-content.js';
 import { lockMemberDrafts, MAX_ACTIVE_DRAFTS } from './limits.js';
 import { catalogBookForRepository, repositoryDisplayName, repositoryKey } from './repository-match.js';
@@ -551,35 +551,86 @@ export async function agentCreateSubmission(pool: Pool, key: Owner & { key_hash:
   };
 }
 
-export async function agentUploadSubmission(pool: Pool, grant: Owner & { grant_hash: string; submission_id: string }, normalized: NormalizedSubmission, origin: string, assets?:SkillImageAssetService) {
-  grant=Object.freeze({...grant});
-  const assetMode=normalized.image!==null&&await skillImageStorageMode(pool)!=='legacy';
-  requireCondition(!assetMode||assets,503,'media_upload_unavailable','內容上傳暫時無法使用。');
-  const imageStage=assetMode?await assets!.stage(grant,normalized):null;
-  if(imageStage)await assets!.verify(imageStage);
+export type UploadSkillSubmissionRequest =
+  | { kind: 'grant'; grant: Owner & { grant_hash: string; submission_id: string }; origin: string; raw?: unknown; normalized?: NormalizedSubmission; onZodError?: (error: z.ZodError) => Problem }
+  | { kind: 'member_insert'; input: Command }
+  | { kind: 'member_fill'; input: Command; id: string };
+
+async function normalizeUploadInput(raw: unknown, onZodError?: (error: z.ZodError) => Problem): Promise<NormalizedSubmission> {
+  try { return await normalizeSubmission(raw); }
+  catch (error) {
+    if (error instanceof z.ZodError && onZodError) throw onZodError(error);
+    throw error;
+  }
+}
+
+async function fillAwaitingDraft(q: PoolClient, row: any, normalized: NormalizedSubmission, assetMode: boolean) {
+  requireCondition(row.status === 'awaiting_upload', 409, 'submission_not_awaiting_upload', '這份草稿目前不能上傳。');
+  if (row.seed) {
+    const expected = repositoryKey(typeof row.seed.repository_url === 'string' ? row.seed.repository_url : null);
+    if (expected !== repositoryKey(normalized.payload.repository_url)) {
+      const label = repositoryDisplayName(typeof row.seed.repository_url === 'string' ? row.seed.repository_url : null) ?? expected ?? '這個儲存庫';
+      throw new Problem(422, 'repository_mismatch', `這份草稿是為 ${label} 建立的；請上傳同一個儲存庫的內容，或撤銷草稿後重新建立。`);
+    }
+  }
+  return (await q.query(`UPDATE skill_submissions SET status='ready_for_review',payload=$2,payload_sha256=$3,image_bytes=$4,storage_source=$5,grant_consumed_at=now(),
+    aggregate_version=aggregate_version+1,updated_at=now() WHERE submission_id=$1 RETURNING ${SUBMISSION_COLUMNS}`,
+    [row.submission_id, JSON.stringify(normalized.payload), normalized.payload_sha256, assetMode ? null : normalized.image, assetMode ? 'asset' : 'legacy'])).rows[0];
+}
+
+/** Shared upload entrypoint for both legacy grant uploads (`fpg_`) and member/agent-door uploads. */
+export async function uploadSkillSubmission(pool: Pool, request: UploadSkillSubmissionRequest, assets?: SkillImageAssetService) {
+  if (request.kind !== 'grant') {
+    const id = request.kind === 'member_fill' ? uuidOrNotFound(request.id) : null;
+    await authRateLimit(pool, 'skill-agent-owner', request.input.actor.user_id, 60, 3600);
+    const normalized = await normalizeUploadInput(request.input.body);
+    const assetMode = normalized.image !== null && await skillImageStorageMode(pool) !== 'legacy';
+    // Member-route image writes have no fpg_ grant adapter when asset mode is active.
+    requireCondition(!assetMode, 503, 'media_upload_unavailable', '內容上傳暫時無法使用。');
+    const journalData = { ...manualProvenance(request.input.actor), payload_sha256: normalized.payload_sha256, has_cover_image: Boolean(normalized.image) };
+    if (request.kind === 'member_insert') {
+      return command(pool, request.input, q => requireReadyMember(q, request.input.actor), async q => {
+        await requireDraftCapacity(q, request.input.actor);
+        const draftId = randomUUID();
+        const saved = (await q.query(`INSERT INTO skill_submissions(submission_id,community_id,owner_ref,status,payload,payload_sha256,image_bytes,storage_source,grant_consumed_at)
+          VALUES($1,$2,$3,'ready_for_review',$4,$5,$6,$7,now()) RETURNING ${SUBMISSION_COLUMNS}`,
+          [draftId, request.input.actor.community_id, request.input.actor.user_id, JSON.stringify(normalized.payload), normalized.payload_sha256, normalized.image, 'legacy'])).rows[0];
+        await journal(q, request.input.actor, 'skill_submission', draftId, 1, 'upload_private_draft', journalData);
+        return submissionView(saved);
+      });
+    }
+    return command(pool, request.input, async q => { await requireReadyMember(q, request.input.actor); await ownedSubmission(q, request.input.actor, id!); }, async q => {
+      const current = await ownedSubmission(q, request.input.actor, id!, true);
+      if (request.input.expected !== undefined) checkVersion(current.aggregate_version, request.input.expected);
+      const saved = await fillAwaitingDraft(q, current, normalized, false);
+      await journal(q, request.input.actor, 'skill_submission', id!, saved.aggregate_version, 'upload_private_draft', journalData);
+      return submissionView(saved);
+    });
+  }
+
+  const grant = Object.freeze({ ...request.grant });
+  const normalized = request.normalized ?? await normalizeUploadInput(request.raw, request.onZodError);
+  const assetMode = normalized.image !== null && await skillImageStorageMode(pool) !== 'legacy';
+  requireCondition(!assetMode || assets, 503, 'media_upload_unavailable', '內容上傳暫時無法使用。');
+  const imageStage = assetMode ? await assets!.stage(grant, normalized) : null;
+  if (imageStage) await assets!.verify(imageStage);
   return transaction(pool, async q => {
-    const row=await lockSkillUploadGrant(q,grant),peek={grant_key_id:row.grant_key_id};
-    const ack = (status: string, consumedAt: Date | string) => ({ submission_id: row.submission_id, status, grant_consumed_at: iso(consumedAt), review_url: reviewUrl(origin) });
+    const row = await lockSkillUploadGrant(q, grant), peek = { grant_key_id: row.grant_key_id };
+    const ack = (status: string, consumedAt: Date | string) => ({ submission_id: row.submission_id, status, grant_consumed_at: iso(consumedAt), review_url: reviewUrl(request.origin) });
     if (row.grant_consumed_at) {
       requireCondition(row.payload_sha256 === normalized.payload_sha256, 409, 'upload_grant_consumed', '這份上傳授權已使用；內容不同的上傳需要新的草稿。');
-      await assertSkillUploadGrantClock(q,grant);return ack(row.status, row.grant_consumed_at);
+      await assertSkillUploadGrantClock(q, grant); return ack(row.status, row.grant_consumed_at);
     }
-    requireCondition(row.status === 'awaiting_upload', 409, 'submission_not_awaiting_upload', '這份草稿目前不能上傳。');
-    if (row.seed) {
-      const expected = repositoryKey(typeof row.seed.repository_url === 'string' ? row.seed.repository_url : null);
-      if (expected !== repositoryKey(normalized.payload.repository_url)) {
-        const label = repositoryDisplayName(typeof row.seed.repository_url === 'string' ? row.seed.repository_url : null) ?? expected ?? '這個儲存庫';
-        throw new Problem(422, 'repository_mismatch', `這份草稿是為 ${label} 建立的；請上傳同一個儲存庫的內容，或撤銷草稿後重新建立。`);
-      }
-    }
-    if(assetMode){requireCondition(imageStage,503,'media_upload_unavailable','內容上傳暫時無法使用。');await assets!.publishOnOriginalTransaction(q,grant,normalized,imageStage!);}
-    await assertSkillUploadGrantClock(q,grant);
-    const saved = (await q.query(`UPDATE skill_submissions SET status='ready_for_review',payload=$2,payload_sha256=$3,image_bytes=$4,storage_source=$5,grant_consumed_at=now(),
-      aggregate_version=aggregate_version+1,updated_at=now() WHERE submission_id=$1 RETURNING aggregate_version,grant_consumed_at`,
-      [row.submission_id, JSON.stringify(normalized.payload), normalized.payload_sha256, assetMode?null:normalized.image,assetMode?'asset':'legacy'])).rows[0];
+    if (assetMode) { requireCondition(imageStage, 503, 'media_upload_unavailable', '內容上傳暫時無法使用。'); await assets!.publishOnOriginalTransaction(q, grant, normalized, imageStage!); }
+    await assertSkillUploadGrantClock(q, grant);
+    const saved = await fillAwaitingDraft(q, row, normalized, assetMode);
     if (peek.grant_key_id) await q.query('UPDATE skill_upload_keys SET last_used_at=now() WHERE key_id=$1', [peek.grant_key_id]);
     await journal(q, journalActor(grant), 'skill_submission', row.submission_id, saved.aggregate_version, 'upload_private_draft',
       { payload_sha256: normalized.payload_sha256, has_cover_image: Boolean(normalized.image), via: peek.grant_key_id ? 'agent_key_grant' : 'browser_grant' });
-    await assertSkillUploadGrantClock(q,grant);return ack('ready_for_review', saved.grant_consumed_at);
+    await assertSkillUploadGrantClock(q, grant); return ack('ready_for_review', saved.grant_consumed_at);
   });
+}
+
+export async function agentUploadSubmission(pool: Pool, grant: Owner & { grant_hash: string; submission_id: string }, normalized: NormalizedSubmission, origin: string, assets?:SkillImageAssetService) {
+  return uploadSkillSubmission(pool, { kind: 'grant', grant, normalized, origin }, assets);
 }

@@ -1,5 +1,7 @@
 # 自由工坊技能草稿上傳協定（agent 端）
 
+若 Agent 已持有會員的自由工坊 Agent 金鑰（`fw_agent_`，具備「分享」`share` 權限），請直接以同一份 JSON 呼叫 `POST /api/v1/me/skill-submissions/upload`（或補齊等待上傳的草稿時呼叫 `POST /api/v1/me/skill-submissions/:id/upload`，附 `Idempotency-Key`）；下方的長期上傳金鑰（`fpk_`）、一次性上傳授權（`fpg_`）與 `/agent-api/v1` 端點仍維持可用。
+
 版本：`@freetwai/skill-upload` 0.1.0。這份協定只涵蓋「建立並上傳私人技能草稿」。查看草稿、撤回、公開、發出或撤銷金鑰都只能由會員本人在網站操作，agent 沒有這些端點。
 
 ## 憑證

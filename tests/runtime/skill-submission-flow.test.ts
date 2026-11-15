@@ -813,7 +813,7 @@ test('I2 (p3-l3b): 更多 in the agent path is closed by default and provides du
     assert.equal(host.postCalls.some(c => c.path === '/me/skill-upload-keys/key-2/revoke'), true);
     assert.equal(host.nodes().some(n => n.type === 'textarea' && n.props.value === 'fpk_synthetic_secret'), false, 'clears revoked issued key');
     assert.equal(host.text().includes('已撤銷'), true, 'marks revoked key');
-    assert.equal(host.text().includes('也可以只用一把 Agent 金鑰：到 自動化 → 我的 Agent 建立時勾「分享」，Agent 就能交私人草稿；發布仍由你按。'), true, 'shows one-key agent hint next to upload keys');
+    assert.equal(host.text().includes('也可以只用一把 Agent 金鑰：到 自動化 → 我的 Agent 建立時勾「分享」，Agent 就能交私人草稿，也能附封面圖和分享介紹；發布仍由你按。'), true, 'shows one-key agent hint next to upload keys');
     assert.ok(host.nodes().some(n => n.type === 'a' && n.props.href === '#automation/agent' && textOf(n).includes('自動化 → 我的 Agent')), 'links one-key hint to #automation/agent');
 
     // Chat bot prompt + file load + upload to preview

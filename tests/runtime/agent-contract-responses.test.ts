@@ -104,6 +104,20 @@ test('every operation with a response schema parses its live REST agent answer o
  }
  const seededDraft=await req('/api/v1/me/skill-submissions/manual',{session,body:{repository_url:'https://github.com/example/project',title:'列表測試技能書',description:'列表測試技能書介紹',use_notes:'先讀 README',relationship:'curator'}});
  assert.equal(seededDraft.status,201,JSON.stringify(seededDraft.data));
+ const userRow=(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[session.user.user_id])).rows[0];
+ await pool.query('INSERT INTO community_journal_publisher(community_id,owner_ref) VALUES($1,$2)',[userRow.community_id,session.user.user_id]);
+ const seededJournalKey=await req('/api/v1/me/community-journal/keys',{session,body:{label:'contract-test'}});
+ assert.equal(seededJournalKey.status,201,JSON.stringify(seededJournalKey.data));
+ const seededJournal=await req('/api/v1/me/community-journal/submissions',{session,body:agentOperations.find(op=>op.id==='journal.submit')!.example!});
+ assert.equal(seededJournal.status,201,JSON.stringify(seededJournal.data));
+ const seededProduct=await req('/api/v1/supplier/products',{session,body:{title:'測試供貨商品',photo_url:null,specifications:'測試規格',net_price_minor:100,currency:'TWD',availability:'finite',stock:5,shipping_terms:'宅配',return_terms:'七天鑑賞'}});
+ assert.equal(seededProduct.status,201,JSON.stringify(seededProduct.data));
+ const seededStore=await req('/api/v1/retail/stores',{session,body:{name:'測試商店',description:'商店說明',support_contact:'聯絡方式'}});
+ assert.equal(seededStore.status,201,JSON.stringify(seededStore.data));
+ const seededListing=await req('/api/v1/retail/listings',{session,body:{store_id:seededStore.data.store_id,offer_version_id:seededProduct.data.current_offer.offer_version_id,retail_price_minor:150,sale_terms:'銷售條款'}});
+ assert.equal(seededListing.status,201,JSON.stringify(seededListing.data));
+ const seededRequest=await req(`/api/v1/retail/listings/${seededListing.data.listing_id}:request-supply`,{session,body:{snapshot_sha256:seededListing.data.snapshot_sha256},headers:{'If-Match':`"${seededListing.data.aggregate_version}"`}});
+ assert.equal(seededRequest.status,200,JSON.stringify(seededRequest.data));
  const routes:Record<string,string>={
   'guilds.list':'/api/v1/guilds',
   'tools.list':'/api/v1/public/guilds/guild_games/tools',
@@ -124,6 +138,13 @@ test('every operation with a response schema parses its live REST agent answer o
   'skills.drafts':'/api/v1/me/skill-submissions',
   'skills.draft_read':`/api/v1/me/skill-submissions/${seededDraft.data.submission_id}`,
   'development.status':'/api/v1/me/development/skill/video-autopilot',
+  'journal.status':'/api/v1/me/community-journal',
+  'journal.read':`/api/v1/me/community-journal/submissions/${seededJournal.data.submission_id}`,
+  'retail.catalog':'/api/v1/retail/catalog',
+  'retail.stores':'/api/v1/retail/stores',
+  'retail.listings':'/api/v1/retail/listings',
+  'supplier.products':'/api/v1/supplier/products',
+  'supplier.requests':'/api/v1/supplier/requests',
   'profile.read':'/api/v1/me/positioning',
  };
  for(const op of agentOperations.filter(op=>op.granted!==false&&op.method==='GET'&&agentResponseSchemas[op.id])){
@@ -246,6 +267,17 @@ test('every write operation with a response schema parses its live REST agent an
  verifyContractResponse('skills.draft',createdDraft.status,createdDraft.data,201);seen.add('skills.draft');
  const revisedDraft=await req(`/api/v1/me/skill-submissions/${createdDraft.data.submission_id}/manual`,{token,body:{...draftBody,title:'更新後技能書草稿'},headers:{'If-Match':`"${createdDraft.data.aggregate_version}"`}});
  verifyContractResponse('skills.revise',revisedDraft.status,revisedDraft.data,200);seen.add('skills.revise');
+ const uploadedDraft=await req('/api/v1/me/skill-submissions/upload',{token,body:agentOperations.find(op=>op.id==='skills.upload')!.example!});
+ verifyContractResponse('skills.upload',uploadedDraft.status,uploadedDraft.data,201);seen.add('skills.upload');
+ const awaitingDraft=await req('/api/v1/me/skill-submissions',{session,body:{}});
+ assert.equal(awaitingDraft.status,201,JSON.stringify(awaitingDraft.data));
+ const filledDraft=await req(`/api/v1/me/skill-submissions/${awaitingDraft.data.submission.submission_id}/upload`,{token,body:agentOperations.find(op=>op.id==='skills.fill')!.example!});
+ verifyContractResponse('skills.fill',filledDraft.status,filledDraft.data,200);seen.add('skills.fill');
+
+ const journalCommunity=(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[session.user.user_id])).rows[0].community_id;
+ await pool.query('INSERT INTO community_journal_publisher(community_id,owner_ref) VALUES($1,$2)',[journalCommunity,session.user.user_id]);
+ const journalDraft=await req('/api/v1/me/community-journal/submissions',{token,body:agentOperations.find(op=>op.id==='journal.submit')!.example!});
+ verifyContractResponse('journal.submit',journalDraft.status,journalDraft.data,201);seen.add('journal.submit');
 
  const devGithubFetch:typeof fetch=async input=>{
   const u=String(input);

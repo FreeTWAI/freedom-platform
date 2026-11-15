@@ -2,6 +2,8 @@
 
 A fork is source code, not platform authority. The storefront and supplier templates obtain a **read connection** only after the signed-in member approves it on Freedom Workshop. Tokens cannot write platform data, sign into the website, view member contacts, operate work, or call arbitrary API endpoints. Product publication, supply decisions and listing changes remain in the platform web UI.
 
+A member's own `fw_agent_` key (`read` scope) can also read the same catalog, store, listing, supplier product and supply request data via `/api/v1/retail/*` and `/api/v1/supplier/*` (`retail.catalog`, `retail.stores`, `retail.listings`, `supplier.products`, `supplier.requests`), while the paired-device `fw_read_` flow and `/client-api/v1/*` still work unchanged.
+
 ## Pairing protocol
 
 Base platform defaults to `https://freetwai.com`; clients must use HTTPS outside loopback, never follow redirects when sending credentials, and never ask for a platform password. POST requests use JSON and an `Origin` equal to the configured platform origin. Browser CORS is intentionally not enabled for arbitrary fork origins: this protocol runs in a Node client/server, not untrusted web JavaScript.

@@ -158,6 +158,36 @@ export const agentContract = {
       "route": "/api/v1/me/development/:kind/:target/revoke",
       "title": "撤銷開發權限（限本人）",
       "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/me/community-journal/keys",
+      "title": "建立共創誌投稿金鑰（限本人）",
+      "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/me/community-journal/keys/:id/revoke",
+      "title": "撤銷共創誌投稿金鑰（限本人）",
+      "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/me/community-journal/submissions/:id/publish",
+      "title": "公開發布共創誌（限本人）",
+      "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/me/community-journal/submissions/:id/discard",
+      "title": "捨棄共創誌草稿（限本人）",
+      "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/me/community-journal/withdraw",
+      "title": "下架已發布共創誌（限本人）",
+      "agent_scope": null
     }
   ],
   "openapi": "3.1.1",
@@ -20826,6 +20856,1523 @@ export const agentContract = {
         }
       }
     },
+    "/me/skill-submissions/upload": {
+      "post": {
+        "operationId": "skills.upload",
+        "summary": "上傳完整技能書草稿",
+        "x-required-scope": "share",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          }
+        ],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "body": {
+              "type": "object",
+              "properties": {
+                "repository_url": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "use_notes": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 3000
+                },
+                "demo_url": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "relationship": {
+                  "type": "string",
+                  "enum": [
+                    "author",
+                    "maintainer",
+                    "contributor",
+                    "curator"
+                  ]
+                },
+                "page_content": {},
+                "share_introductions": {
+                  "minItems": 100,
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "cover_image": {
+                  "type": "object",
+                  "properties": {
+                    "mime_type": {
+                      "type": "string",
+                      "enum": [
+                        "image/png",
+                        "image/jpeg",
+                        "image/webp"
+                      ]
+                    },
+                    "data_base64": {
+                      "type": "string",
+                      "maxLength": 699056
+                    }
+                  },
+                  "required": [
+                    "mime_type",
+                    "data_base64"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "repository_url",
+                "title",
+                "description",
+                "use_notes",
+                "relationship",
+                "share_introductions"
+              ],
+              "additionalProperties": false
+            },
+            "idempotency_key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          },
+          "required": [
+            "body",
+            "idempotency_key"
+          ],
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "repository_url": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "use_notes": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3000
+            },
+            "demo_url": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "relationship": {
+              "type": "string",
+              "enum": [
+                "author",
+                "maintainer",
+                "contributor",
+                "curator"
+              ]
+            },
+            "page_content": {},
+            "share_introductions": {
+              "minItems": 100,
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            },
+            "cover_image": {
+              "type": "object",
+              "properties": {
+                "mime_type": {
+                  "type": "string",
+                  "enum": [
+                    "image/png",
+                    "image/jpeg",
+                    "image/webp"
+                  ]
+                },
+                "data_base64": {
+                  "type": "string",
+                  "maxLength": 699056
+                }
+              },
+              "required": [
+                "mime_type",
+                "data_base64"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "repository_url",
+            "title",
+            "description",
+            "use_notes",
+            "relationship",
+            "share_introductions"
+          ],
+          "additionalProperties": false
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "repository_url": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "use_notes": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 3000
+                  },
+                  "demo_url": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "relationship": {
+                    "type": "string",
+                    "enum": [
+                      "author",
+                      "maintainer",
+                      "contributor",
+                      "curator"
+                    ]
+                  },
+                  "page_content": {},
+                  "share_introductions": {
+                    "minItems": 100,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "cover_image": {
+                    "type": "object",
+                    "properties": {
+                      "mime_type": {
+                        "type": "string",
+                        "enum": [
+                          "image/png",
+                          "image/jpeg",
+                          "image/webp"
+                        ]
+                      },
+                      "data_base64": {
+                        "type": "string",
+                        "maxLength": 699056
+                      }
+                    },
+                    "required": [
+                      "mime_type",
+                      "data_base64"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "repository_url",
+                  "title",
+                  "description",
+                  "use_notes",
+                  "relationship",
+                  "share_introductions"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "repository_url": "https://github.com/example/project",
+                "title": "技能書名稱",
+                "description": "技能書簡介與實測說明",
+                "use_notes": "先閱讀 README 再開始使用",
+                "demo_url": null,
+                "relationship": "curator",
+                "share_introductions": [
+                  "分享介紹第 1 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 2 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 3 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 4 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 5 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 6 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 7 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 8 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 9 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 10 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 11 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 12 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 13 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 14 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 15 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 16 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 17 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 18 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 19 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 20 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 21 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 22 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 23 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 24 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 25 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 26 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 27 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 28 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 29 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 30 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 31 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 32 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 33 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 34 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 35 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 36 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 37 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 38 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 39 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 40 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 41 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 42 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 43 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 44 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 45 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 46 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 47 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 48 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 49 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 50 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 51 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 52 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 53 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 54 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 55 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 56 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 57 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 58 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 59 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 60 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 61 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 62 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 63 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 64 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 65 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 66 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 67 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 68 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 69 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 70 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 71 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 72 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 73 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 74 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 75 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 76 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 77 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 78 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 79 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 80 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 81 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 82 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 83 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 84 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 85 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 86 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 87 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 88 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 89 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 90 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 91 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 92 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 93 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 94 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 95 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 96 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 97 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 98 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 99 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 100 則：這個開源工具協助開發者快速完成實作驗證。"
+                ],
+                "cover_image": {
+                  "mime_type": "image/png",
+                  "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWMwTpsJAAICATMDms/iAAAAAElFTkSuQmCC"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已建立，實際發布狀態依回應 state。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "submission_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "aggregate_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "payload": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "project_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "seed": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "upgrades_submission_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "upgrade": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "submission_id": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "submission_id",
+                            "status"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "can_upgrade": {
+                      "type": "boolean"
+                    },
+                    "catalog_book": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "book_id": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "public_path": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "book_id",
+                            "title",
+                            "public_path"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "can_edit": {
+                      "type": "boolean"
+                    },
+                    "public_path": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "illustration_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "grant_expires_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "grant_consumed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "grant_revoked_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "submission_id",
+                    "status",
+                    "aggregate_version",
+                    "payload",
+                    "project_id",
+                    "seed",
+                    "upgrades_submission_id",
+                    "upgrade",
+                    "can_upgrade",
+                    "catalog_book",
+                    "can_edit",
+                    "public_path",
+                    "illustration_url",
+                    "grant_expires_at",
+                    "grant_consumed_at",
+                    "grant_revoked_at",
+                    "created_at",
+                    "updated_at"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/skill-submissions/{id}/upload": {
+      "post": {
+        "operationId": "skills.fill",
+        "summary": "補上等待上傳的技能書",
+        "x-required-scope": "share",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          }
+        ],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "body": {
+              "type": "object",
+              "properties": {
+                "repository_url": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "use_notes": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 3000
+                },
+                "demo_url": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "relationship": {
+                  "type": "string",
+                  "enum": [
+                    "author",
+                    "maintainer",
+                    "contributor",
+                    "curator"
+                  ]
+                },
+                "page_content": {},
+                "share_introductions": {
+                  "minItems": 100,
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                },
+                "cover_image": {
+                  "type": "object",
+                  "properties": {
+                    "mime_type": {
+                      "type": "string",
+                      "enum": [
+                        "image/png",
+                        "image/jpeg",
+                        "image/webp"
+                      ]
+                    },
+                    "data_base64": {
+                      "type": "string",
+                      "maxLength": 699056
+                    }
+                  },
+                  "required": [
+                    "mime_type",
+                    "data_base64"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "repository_url",
+                "title",
+                "description",
+                "use_notes",
+                "relationship",
+                "share_introductions"
+              ],
+              "additionalProperties": false
+            },
+            "idempotency_key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          },
+          "required": [
+            "id",
+            "body",
+            "idempotency_key"
+          ],
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "repository_url": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "use_notes": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3000
+            },
+            "demo_url": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "relationship": {
+              "type": "string",
+              "enum": [
+                "author",
+                "maintainer",
+                "contributor",
+                "curator"
+              ]
+            },
+            "page_content": {},
+            "share_introductions": {
+              "minItems": 100,
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            },
+            "cover_image": {
+              "type": "object",
+              "properties": {
+                "mime_type": {
+                  "type": "string",
+                  "enum": [
+                    "image/png",
+                    "image/jpeg",
+                    "image/webp"
+                  ]
+                },
+                "data_base64": {
+                  "type": "string",
+                  "maxLength": 699056
+                }
+              },
+              "required": [
+                "mime_type",
+                "data_base64"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "repository_url",
+            "title",
+            "description",
+            "use_notes",
+            "relationship",
+            "share_introductions"
+          ],
+          "additionalProperties": false
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "repository_url": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "use_notes": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 3000
+                  },
+                  "demo_url": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "relationship": {
+                    "type": "string",
+                    "enum": [
+                      "author",
+                      "maintainer",
+                      "contributor",
+                      "curator"
+                    ]
+                  },
+                  "page_content": {},
+                  "share_introductions": {
+                    "minItems": 100,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 1000
+                    }
+                  },
+                  "cover_image": {
+                    "type": "object",
+                    "properties": {
+                      "mime_type": {
+                        "type": "string",
+                        "enum": [
+                          "image/png",
+                          "image/jpeg",
+                          "image/webp"
+                        ]
+                      },
+                      "data_base64": {
+                        "type": "string",
+                        "maxLength": 699056
+                      }
+                    },
+                    "required": [
+                      "mime_type",
+                      "data_base64"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "repository_url",
+                  "title",
+                  "description",
+                  "use_notes",
+                  "relationship",
+                  "share_introductions"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "repository_url": "https://github.com/example/project",
+                "title": "技能書名稱",
+                "description": "技能書簡介與實測說明",
+                "use_notes": "先閱讀 README 再開始使用",
+                "demo_url": null,
+                "relationship": "curator",
+                "share_introductions": [
+                  "分享介紹第 1 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 2 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 3 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 4 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 5 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 6 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 7 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 8 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 9 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 10 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 11 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 12 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 13 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 14 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 15 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 16 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 17 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 18 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 19 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 20 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 21 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 22 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 23 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 24 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 25 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 26 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 27 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 28 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 29 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 30 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 31 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 32 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 33 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 34 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 35 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 36 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 37 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 38 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 39 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 40 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 41 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 42 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 43 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 44 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 45 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 46 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 47 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 48 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 49 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 50 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 51 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 52 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 53 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 54 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 55 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 56 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 57 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 58 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 59 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 60 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 61 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 62 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 63 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 64 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 65 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 66 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 67 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 68 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 69 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 70 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 71 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 72 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 73 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 74 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 75 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 76 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 77 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 78 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 79 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 80 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 81 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 82 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 83 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 84 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 85 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 86 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 87 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 88 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 89 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 90 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 91 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 92 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 93 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 94 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 95 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 96 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 97 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 98 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 99 則：這個開源工具協助開發者快速完成實作驗證。",
+                  "分享介紹第 100 則：這個開源工具協助開發者快速完成實作驗證。"
+                ],
+                "cover_image": {
+                  "mime_type": "image/png",
+                  "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWMwTpsJAAICATMDms/iAAAAAElFTkSuQmCC"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "submission_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "aggregate_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "payload": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "project_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "seed": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "upgrades_submission_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "upgrade": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "submission_id": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "submission_id",
+                            "status"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "can_upgrade": {
+                      "type": "boolean"
+                    },
+                    "catalog_book": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "book_id": {
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "public_path": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "book_id",
+                            "title",
+                            "public_path"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "can_edit": {
+                      "type": "boolean"
+                    },
+                    "public_path": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "illustration_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "grant_expires_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "grant_consumed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "grant_revoked_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "submission_id",
+                    "status",
+                    "aggregate_version",
+                    "payload",
+                    "project_id",
+                    "seed",
+                    "upgrades_submission_id",
+                    "upgrade",
+                    "can_upgrade",
+                    "catalog_book",
+                    "can_edit",
+                    "public_path",
+                    "illustration_url",
+                    "grant_expires_at",
+                    "grant_consumed_at",
+                    "grant_revoked_at",
+                    "created_at",
+                    "updated_at"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/development/{kind}/{target}": {
       "get": {
         "operationId": "development.status",
@@ -21553,6 +23100,4240 @@ export const agentContract = {
                     "summary",
                     "pr_url",
                     "created_at"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/community-journal": {
+      "get": {
+        "operationId": "journal.status",
+        "summary": "查看共創誌草稿與狀態",
+        "x-required-scope": "read",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "aggregate_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "published_submission_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key_id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "expires_at": {
+                            "type": "string"
+                          },
+                          "revoked_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "created_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key_id",
+                          "label",
+                          "expires_at",
+                          "revoked_at",
+                          "created_at"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "submissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "submission_id": {
+                            "type": "string"
+                          },
+                          "source_revision": {
+                            "type": "string"
+                          },
+                          "payload_sha256": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "submission_id",
+                          "source_revision",
+                          "payload_sha256",
+                          "status",
+                          "created_at"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "aggregate_version",
+                    "published_submission_id",
+                    "keys",
+                    "submissions"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/community-journal/submissions/{id}": {
+      "get": {
+        "operationId": "journal.read",
+        "summary": "查看一份共創誌草稿",
+        "x-required-scope": "read",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "submission_id": {
+                      "type": "string"
+                    },
+                    "source_revision": {
+                      "type": "string"
+                    },
+                    "payload_sha256": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "schema_version": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "source_revision": {
+                          "type": "string"
+                        },
+                        "people": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        },
+                        "journals": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          }
+                        }
+                      },
+                      "required": [
+                        "schema_version",
+                        "source_revision",
+                        "people",
+                        "journals"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "submission_id",
+                    "source_revision",
+                    "payload_sha256",
+                    "status",
+                    "created_at",
+                    "payload"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/community-journal/submissions": {
+      "post": {
+        "operationId": "journal.submit",
+        "summary": "交共創誌草稿",
+        "x-required-scope": "share",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          }
+        ],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "body": {
+              "type": "object",
+              "properties": {
+                "schema_version": {
+                  "type": "number",
+                  "const": 1
+                },
+                "source_revision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "people": {
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "community": {
+                        "type": "string",
+                        "enum": [
+                          "freedom",
+                          "claude",
+                          "codex"
+                        ]
+                      },
+                      "slug": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                      },
+                      "display_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "intro": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 4000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "person",
+                          "assistant"
+                        ]
+                      },
+                      "color": {
+                        "type": "string",
+                        "pattern": "^#[a-fA-F0-9]{6}$"
+                      },
+                      "avatar": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string"
+                          },
+                          "alt": {
+                            "type": "string",
+                            "maxLength": 200
+                          },
+                          "width": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10000
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10000
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "display_fit": {
+                            "type": "string",
+                            "enum": [
+                              "contain",
+                              "cover"
+                            ]
+                          },
+                          "object_position": {
+                            "type": "string",
+                            "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "alt",
+                          "width",
+                          "height",
+                          "display_fit",
+                          "object_position"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "role": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "category": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "tags": {
+                        "maxItems": 30,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 100
+                        }
+                      }
+                    },
+                    "required": [
+                      "slug",
+                      "display_name",
+                      "intro",
+                      "kind",
+                      "color",
+                      "avatar",
+                      "role",
+                      "category",
+                      "tags"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "journals": {
+                  "maxItems": 366,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "community": {
+                        "type": "string",
+                        "enum": [
+                          "freedom",
+                          "claude",
+                          "codex"
+                        ]
+                      },
+                      "date": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      },
+                      "excerpt": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "version": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "coverage": {
+                        "type": "object",
+                        "properties": {
+                          "is_partial": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "is_partial"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "blocks": {
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "heading"
+                                },
+                                "text": {
+                                  "type": "string",
+                                  "maxLength": 1000
+                                },
+                                "source_messages": {
+                                  "maxItems": 100,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "time": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                      },
+                                      "text": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 6000
+                                      },
+                                      "sender_name": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 100
+                                      },
+                                      "sender_avatar": {
+                                        "type": "object",
+                                        "properties": {
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "display_fit": {
+                                            "type": "string",
+                                            "enum": [
+                                              "contain",
+                                              "cover"
+                                            ]
+                                          },
+                                          "object_position": {
+                                            "type": "string",
+                                            "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                                          }
+                                        },
+                                        "required": [
+                                          "url",
+                                          "display_fit",
+                                          "object_position"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "source_key": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "person_slug": {
+                                        "type": "string",
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                      }
+                                    },
+                                    "required": [
+                                      "time",
+                                      "text"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "paragraph"
+                                },
+                                "text": {
+                                  "type": "string",
+                                  "maxLength": 20000
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "quote"
+                                },
+                                "text": {
+                                  "type": "string",
+                                  "maxLength": 20000
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "list"
+                                },
+                                "items": {
+                                  "maxItems": 100,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 4000
+                                  }
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "items"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "development_items": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 300
+                            },
+                            "next_step": {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "proposed",
+                                "in_progress",
+                                "reported_done",
+                                "verified_done"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "title",
+                            "next_step",
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "decisions": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            "scope": {
+                              "type": "string",
+                              "maxLength": 2000
+                            }
+                          },
+                          "required": [
+                            "text",
+                            "scope"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "people": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "community": {
+                              "type": "string",
+                              "enum": [
+                                "freedom",
+                                "claude",
+                                "codex"
+                              ]
+                            },
+                            "slug": {
+                              "type": "string",
+                              "maxLength": 64,
+                              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                            },
+                            "display_name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            "intro": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "maxLength": 4000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "person",
+                                "assistant"
+                              ]
+                            },
+                            "color": {
+                              "type": "string",
+                              "pattern": "^#[a-fA-F0-9]{6}$"
+                            },
+                            "avatar": {
+                              "type": "object",
+                              "properties": {
+                                "url": {
+                                  "type": "string"
+                                },
+                                "alt": {
+                                  "type": "string",
+                                  "maxLength": 200
+                                },
+                                "width": {
+                                  "anyOf": [
+                                    {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 10000
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "height": {
+                                  "anyOf": [
+                                    {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 10000
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "display_fit": {
+                                  "type": "string",
+                                  "enum": [
+                                    "contain",
+                                    "cover"
+                                  ]
+                                },
+                                "object_position": {
+                                  "type": "string",
+                                  "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                                }
+                              },
+                              "required": [
+                                "url",
+                                "alt",
+                                "width",
+                                "height",
+                                "display_fit",
+                                "object_position"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "role": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "category": {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            "tags": {
+                              "maxItems": 30,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 100
+                              }
+                            }
+                          },
+                          "required": [
+                            "slug",
+                            "display_name",
+                            "intro",
+                            "kind",
+                            "color",
+                            "avatar",
+                            "role",
+                            "category",
+                            "tags"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "hero": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string"
+                              },
+                              "alt": {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              "width": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 10000
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "height": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 10000
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "display_fit": {
+                                "type": "string",
+                                "enum": [
+                                  "contain",
+                                  "cover"
+                                ]
+                              },
+                              "object_position": {
+                                "type": "string",
+                                "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                              }
+                            },
+                            "required": [
+                              "url",
+                              "alt",
+                              "width",
+                              "height",
+                              "display_fit",
+                              "object_position"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reading_note": {
+                        "type": "object",
+                        "properties": {
+                          "conclusion": {
+                            "type": "string",
+                            "maxLength": 300
+                          },
+                          "priority_todo": {
+                            "type": "string",
+                            "maxLength": 300
+                          },
+                          "discussion_question": {
+                            "type": "string",
+                            "maxLength": 300
+                          }
+                        },
+                        "required": [
+                          "conclusion",
+                          "priority_todo",
+                          "discussion_question"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "date",
+                      "title",
+                      "excerpt",
+                      "version",
+                      "coverage",
+                      "blocks",
+                      "development_items",
+                      "decisions",
+                      "people",
+                      "hero"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "schema_version",
+                "source_revision",
+                "people",
+                "journals"
+              ],
+              "additionalProperties": false
+            },
+            "idempotency_key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          },
+          "required": [
+            "body",
+            "idempotency_key"
+          ],
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "number",
+              "const": 1
+            },
+            "source_revision": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "people": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "community": {
+                    "type": "string",
+                    "enum": [
+                      "freedom",
+                      "claude",
+                      "codex"
+                    ]
+                  },
+                  "slug": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "intro": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "person",
+                      "assistant"
+                    ]
+                  },
+                  "color": {
+                    "type": "string",
+                    "pattern": "^#[a-fA-F0-9]{6}$"
+                  },
+                  "avatar": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string"
+                      },
+                      "alt": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "width": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "height": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "display_fit": {
+                        "type": "string",
+                        "enum": [
+                          "contain",
+                          "cover"
+                        ]
+                      },
+                      "object_position": {
+                        "type": "string",
+                        "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                      }
+                    },
+                    "required": [
+                      "url",
+                      "alt",
+                      "width",
+                      "height",
+                      "display_fit",
+                      "object_position"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "role": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "category": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "tags": {
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  }
+                },
+                "required": [
+                  "slug",
+                  "display_name",
+                  "intro",
+                  "kind",
+                  "color",
+                  "avatar",
+                  "role",
+                  "category",
+                  "tags"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "journals": {
+              "maxItems": 366,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "community": {
+                    "type": "string",
+                    "enum": [
+                      "freedom",
+                      "claude",
+                      "codex"
+                    ]
+                  },
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "excerpt": {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "version": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "coverage": {
+                    "type": "object",
+                    "properties": {
+                      "is_partial": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "is_partial"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "blocks": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "heading"
+                            },
+                            "text": {
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            "source_messages": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "time": {
+                                    "type": "string",
+                                    "format": "date-time",
+                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                  },
+                                  "text": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 6000
+                                  },
+                                  "sender_name": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "sender_avatar": {
+                                    "type": "object",
+                                    "properties": {
+                                      "url": {
+                                        "type": "string"
+                                      },
+                                      "display_fit": {
+                                        "type": "string",
+                                        "enum": [
+                                          "contain",
+                                          "cover"
+                                        ]
+                                      },
+                                      "object_position": {
+                                        "type": "string",
+                                        "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                                      }
+                                    },
+                                    "required": [
+                                      "url",
+                                      "display_fit",
+                                      "object_position"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source_key": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "person_slug": {
+                                    "type": "string",
+                                    "maxLength": 64,
+                                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                  }
+                                },
+                                "required": [
+                                  "time",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "paragraph"
+                            },
+                            "text": {
+                              "type": "string",
+                              "maxLength": 20000
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "quote"
+                            },
+                            "text": {
+                              "type": "string",
+                              "maxLength": 20000
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "list"
+                            },
+                            "items": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 4000
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "items"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "development_items": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "title": {
+                          "type": "string",
+                          "maxLength": 300
+                        },
+                        "next_step": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "proposed",
+                            "in_progress",
+                            "reported_done",
+                            "verified_done"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "next_step",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "decisions": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "scope": {
+                          "type": "string",
+                          "maxLength": 2000
+                        }
+                      },
+                      "required": [
+                        "text",
+                        "scope"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "people": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "community": {
+                          "type": "string",
+                          "enum": [
+                            "freedom",
+                            "claude",
+                            "codex"
+                          ]
+                        },
+                        "slug": {
+                          "type": "string",
+                          "maxLength": 64,
+                          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                        },
+                        "display_name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "intro": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "person",
+                            "assistant"
+                          ]
+                        },
+                        "color": {
+                          "type": "string",
+                          "pattern": "^#[a-fA-F0-9]{6}$"
+                        },
+                        "avatar": {
+                          "type": "object",
+                          "properties": {
+                            "url": {
+                              "type": "string"
+                            },
+                            "alt": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "width": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 10000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "height": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 10000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "display_fit": {
+                              "type": "string",
+                              "enum": [
+                                "contain",
+                                "cover"
+                              ]
+                            },
+                            "object_position": {
+                              "type": "string",
+                              "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                            }
+                          },
+                          "required": [
+                            "url",
+                            "alt",
+                            "width",
+                            "height",
+                            "display_fit",
+                            "object_position"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "role": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "category": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "tags": {
+                          "maxItems": 30,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 100
+                          }
+                        }
+                      },
+                      "required": [
+                        "slug",
+                        "display_name",
+                        "intro",
+                        "kind",
+                        "color",
+                        "avatar",
+                        "role",
+                        "category",
+                        "tags"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "hero": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string"
+                          },
+                          "alt": {
+                            "type": "string",
+                            "maxLength": 200
+                          },
+                          "width": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10000
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 10000
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "display_fit": {
+                            "type": "string",
+                            "enum": [
+                              "contain",
+                              "cover"
+                            ]
+                          },
+                          "object_position": {
+                            "type": "string",
+                            "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "alt",
+                          "width",
+                          "height",
+                          "display_fit",
+                          "object_position"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reading_note": {
+                    "type": "object",
+                    "properties": {
+                      "conclusion": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "priority_todo": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "discussion_question": {
+                        "type": "string",
+                        "maxLength": 300
+                      }
+                    },
+                    "required": [
+                      "conclusion",
+                      "priority_todo",
+                      "discussion_question"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "date",
+                  "title",
+                  "excerpt",
+                  "version",
+                  "coverage",
+                  "blocks",
+                  "development_items",
+                  "decisions",
+                  "people",
+                  "hero"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "schema_version",
+            "source_revision",
+            "people",
+            "journals"
+          ],
+          "additionalProperties": false
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "schema_version": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "source_revision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "people": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "community": {
+                          "type": "string",
+                          "enum": [
+                            "freedom",
+                            "claude",
+                            "codex"
+                          ]
+                        },
+                        "slug": {
+                          "type": "string",
+                          "maxLength": 64,
+                          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                        },
+                        "display_name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "intro": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "person",
+                            "assistant"
+                          ]
+                        },
+                        "color": {
+                          "type": "string",
+                          "pattern": "^#[a-fA-F0-9]{6}$"
+                        },
+                        "avatar": {
+                          "type": "object",
+                          "properties": {
+                            "url": {
+                              "type": "string"
+                            },
+                            "alt": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "width": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 10000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "height": {
+                              "anyOf": [
+                                {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 10000
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "display_fit": {
+                              "type": "string",
+                              "enum": [
+                                "contain",
+                                "cover"
+                              ]
+                            },
+                            "object_position": {
+                              "type": "string",
+                              "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                            }
+                          },
+                          "required": [
+                            "url",
+                            "alt",
+                            "width",
+                            "height",
+                            "display_fit",
+                            "object_position"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "role": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "category": {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        "tags": {
+                          "maxItems": 30,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 100
+                          }
+                        }
+                      },
+                      "required": [
+                        "slug",
+                        "display_name",
+                        "intro",
+                        "kind",
+                        "color",
+                        "avatar",
+                        "role",
+                        "category",
+                        "tags"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "journals": {
+                    "maxItems": 366,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "community": {
+                          "type": "string",
+                          "enum": [
+                            "freedom",
+                            "claude",
+                            "codex"
+                          ]
+                        },
+                        "date": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "excerpt": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "version": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 2147483647
+                        },
+                        "coverage": {
+                          "type": "object",
+                          "properties": {
+                            "is_partial": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "is_partial"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "blocks": {
+                          "maxItems": 1000,
+                          "type": "array",
+                          "items": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "const": "heading"
+                                  },
+                                  "text": {
+                                    "type": "string",
+                                    "maxLength": 1000
+                                  },
+                                  "source_messages": {
+                                    "maxItems": 100,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "time": {
+                                          "type": "string",
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                                        },
+                                        "text": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 6000
+                                        },
+                                        "sender_name": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 100
+                                        },
+                                        "sender_avatar": {
+                                          "type": "object",
+                                          "properties": {
+                                            "url": {
+                                              "type": "string"
+                                            },
+                                            "display_fit": {
+                                              "type": "string",
+                                              "enum": [
+                                                "contain",
+                                                "cover"
+                                              ]
+                                            },
+                                            "object_position": {
+                                              "type": "string",
+                                              "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                                            }
+                                          },
+                                          "required": [
+                                            "url",
+                                            "display_fit",
+                                            "object_position"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "source_key": {
+                                          "type": "string",
+                                          "pattern": "^[a-f0-9]{64}$"
+                                        },
+                                        "person_slug": {
+                                          "type": "string",
+                                          "maxLength": 64,
+                                          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                        }
+                                      },
+                                      "required": [
+                                        "time",
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "const": "paragraph"
+                                  },
+                                  "text": {
+                                    "type": "string",
+                                    "maxLength": 20000
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "const": "quote"
+                                  },
+                                  "text": {
+                                    "type": "string",
+                                    "maxLength": 20000
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "const": "list"
+                                  },
+                                  "items": {
+                                    "maxItems": 100,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 4000
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "items"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "development_items": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "maxLength": 100
+                              },
+                              "title": {
+                                "type": "string",
+                                "maxLength": 300
+                              },
+                              "next_step": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "proposed",
+                                  "in_progress",
+                                  "reported_done",
+                                  "verified_done"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "next_step",
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "decisions": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "scope": {
+                                "type": "string",
+                                "maxLength": 2000
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "scope"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "people": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "community": {
+                                "type": "string",
+                                "enum": [
+                                  "freedom",
+                                  "claude",
+                                  "codex"
+                                ]
+                              },
+                              "slug": {
+                                "type": "string",
+                                "maxLength": 64,
+                                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "display_name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
+                              },
+                              "intro": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 4000
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "person",
+                                  "assistant"
+                                ]
+                              },
+                              "color": {
+                                "type": "string",
+                                "pattern": "^#[a-fA-F0-9]{6}$"
+                              },
+                              "avatar": {
+                                "type": "object",
+                                "properties": {
+                                  "url": {
+                                    "type": "string"
+                                  },
+                                  "alt": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  },
+                                  "width": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 10000
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "height": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 10000
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "display_fit": {
+                                    "type": "string",
+                                    "enum": [
+                                      "contain",
+                                      "cover"
+                                    ]
+                                  },
+                                  "object_position": {
+                                    "type": "string",
+                                    "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                                  }
+                                },
+                                "required": [
+                                  "url",
+                                  "alt",
+                                  "width",
+                                  "height",
+                                  "display_fit",
+                                  "object_position"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "role": {
+                                "type": "string",
+                                "maxLength": 200
+                              },
+                              "category": {
+                                "type": "string",
+                                "maxLength": 100
+                              },
+                              "tags": {
+                                "maxItems": 30,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "maxLength": 100
+                                }
+                              }
+                            },
+                            "required": [
+                              "slug",
+                              "display_name",
+                              "intro",
+                              "kind",
+                              "color",
+                              "avatar",
+                              "role",
+                              "category",
+                              "tags"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "hero": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "url": {
+                                  "type": "string"
+                                },
+                                "alt": {
+                                  "type": "string",
+                                  "maxLength": 200
+                                },
+                                "width": {
+                                  "anyOf": [
+                                    {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 10000
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "height": {
+                                  "anyOf": [
+                                    {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0,
+                                      "maximum": 10000
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "display_fit": {
+                                  "type": "string",
+                                  "enum": [
+                                    "contain",
+                                    "cover"
+                                  ]
+                                },
+                                "object_position": {
+                                  "type": "string",
+                                  "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?% (100|[0-9]{1,2})(\\.[0-9]+)?%$"
+                                }
+                              },
+                              "required": [
+                                "url",
+                                "alt",
+                                "width",
+                                "height",
+                                "display_fit",
+                                "object_position"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reading_note": {
+                          "type": "object",
+                          "properties": {
+                            "conclusion": {
+                              "type": "string",
+                              "maxLength": 300
+                            },
+                            "priority_todo": {
+                              "type": "string",
+                              "maxLength": 300
+                            },
+                            "discussion_question": {
+                              "type": "string",
+                              "maxLength": 300
+                            }
+                          },
+                          "required": [
+                            "conclusion",
+                            "priority_todo",
+                            "discussion_question"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "date",
+                        "title",
+                        "excerpt",
+                        "version",
+                        "coverage",
+                        "blocks",
+                        "development_items",
+                        "decisions",
+                        "people",
+                        "hero"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "schema_version",
+                  "source_revision",
+                  "people",
+                  "journals"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "schema_version": 1,
+                "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "people": [
+                  {
+                    "slug": "demo",
+                    "display_name": "合成測試人物",
+                    "intro": "合成資料",
+                    "kind": "person",
+                    "color": "#abcdef",
+                    "avatar": {
+                      "url": "/media/public/b446b751d00d0a62b786c9cbdb8a41c7040778713a607cc7e4f2e2a31d1adfe4.png",
+                      "alt": "合成資料",
+                      "width": null,
+                      "height": null,
+                      "display_fit": "contain",
+                      "object_position": "50% 50%"
+                    },
+                    "role": "測試",
+                    "category": "測試",
+                    "tags": []
+                  }
+                ],
+                "journals": [
+                  {
+                    "date": "2026-10-22",
+                    "title": "合成測試日誌",
+                    "excerpt": "合成內容，不是真實群組記錄",
+                    "version": 1,
+                    "coverage": {
+                      "is_partial": true
+                    },
+                    "blocks": [
+                      {
+                        "type": "paragraph",
+                        "text": "合成測試段落"
+                      }
+                    ],
+                    "development_items": [],
+                    "decisions": [],
+                    "people": [
+                      {
+                        "slug": "demo",
+                        "display_name": "合成測試人物",
+                        "intro": "合成資料",
+                        "kind": "person",
+                        "color": "#abcdef",
+                        "avatar": {
+                          "url": "/media/public/b446b751d00d0a62b786c9cbdb8a41c7040778713a607cc7e4f2e2a31d1adfe4.png",
+                          "alt": "合成資料",
+                          "width": null,
+                          "height": null,
+                          "display_fit": "contain",
+                          "object_position": "50% 50%"
+                        },
+                        "role": "測試",
+                        "category": "測試",
+                        "tags": []
+                      }
+                    ],
+                    "hero": null
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已建立，實際發布狀態依回應 state。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "submission_id": {
+                      "type": "string"
+                    },
+                    "source_revision": {
+                      "type": "string"
+                    },
+                    "payload_sha256": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "submission_id",
+                    "source_revision",
+                    "payload_sha256",
+                    "status",
+                    "created_at"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/retail/catalog": {
+      "get": {
+        "operationId": "retail.catalog",
+        "summary": "查看供貨目錄",
+        "x-required-scope": "read",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            }
+          }
+        ],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "object",
+              "properties": {
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 50
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "product_id": {
+                            "type": "string"
+                          },
+                          "community_id": {
+                            "type": "string"
+                          },
+                          "supplier_ref": {
+                            "type": "string"
+                          },
+                          "supplier_name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "photo_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "specifications": {
+                            "type": "string"
+                          },
+                          "product_type": {
+                            "type": "string"
+                          },
+                          "qc_status": {
+                            "type": "string"
+                          },
+                          "aggregate_version": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "current_offer": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "checkout_enabled": {
+                            "type": "boolean"
+                          },
+                          "money_movement_enabled": {
+                            "type": "boolean"
+                          },
+                          "official": {
+                            "type": "boolean"
+                          },
+                          "confirmation_kind": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "product_id",
+                          "community_id",
+                          "supplier_ref",
+                          "supplier_name",
+                          "title",
+                          "photo_url",
+                          "specifications",
+                          "product_type",
+                          "qc_status",
+                          "aggregate_version",
+                          "created_at",
+                          "current_offer",
+                          "checkout_enabled",
+                          "money_movement_enabled",
+                          "official",
+                          "confirmation_kind"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "next_offset": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_offset"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/retail/stores": {
+      "get": {
+        "operationId": "retail.stores",
+        "summary": "查看我的商店",
+        "x-required-scope": "read",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "store_id": {
+                            "type": "string"
+                          },
+                          "community_id": {
+                            "type": "string"
+                          },
+                          "seller_ref": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "support_contact": {
+                            "type": "string"
+                          },
+                          "aggregate_version": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "store_mode": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "checkout_enabled": {
+                            "type": "boolean"
+                          },
+                          "money_movement_enabled": {
+                            "type": "boolean"
+                          },
+                          "official": {
+                            "type": "boolean"
+                          },
+                          "confirmation_kind": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "store_id",
+                          "community_id",
+                          "seller_ref",
+                          "name",
+                          "description",
+                          "support_contact",
+                          "aggregate_version",
+                          "store_mode",
+                          "created_at",
+                          "checkout_enabled",
+                          "money_movement_enabled",
+                          "official",
+                          "confirmation_kind"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/retail/listings": {
+      "get": {
+        "operationId": "retail.listings",
+        "summary": "查看我的商店選品",
+        "x-required-scope": "read",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "listing_id": {
+                            "type": "string"
+                          },
+                          "community_id": {
+                            "type": "string"
+                          },
+                          "store_id": {
+                            "type": "string"
+                          },
+                          "offer_version_id": {
+                            "type": "string"
+                          },
+                          "seller_ref": {
+                            "type": "string"
+                          },
+                          "supplier_ref": {
+                            "type": "string"
+                          },
+                          "retail_price_minor": {
+                            "type": "string"
+                          },
+                          "currency": {
+                            "type": "string"
+                          },
+                          "sale_terms": {
+                            "type": "string"
+                          },
+                          "snapshot": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "snapshot_sha256": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "aggregate_version": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "acceptance_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "acceptance_state": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "decision_note": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "checkout_enabled": {
+                            "type": "boolean"
+                          },
+                          "money_movement_enabled": {
+                            "type": "boolean"
+                          },
+                          "official": {
+                            "type": "boolean"
+                          },
+                          "confirmation_kind": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "listing_id",
+                          "community_id",
+                          "store_id",
+                          "offer_version_id",
+                          "seller_ref",
+                          "supplier_ref",
+                          "retail_price_minor",
+                          "currency",
+                          "sale_terms",
+                          "snapshot",
+                          "snapshot_sha256",
+                          "state",
+                          "aggregate_version",
+                          "acceptance_id",
+                          "acceptance_state",
+                          "decision_note",
+                          "created_at",
+                          "checkout_enabled",
+                          "money_movement_enabled",
+                          "official",
+                          "confirmation_kind"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/supplier/products": {
+      "get": {
+        "operationId": "supplier.products",
+        "summary": "查看我的供貨商品",
+        "x-required-scope": "read",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "product_id": {
+                            "type": "string"
+                          },
+                          "community_id": {
+                            "type": "string"
+                          },
+                          "supplier_ref": {
+                            "type": "string"
+                          },
+                          "supplier_name": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "photo_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "specifications": {
+                            "type": "string"
+                          },
+                          "product_type": {
+                            "type": "string"
+                          },
+                          "qc_status": {
+                            "type": "string"
+                          },
+                          "aggregate_version": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "current_offer": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "checkout_enabled": {
+                            "type": "boolean"
+                          },
+                          "money_movement_enabled": {
+                            "type": "boolean"
+                          },
+                          "official": {
+                            "type": "boolean"
+                          },
+                          "confirmation_kind": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "product_id",
+                          "community_id",
+                          "supplier_ref",
+                          "supplier_name",
+                          "title",
+                          "photo_url",
+                          "specifications",
+                          "product_type",
+                          "qc_status",
+                          "aggregate_version",
+                          "created_at",
+                          "current_offer",
+                          "checkout_enabled",
+                          "money_movement_enabled",
+                          "official",
+                          "confirmation_kind"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/supplier/requests": {
+      "get": {
+        "operationId": "supplier.requests",
+        "summary": "查看供貨請求",
+        "x-required-scope": "read",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "acceptance_id": {
+                            "type": "string"
+                          },
+                          "listing_id": {
+                            "type": "string"
+                          },
+                          "community_id": {
+                            "type": "string"
+                          },
+                          "supplier_ref": {
+                            "type": "string"
+                          },
+                          "seller_ref": {
+                            "type": "string"
+                          },
+                          "seller_name": {
+                            "type": "string"
+                          },
+                          "snapshot": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "snapshot_sha256": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "aggregate_version": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "decision_note": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "decided_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "checkout_enabled": {
+                            "type": "boolean"
+                          },
+                          "money_movement_enabled": {
+                            "type": "boolean"
+                          },
+                          "official": {
+                            "type": "boolean"
+                          },
+                          "confirmation_kind": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "acceptance_id",
+                          "listing_id",
+                          "community_id",
+                          "supplier_ref",
+                          "seller_ref",
+                          "seller_name",
+                          "snapshot",
+                          "snapshot_sha256",
+                          "state",
+                          "aggregate_version",
+                          "decision_note",
+                          "decided_at",
+                          "created_at",
+                          "checkout_enabled",
+                          "money_movement_enabled",
+                          "official",
+                          "confirmation_kind"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
                   ],
                   "additionalProperties": {}
                 }

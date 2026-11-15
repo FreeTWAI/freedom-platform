@@ -4,7 +4,7 @@ import {z} from 'zod';
 import {command,transaction,journal,checkVersion,type Command} from '../../packages/db/index.js';
 import {tokenHash,type Actor} from '../identity-membership/service.js';
 import {requireCondition} from '../../packages/shared/problem.js';
-import type {JournalSnapshot} from './payload.js';
+import {snapshotSchema,type JournalSnapshot} from './payload.js';
 export const MAX_BYTES=2*1024*1024;
 const keyInput=z.object({label:z.string().trim().min(1).max(80),expires_in_days:z.number().int().min(1).max(90).default(30)}).strict();
 const uuid=(id:string)=>{requireCondition(z.uuid().safeParse(id).success,404,'not_found','找不到投稿。');return id;};
@@ -74,14 +74,31 @@ async function agentTransaction<T>(pool:Pool,hash:string,action:(q:PoolClient,ke
  });
 }
 export function idempotency(value:string|undefined){requireCondition(value&&/^[A-Za-z0-9_-]{8,128}$/.test(value),400,'idempotency_required','請提供有效的 Idempotency-Key。');return value;}
+export type SubmitDraftRequest=
+ |{kind:'key';hash:string;idem:string;payload:JournalSnapshot;sha256:string}
+ |{kind:'member';input:Command;sha256:string};
+async function insertDraft(q:PoolClient,actor:Pick<Actor,'user_id'|'community_id'>&{agent?:Actor['agent']},keyId:string|null,idem:string,payload:JournalSnapshot,sha256:string){
+ const count=Number((await q.query("SELECT count(*) FROM community_journal_submissions WHERE community_id=$1 AND owner_ref=$2 AND status='ready_for_review'",[actor.community_id,actor.user_id])).rows[0].count);
+ requireCondition(count<10,409,'journal_draft_limit','最多保留十份待審版本。');
+ const id=randomUUID();
+ const row=(await q.query(`INSERT INTO community_journal_submissions(submission_id,community_id,owner_ref,key_id,idempotency_key,source_revision,payload_sha256,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING ${receiptColumns}`,[id,actor.community_id,actor.user_id,keyId,idem,payload.source_revision,sha256,JSON.stringify(payload)])).rows[0];
+ await journal(q,actor as Actor,'community_journal',id,1,'submit',{source_revision:payload.source_revision,payload_sha256:sha256,...(actor.agent?{source:'agent',connection_id:actor.agent.connection_id}:{})});
+ return row;
+}
+/** Creates a ready-for-review journal draft for either an fjp_ key or a member/fw_agent_ command. */
+export async function submitDraft(pool:Pool,request:SubmitDraftRequest){
+ if(request.kind==='key'){
+  return agentTransaction(pool,request.hash,async(q,key)=>{
+   const prior=(await q.query(`SELECT ${receiptColumns} FROM community_journal_submissions WHERE key_id=$1 AND idempotency_key=$2`,[key.key_id,request.idem])).rows[0];
+   if(prior){requireCondition(prior.payload_sha256===request.sha256,409,'idempotency_conflict','相同識別碼不可送不同內容。');return prior;}
+   return insertDraft(q,key,key.key_id,request.idem,request.payload,request.sha256);
+  });
+ }
+ const payload=snapshotSchema.parse(request.input.body);
+ return command(pool,request.input,q=>publisher(q,request.input.actor),q=>insertDraft(q,request.input.actor,null,request.input.key,payload,request.sha256));
+}
 export async function submit(pool:Pool,hash:string,idem:string,payload:JournalSnapshot,sha256:string){
- return agentTransaction(pool,hash,async(q,key)=>{
-  const prior=(await q.query(`SELECT ${receiptColumns} FROM community_journal_submissions WHERE key_id=$1 AND idempotency_key=$2`,[key.key_id,idem])).rows[0];
-  if(prior){requireCondition(prior.payload_sha256===sha256,409,'idempotency_conflict','相同識別碼不可送不同內容。');return prior;}
-  const count=Number((await q.query("SELECT count(*) FROM community_journal_submissions WHERE community_id=$1 AND owner_ref=$2 AND status='ready_for_review'",[key.community_id,key.user_id])).rows[0].count);requireCondition(count<10,409,'journal_draft_limit','最多保留十份待審版本。');
-  const id=randomUUID();const row=(await q.query(`INSERT INTO community_journal_submissions(submission_id,community_id,owner_ref,key_id,idempotency_key,source_revision,payload_sha256,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING ${receiptColumns}`,[id,key.community_id,key.user_id,key.key_id,idem,payload.source_revision,sha256,JSON.stringify(payload)])).rows[0];
-  await journal(q,key as unknown as Actor,'community_journal',id,1,'submit',{source_revision:payload.source_revision,payload_sha256:sha256});return row;
- });
+ return submitDraft(pool,{kind:'key',hash,idem,payload,sha256});
 }
 export async function receipt(pool:Pool,hash:string,idem:string){return agentTransaction(pool,hash,async(q,key)=>{const row=(await q.query(`SELECT ${receiptColumns} FROM community_journal_submissions WHERE key_id=$1 AND idempotency_key=$2`,[key.key_id,idem])).rows[0];requireCondition(row,404,'not_found','找不到投稿收據。');return row;});}
 export async function publicSnapshot(pool:Pool){const row=(await pool.query("SELECT s.payload,s.source_revision,s.payload_sha256 FROM community_journal_publisher p JOIN community_journal_submissions s ON s.submission_id=p.published_submission_id AND s.community_id=p.community_id AND s.owner_ref=p.owner_ref WHERE p.singleton AND s.status='published'")).rows[0];return row?{data:row.payload,source_revision:row.source_revision,payload_sha256:row.payload_sha256}:{data:{people:[],journals:[]},source_revision:null,payload_sha256:null};}

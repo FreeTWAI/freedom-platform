@@ -6,7 +6,7 @@ import {tsImport} from 'tsx/esm/api';
 const {agentBodySchemas,agentPathSchemas,agentQuerySchemas,agentResponseSchemas,agentPendingSchema,agentErrorSchema,agentInputSchema,agentJsonSchema}=await tsImport('../apps/platform-api/src/agent-schemas.ts',import.meta.url);
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const active=agentOperations.filter(op=>op.granted!==false);
-const created=new Set(['events.share','repositories.share','posts.note','posts.link','posts.comment','services.create','works.create','skills.draft']);
+const created=new Set(['events.share','repositories.share','posts.note','posts.link','posts.comment','services.create','works.create','skills.draft','skills.upload','journal.submit']);
 const pendingJson=agentJsonSchema(agentPendingSchema);
 const errorContent={content:{'application/json':{schema:agentJsonSchema(agentErrorSchema)}}};
 const paths={},sdkOperations=[];

@@ -15,7 +15,7 @@ import {createEventMissionRoutes} from './routes/event-missions.js';
 import {createCommunityCertificationRoutes} from './routes/community-certification.js';
 import {createSocialAchievementRoutes} from './routes/social-achievements.js';
 import {createProfileCoverRoutes,createPublicProfileCoverRoutes,isProfileCoverUpload,checkProfileCoverHeaders} from './routes/profile-covers.js';
-import {createJournalAgentRoutes,createJournalMemberRoutes,createJournalPublicRoutes,isAgentJournalPath} from './routes/community-journal.js';
+import {createJournalAgentRoutes,createJournalMemberRoutes,createJournalPublicRoutes,isAgentJournalPath,isMemberJournalSubmitPath,JOURNAL_MAX_BYTES} from './routes/community-journal.js';
 import { storeCategoriesInstalled, storeCategoriesOptions } from './routes/hosted-store-categories.js';
 import { commerceOrderNotificationsInstalled } from './routes/hosted-checkout.js';
 import { storeVariantsInstalled, storeVariantsOptions, isProductGroupReplace } from './routes/hosted-store-variants.js';
@@ -95,7 +95,7 @@ import { createGuildLaunchpadRoutes, createPublicGuildLaunchpadRoutes } from './
 import { createPublicModuleRegistryRoutes } from './routes/module-registry.js';
 import { checkTenantResultContentHeaders, isTenantResultContentUpload } from './routes/tenant-work.js';
 import { onboardingDiagnostics } from './onboarding-diagnostics.js';
-import { createSkillSubmissionRoutes, createAgentSkillSubmissionRoutes, isAgentSkillUploadPath } from './routes/skill-submissions.js';
+import { AGENT_UPLOAD_MAX_BYTES, createSkillSubmissionRoutes, createAgentSkillSubmissionRoutes, isAgentSkillUploadPath, isMemberSkillUploadPath } from './routes/skill-submissions.js';
 import { createMaintainerWebhookRoutes, createRepoMaintainerMemberRoutes, isMaintainerWebhookPath } from './routes/repo-maintainer.js';
 import { createPublishedSkillRoutes } from './routes/published-skills.js';
 import { createPublicSkillAuthorCardRoutes } from './routes/skill-author-cards.js';
@@ -353,6 +353,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         // Notes may embed an image; preview wraps up to 24,000 UTF-8 bytes
         // in {"content":""}, with at most six JSON escape bytes per input byte.
         const jsonLimit=isEventDetailsWrite(c.req.method,c.req.path)?EVENT_DETAILS_REQUEST_BYTES:
+          isMemberSkillUploadPath(c.req.method,c.req.path)?AGENT_UPLOAD_MAX_BYTES:
+          isMemberJournalSubmitPath(c.req.method,c.req.path)?JOURNAL_MAX_BYTES:
           c.req.method==='POST'&&c.req.path==='/api/v1/social-posts/notes'?SOCIAL_NOTE_REQUEST_BYTES:
           c.req.method==='POST'&&c.req.path==='/api/v1/commerce/preview'?6*24000+14:
           storePoliciesInstalled(runtime)&&isSellerPoliciesSave(c.req.method,c.req.path)?524288:
