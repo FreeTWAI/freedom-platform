@@ -205,7 +205,7 @@ test('single volumetric foods partition exactly at guide planes with bounded res
    model.root.traverse(o=>{if(o instanceof T.Mesh){assert.ok(owned.has(o.geometry));for(const v of o.geometry.getAttribute('position').array)assert.ok(Number.isFinite(v));assert.equal((o.material as T.MeshStandardMaterial).map,null);}});
    for(let i=0;i<7;i++){
     const a=model.faces[i].right.geometry.getAttribute('position'),b=model.faces[i+1].left.geometry.getAttribute('position');
-    for(const [mesh,position] of [[model.faces[i].right,a],[model.faces[i+1].left,b]] as const)for(let n=0;n<position.count;n++)assert.ok(Math.abs(position.getX(n)+mesh.parent!.position.x-planes[i])<(id==='pumpkin'&&n>=120?.00601:1e-6),'the flesh lies on the knife plane; only raised seeds stand .006 above it');
+    for(const [mesh,position] of [[model.faces[i].right,a],[model.faces[i+1].left,b]] as const)for(let n=0;n<position.count;n++)assert.ok(Math.abs(position.getX(n)+mesh.parent!.position.x-planes[i])<(id==='pumpkin'&&n>=1320?.00601:1e-6),'the flesh lies on the knife plane; only raised seeds stand .006 above it');
    }
    const refs=resources(model.root);for(const count of [...Array.from({length:8},(_,i)=>i),0]){model.update(count);model.faces.forEach((f,i)=>{assert.equal(f.left.visible,i>0&&i<=count);assert.equal(f.right.visible,i<count);assert.equal(model.segments[i].position.z,i<count?.65:0);});assert.deepEqual(resources(model.root),refs);
     model.root.updateMatrixWorld(true);const world=new T.Box3().setFromObject(model.root,true);assert.ok(world.min.x>=-3.05&&world.max.x<=3.05,`${id}/${count}: slices remain across the board`);assert.ok(world.min.z>=-2&&world.max.z<=2.2,`${id}/${count}: slices remain within board depth`);assert.ok(world.min.y>=.249);
@@ -341,6 +341,38 @@ test('mushroom cap, flesh border and tapered stalk have explicit real dimensions
     const bounds=new T.Box3().setFromObject(model.root,true);assert.ok(bounds.min.x>-2.5&&bounds.max.x<1.861&&bounds.min.z>=-1.181&&bounds.max.z<1.831,'all real cut pieces fit comfortably on the unchanged board');
     assert.deepEqual(resources(model.root),refs);
    }
+  }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
+ }
+});
+
+test('preparation pigments are deterministic, seam-continuous and reveal layered real cut flesh',()=>{
+ for(const id of preparation.VOLUMETRIC_PREPARATION_IDS){
+  const planes=[-1.2,-.4,.4,1.2],owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>();
+  const model=preparation.createPreparationModel(id,planes,owned,materials);
+  try{
+   const skins=model.segments.map(g=>g.getObjectByName('preparation/skin') as T.Mesh);
+   for(const skin of skins){
+    const colors=skin.geometry.getAttribute('color'),distinct=new Set<string>();
+    for(let i=0;i<colors.count;i++){
+     const channels=[colors.getX(i),colors.getY(i),colors.getZ(i)];
+     channels.forEach(v=>assert.ok(Number.isFinite(v)&&v>=0&&v<=1.2));
+     distinct.add(channels.map(v=>v.toFixed(4)).join('/'));
+    }
+    assert.ok(distinct.size>80,`${id}: real pigment variation must survive beyond a flat colour swap`);
+   }
+   for(let seam=0;seam<planes.length;seam++){
+    const at=(mesh:T.Mesh)=>{const p=mesh.geometry.getAttribute('position'),c=mesh.geometry.getAttribute('color'),result=new Map<string,number[]>();for(let i=0;i<p.count;i++)if(Math.abs(p.getX(i)+mesh.parent!.position.x-planes[seam])<1e-6)result.set(`${p.getY(i).toFixed(5)}/${p.getZ(i).toFixed(5)}`,[c.getX(i),c.getY(i),c.getZ(i)]);return result;};
+    const left=at(skins[seam]),right=at(skins[seam+1]);assert.ok(left.size>=39);
+    for(const [point,color] of left){const other=right.get(point);assert.ok(other,`${id}: both sides share the same skin seam`);color.forEach((value,i)=>assert.ok(Math.abs(value-other![i])<1e-6));}
+   }
+   if(id!=='mushroom'){
+    const face=model.faces[2].right.geometry,c=face.getAttribute('color'),p=face.getAttribute('position');
+    assert.ok(p.count>=1320&&p.count<=1500,'six flesh bands and at most five 12-triangle seeds have a fixed vertex budget');
+    const tones=new Set(Array.from({length:c.count},(_,i)=>[c.getX(i),c.getY(i),c.getZ(i)].map(v=>v.toFixed(4)).join('/')));
+    assert.ok(tones.size>50,'thin rind, flesh and core retain distinct pigments');
+   }
+   const before=snapshot(model.root as unknown as T.Scene);
+   model.update(2);model.update(0);assert.deepEqual(snapshot(model.root as unknown as T.Scene),before,'cuts do not rerandomize surface appearance');
   }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
  }
 });

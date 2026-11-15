@@ -53,13 +53,31 @@ export function createPreparationModel(id:PreparationId,planes:readonly number[]
    for(const [x,a] of [[x0,a0],[x1,a0],[x1,a1],[x0,a0],[x1,a1],[x0,a1]]){const v=ring(x,a),vnormal=normal(x,a);p.push(v.x-center,v.y,v.z);n.push(vnormal.x,vnormal.y,vnormal.z);}
   }
   const skinGeometry=geometry(p,n),tints:number[]=[];
-  for(let vertex=0;vertex<p.length;vertex+=3){const x=p[vertex]+center,y=p[vertex+1],z=p[vertex+2];let tone=1;if(id==='potato')for(const [ex,ey,ez] of [[-1.2,1.15,.35],[.3,1.35,.3],[1.25,1.05,-.15]])if(((x-ex)/.16)**2+((y-ey)/.18)**2+((z-ez)/.2)**2<1)tone=.48;if(id==='mushroom'){
-    // Original vertex colour, not a painted image: cap skin and the radially
-    // shaded underside occupy different surface triangles of the same solid.
-    const tint=new Color(y<1.25-1e-6?'#bc9f85':colors[0]);
-    if(y<1.25-1e-6)tint.multiplyScalar(.9+.1*Math.cos(12*Math.atan2(z,x))**2);
+  // Continuous object-space pigments meet exactly at every knife seam. These
+  // are vertex colours on the real solid, not decals, textures or random noise.
+  for(let vertex=0;vertex<p.length;vertex+=3){
+   const x=p[vertex]+center,y=p[vertex+1],z=p[vertex+2];
+   const grain=Math.sin(x*17+z*11)*Math.sin(y*19-z*9),mottle=Math.sin(x*3.7+z*4.1)*Math.cos(y*5.3-x*1.9);
+   let tone=1;
+   if(id==='potato'){
+    tone=.91+.10*mottle+.035*grain;
+    for(const [ex,ey,ez] of [[-1.2,1.15,.35],[.3,1.35,.3],[1.25,1.05,-.15],[-.45,.85,-.8],[1.7,.65,.6]]){
+     const distance=((x-ex)/.19)**2+((y-ey)/.21)**2+((z-ez)/.23)**2;
+     tone-=.38*Math.exp(-distance*2);
+    }
+   }else if(id==='pumpkin'){
+    const rib=Math.cos(10*Math.atan2(z,x));
+    tone=.86+.17*rib+.045*mottle+.02*grain;
+   }else if(id==='sweet-potato'){
+    const fibre=Math.sin(x*4+z*22+y*13);
+    tone=.83+.14*mottle+.075*fibre+.025*grain;
+   }
+   if(id==='mushroom'){
+    const underside=y<1.25-1e-6,tint=new Color(underside?'#bc9f85':colors[0]);
+    tint.multiplyScalar(underside?.90+.10*Math.cos(18*Math.atan2(z,x))**2:.88+.10*mottle+.035*grain);
     tints.push(tint.r,tint.g,tint.b);
-   }else tints.push(tone,tone,tone);}
+   }else tints.push(tone,tone,tone);
+  }
   skinGeometry.setAttribute('color',new Float32BufferAttribute(tints,3));const skin=mesh(g,skinGeometry,id==='mushroom'?'#ffffff':colors[0]);(skin.material as MeshStandardMaterial).vertexColors=true;skin.name='preparation/skin';
   const cap=(x:number,side:number)=>{const points:number[]=[],normals:number[]=[],tints:number[]=[],mid=new Vector3(x,ring(x,0).y,0);
    const faceTriangle=(vertices:Vector3[],color:string)=>{for(const v of side<0?vertices:[...vertices].reverse()){points.push(v.x-center,v.y,v.z);normals.push(side,0,0);const tint=new Color(color);tints.push(tint.r,tint.g,tint.b);}};
@@ -70,7 +88,29 @@ export function createPreparationModel(id:PreparationId,planes:readonly number[]
      // Top skin is brown; the lower edge belongs to the lighter underside.
      const ia=a.clone().lerp(mid,.045),ib=b.clone().lerp(mid,.045),border=k<radial/2?colors[0]:'#bc9f85';
      faceTriangle([mid,ia,ib],colors[1]);faceTriangle([ia,a,b],border);faceTriangle([ia,b,ib],border);
-    }else for(const v of side<0?[mid,a,b]:[mid,b,a]){points.push(v.x-center,v.y,v.z);normals.push(side,0,0);const tint=new Color(id==='pumpkin'&&v===mid?'#8b5023':colors[1]);tints.push(tint.r,tint.g,tint.b);}
+    }else{
+     // Concentric real triangles expose a thin rind, moist flesh and a softer
+     // core. Every vertex stays on the same exact domain knife plane.
+     const radii=[0,.22,.48,.73,.94,.975,1];
+     const fleshTint=(r:number,angle:number)=>{
+      const tint=new Color(r>=.975?colors[0]:colors[1]);
+      if(r<.975){
+       const fibre=(Math.cos(angle*12+x*2)+.35*Math.sin(angle*7-r*9))*Math.sin(r*Math.PI);
+       if(id==='pumpkin')tint.lerp(new Color('#a15b24'),Math.max(0,1-r/.55)*.66);
+       else tint.lerp(new Color(id==='potato'?'#fff0c8':'#ffe088'),.14+.11*Math.sin(r*12));
+       tint.multiplyScalar(1+.035*fibre);
+      }
+      return tint;
+     };
+     for(let band=0;band<radii.length-1;band++){
+      const r0=radii[band],r1=radii[band+1],angle0=k*Math.PI*2/radial,angle1=(k+1)*Math.PI*2/radial;
+      const vertex=(r:number,angle:number)=>({v:mid.clone().lerp(ring(x,angle),r),t:fleshTint(r,angle)});
+      const ia=vertex(r0,angle0),ib=vertex(r0,angle1),oa=vertex(r1,angle0),ob=vertex(r1,angle1);
+      for(const triangle of (r0===0?[[ia,oa,ob]]:[[ia,oa,ob],[ia,ob,ib]]))for(const {v,t} of side<0?triangle:[...triangle].reverse()){
+       points.push(v.x-center,v.y,v.z);normals.push(side,0,0);tints.push(t.r,t.g,t.b);
+      }
+     }
+    }
    }
    if(id==='mushroom'&&Math.abs(x)<.42)for(let j=0;j<12;j++){
     const y0=1.25*j/12,y1=1.25*(j+1)/12,z0=stalkWidth(x,y0),z1=stalkWidth(x,y1);
