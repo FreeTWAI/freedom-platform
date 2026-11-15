@@ -9,10 +9,10 @@ const paths = (dir, ext, text) => Object.freeze(text.trim().split(/\s+/).map(nam
 
 const GOVERNANCE_BASELINE = paths('packages/contribution-tools/test', '.test.mjs', `
 agent-kit-device-fixture agent-kit-device-profile behavior-harness-adversarial behavior-harness
-behavior-supervisor checkout-repositories consumer-entry-coverage consumer-libraries
+behavior-supervisor check-pr checkout-repositories consumer-entry-coverage consumer-libraries
 consumer-runtime-recipe consumer-source-profiles consumer-workspace context contracts
 directory-build export github-app-publisher github-behavior-host github-consumer-host
-github-consumer-profiles github-trusted-adapter io machine-device-cli modules-repository modules pinned-e2e pinned-suite runtime-matrix
+github-consumer-profiles github-trusted-adapter io machine-device-cli module-lane modules-repository modules pinned-e2e pinned-suite runtime-matrix
 runtime-sharding runtime-weights suite-runner supervisor-create-lifecycle surface-adversarial surface-audit
 test-reporter-progress trusted-ci
 `);
@@ -59,8 +59,8 @@ test_check_package_dag test_check_specs
 
 export const PINNED_SUITES = Object.freeze({
   'ci.browser-spec-consumers': Object.freeze({ files: Object.freeze(['tests/runtime/public-social-post-page.test.ts', 'tests/runtime/newcomer-guides.test.ts', 'tests/runtime/social-share.test.ts', 'tests/runtime/social-feed-write-order.test.ts', 'tests/runtime/guild-workspace-writer.test.ts', 'tests/runtime/guild-member-tier-fixture.test.ts']), loader: 'tsx', database: false, timeoutMs: 180000, env: Object.freeze([]) }),
-  'ci.governance-unit': Object.freeze({ directory: 'packages/contribution-tools/test', pattern: /^[a-z][a-z0-9-]*\.test\.mjs$/, baseline: GOVERNANCE_BASELINE, loader: 'node', database: false, timeoutMs: 300000, env: Object.freeze([]) }),
-  'ci.selector-unit': Object.freeze({ files: Object.freeze(['scripts/ci/select-affected-jobs.test.mjs', 'scripts/ci/guild-presentation-profile.test.mjs']), loader: 'node', database: false, timeoutMs: 180000, env: Object.freeze([]) }),
+  'ci.governance-unit': Object.freeze({ directory: 'packages/contribution-tools/test', pattern: /^[a-z][a-z0-9-]*\.test\.mjs$/, baseline: GOVERNANCE_BASELINE, loader: 'node', database: false, timeoutMs: 600000, env: Object.freeze([]) }),
+  'ci.selector-unit': Object.freeze({ files: Object.freeze(['scripts/ci/select-affected-jobs.test.mjs', 'scripts/ci/guild-presentation-profile.test.mjs']), loader: 'node', database: false, timeoutMs: 600000, env: Object.freeze([]) }),
   'ci.skill-client-unit': Object.freeze({ directory: 'packages/skill-upload-client/test', pattern: /^[a-z][a-z0-9_-]*\.test\.mjs$/, baseline: SKILL_CLIENT_BASELINE, loader: 'node', database: false, timeoutMs: 180000, env: Object.freeze([]) }),
   'ci.worker-unit': Object.freeze({ directory: 'tests/worker', pattern: /^[a-z][a-z0-9_-]*\.test\.ts$/, baseline: WORKER_BASELINE, loader: 'tsx', database: true, timeoutMs: 900000, env: Object.freeze(['HOME', 'FREEDOM_WORKERD_BUNDLE_DIR']) }),
   'ci.deploy-preflight': Object.freeze({ directory: 'deploy/cloudflare/test', pattern: /^[a-z][a-z0-9_-]*\.test\.mjs$/, baseline: DEPLOY_PREFLIGHT_BASELINE, loader: 'node', database: false, timeoutMs: 180000, env: Object.freeze([]) }),

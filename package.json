@@ -82,6 +82,7 @@
     "module:list": "node scripts/freedom.mjs modules",
     "module:new": "node scripts/freedom.mjs module-new",
     "module:check": "node scripts/freedom.mjs module-check",
+    "check:pr": "node scripts/check-pr.mjs",
     "contracts:agent": "node scripts/build-agent-contract.mjs",
     "check:agent-contract": "node scripts/build-agent-contract.mjs --check",
     "shares:backfill": "tsx scripts/backfill-shares.ts",

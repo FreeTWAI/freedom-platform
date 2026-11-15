@@ -12,6 +12,7 @@ import { cleanupE2ePass } from '../../../scripts/ci/run-pinned-e2e.mjs';
 import { defaultFragmentBinding, writeDefaultFragment, publishDefaultFragment, readDefaultFragments } from '../../../scripts/ci/pinned-e2e-fragments.mjs';
 import NativeProgressReporter from '../../../scripts/ci/pinned-e2e-progress-reporter.mjs';
 import { STORE_SPEC_PROFILE, STORE_SPEC_FILES, STORE_SPEC_PLAN, E2E_BASELINE, E2E_PLAN, E2E_DEFAULT_SHARDS, E2E_PASS_TIMEOUT_MS, evaluateE2ePasses, evaluateE2ePassProgress, GUIDE_DEFAULT_FILES, GUIDE_COMPOSITION_PROFILE, planE2eSelection } from '../pinned-e2e.mjs';
+import { MODULE_LANE_SMOKE_FILES } from '../module-lane.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const rootDir = '/fixture/tests/e2e';
@@ -1401,7 +1402,9 @@ test('separate real Playwright invocations join only complete default coverage a
       const child = invoke(['--root', root, ...identity, '--default-shard', String(shard.current), '--output', directory], fragmentEnv);
       assert.equal(child.status, 0, child.stdout + child.stderr);
       const name = `default-shard-${shard.current}.json`;
-      await writeFile(join(fragments, name), await readFile(join(directory, name)));
+      const fragmentBytes = await readFile(join(directory, name));
+      assert.ok(JSON.parse(JSON.parse(fragmentBytes).report).suites.length > 0, `shard ${shard.current} must execute >=1 suite`);
+      await writeFile(join(fragments, name), fragmentBytes);
       assert.deepEqual(await readdir(directory), [name]);
       assert.doesNotMatch(child.stdout, /"check_id":"ci.e2e","status":"passed"/);
     }
@@ -1426,5 +1429,133 @@ test('separate real Playwright invocations join only complete default coverage a
     assert.equal(subset.status, 1, subset.stdout + subset.stderr);
     assert.equal(JSON.parse(await readFile(output, 'utf8')).reason, 'case_listing_mismatch');
     assert.equal((await readFile(starts, 'utf8')).trim().split('\n').length, executions.length, 'invalid default coverage cannot start fixture passes');
+  });
+});
+
+test('module-affected and specs-affected plan exactly their narrowed files and reject mismatched reports', () => {
+  const fixtureFiles = E2E_PLAN.slice(1).flatMap(pass => pass.files);
+  const targetFiles = [...new Set(['tests/e2e/other.spec.ts', ...MODULE_LANE_SMOKE_FILES.slice(0, 2), ...fixtureFiles])].sort();
+  const catalog = [...new Set([...E2E_BASELINE, ...targetFiles, 'tests/e2e/unrelated.spec.ts'])].sort();
+  for (const profile of ['module-affected', 'specs-affected']) {
+    const selected = planE2eSelection(profile, catalog, [...targetFiles].reverse());
+    assert.equal(selected.profile, profile);
+    assert.deepEqual(selected.expectedFiles, targetFiles);
+    assert.deepEqual(selected.plan[0].files, targetFiles);
+    assert.deepEqual(selected.plan.slice(1), E2E_PLAN.slice(1));
+    assert.equal(planE2eSelection(profile, catalog).profile, 'full');
+    assert.equal(planE2eSelection(profile, catalog, []).profile, 'full');
+    assert.equal(planE2eSelection(profile, catalog, [...targetFiles, 'tests/e2e/missing.spec.ts']).profile, 'full');
+    assert.equal(planE2eSelection(profile, catalog, targetFiles.filter(f => f !== fixtureFiles[0])).profile, 'full');
+    assert.equal(planE2eSelection(profile, catalog, [...targetFiles, targetFiles[0]]).profile, 'full');
+
+    const defaultSuites = selected.expectedFiles.map(file => {
+      const name = file.slice('tests/e2e/'.length);
+      if (name === 'private-work-ai.spec.ts') return suite(name, [['off', 'expected'], ['on', 'skipped']]);
+      if (name === 'hosted-store-photo.spec.ts') return suite(name, [['photo', 'skipped']]);
+      if (name === 'member-avatar-asset.spec.ts') return suite(name, [['asset', 'skipped']]);
+      return suite(name, [['ordinary', 'expected']]);
+    });
+    const makePasses = suites0 => E2E_PLAN.map((pass, index) => index === 0 ? {
+      id: pass.id, exit_code: 0, listing: structuredClone(report(suites0)), listing_exit_code: 0, listing_evidence_sha256: 'a'.repeat(64),
+      partitions: E2E_DEFAULT_SHARDS.map(({ current, total }, part) => ({
+        current, total, exit_code: 0, evidence_sha256: 'b'.repeat(64),
+        report: report(suites0.filter((_, i) => i % E2E_DEFAULT_SHARDS.length === part), null),
+      })),
+    } : {
+      id: pass.id, exit_code: 0, evidence_sha256: 'a'.repeat(64),
+      report: report([suite(pass.files[0].slice('tests/e2e/'.length), pass.id === 'private-ai' ? [['off', 'skipped'], ['on', 'expected']]
+        : pass.id === 'avatar-asset' ? [['asset', 'expected']]
+        : pass.id === 'store-photo' ? [['photo', 'expected']]
+        : pass.id === 'message-image' ? [['image', 'expected']]
+        : [['preferences', 'expected']])]),
+    });
+
+    const passes = makePasses(defaultSuites);
+    assert.equal(evaluateE2ePasses(selected.expectedFiles, passes, { rootDir, configFile, profile }).status, 'passed');
+
+    const differentExpected = [...selected.expectedFiles, 'tests/e2e/unrelated.spec.ts'].sort();
+    assert.equal(evaluateE2ePasses(differentExpected, passes, { rootDir, configFile, profile }).status, 'failed');
+
+    const extraInReport = makePasses([...defaultSuites, suite('unrelated.spec.ts', [['extra', 'expected']])]);
+    assert.equal(evaluateE2ePasses(selected.expectedFiles, extraInReport, { rootDir, configFile, profile }).status, 'failed');
+
+    const missingFromReport = makePasses(defaultSuites.filter(s => s.file !== 'other.spec.ts'));
+    assert.equal(evaluateE2ePasses(selected.expectedFiles, missingFromReport, { rootDir, configFile, profile }).status, 'failed');
+
+    const nonNullShard = makePasses(defaultSuites);
+    nonNullShard[0].partitions[0].report.config.shard = { current: 1, total: 4 };
+    assert.equal(evaluateE2ePasses(selected.expectedFiles, nonNullShard, { rootDir, configFile, profile }).reason, 'invalid_test_results');
+
+    const wrongShardOrder = makePasses(defaultSuites);
+    const s0 = wrongShardOrder[0].partitions[0].report.suites[1];
+    wrongShardOrder[0].partitions[0].report.suites[1] = wrongShardOrder[0].partitions[1].report.suites[1];
+    wrongShardOrder[0].partitions[1].report.suites[1] = s0;
+    assert.equal(evaluateE2ePasses(selected.expectedFiles, wrongShardOrder, { rootDir, configFile, profile }).reason, 'unexpected_file');
+  }
+});
+
+test('narrowed profiles split pass 0 across all four default shards even when hosted-store-photo has 46 tests', async () => {
+  await withFixture(async root => {
+    await playwrightFixture(root, "export default { workers: 1, projects: [{ name: 'chromium' }] };\n");
+    const fortySixStoreTests = [
+      "import { test } from '@playwright/test';",
+      "const enabled = process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE === '1';",
+      "for (let i = 0; i < 46; i++) test(`store-${i}`, () => { test.skip(!enabled, 'fixture'); });",
+    ].join('\n');
+    const conditionalAvatarTests = [
+      "import { test } from '@playwright/test';",
+      "if (process.env.FREEDOM_E2E_AVATAR_ASSET_FIXTURE === '1') { test('avatar-1', () => {}); test('avatar-2', () => {}); }",
+    ].join('\n');
+    const fixtureStub = (envVar, count = 4) => [
+      "import { test } from '@playwright/test';",
+      `const enabled = process.env.${envVar} === '1';`,
+      `for (let i = 0; i < ${count}; i++) test(\`fix-\${i}\`, () => { test.skip(!enabled, 'fixture'); });`,
+    ].join('\n');
+    await writeFile(join(root, 'tests/e2e/hosted-store-photo.spec.ts'), fortySixStoreTests);
+    await writeFile(join(root, 'tests/e2e/member-avatar-asset.spec.ts'), conditionalAvatarTests);
+    await writeFile(join(root, 'tests/e2e/private-work-ai.spec.ts'), fixtureStub('FREEDOM_E2E_PRIVATE_AI_FIXTURE', 14));
+    await writeFile(join(root, 'tests/e2e/message-images.spec.ts'), fixtureStub('FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE', 1));
+    await writeFile(join(root, 'tests/e2e/notification-preferences.spec.ts'), fixtureStub('FREEDOM_E2E_NOTIFICATION_PREFERENCES', 4));
+    for (const file of MODULE_LANE_SMOKE_FILES) await writeFile(join(root, file), ordinaryTests);
+    await mkdir(join(root, 'modules/example'), { recursive: true });
+    await writeFile(join(root, 'modules/example/freedom.module.json'), JSON.stringify({
+      format: 'freedom.module/v1', module_id: 'example', owner_role: 'foundation',
+      owned_paths: ['modules/example/**'], public_exports: [], dependencies: [],
+      contract_families: ['preview'], client_profiles: ['member'],
+      instructions: ['governance/README.md'], invariants: ['local-only'], tests: ['runtime.full'], surfaces: [],
+    }));
+    await writeFile(join(root, '.gitignore'), 'node_modules\nfragments\nresult.json\nrunner-*\n');
+    const git = (args, input) => execFileSync('/usr/bin/git', ['-C', root, '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], {
+      input, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+        GIT_AUTHOR_NAME: 'Shard Test', GIT_AUTHOR_EMAIL: 'shard@example.invalid', GIT_COMMITTER_NAME: 'Shard Test', GIT_COMMITTER_EMAIL: 'shard@example.invalid' },
+    }).trim();
+    git(['init', '-q', '-b', 'main']); git(['add', '.']); git(['commit', '-qm', 'base']);
+    const base = git(['rev-parse', 'HEAD']);
+    await writeFile(join(root, 'tests/e2e/calm-experience.spec.ts'), ordinaryTests + '\n// PR spec change\n');
+    git(['add', '.']); git(['commit', '-qm', 'spec-change']);
+    const head = git(['rev-parse', 'HEAD']);
+    const candidate = git(['commit-tree', git(['rev-parse', 'HEAD^{tree}']), '-p', base, '-p', head], 'integration\n');
+    git(['checkout', '-q', candidate]);
+    const fragments = join(root, 'fragments');
+    await mkdir(fragments);
+    const prBinding = ['--event', 'pull_request', '--base', base, '--head', head, '--candidate', candidate, '--pull-request', '7'];
+    const shardEnv = { ...fragmentEnv, PINNED_SHA: candidate, GITHUB_BASE_REF: 'main' };
+    for (const shard of E2E_DEFAULT_SHARDS) {
+      const directory = join(root, `runner-${shard.current}`);
+      const child = invoke(['--root', root, ...prBinding, '--default-shard', String(shard.current), '--output', directory], shardEnv);
+      assert.equal(child.status, 0, `shard ${shard.current} failed: ${child.stdout}\n${child.stderr}`);
+      const name = `default-shard-${shard.current}.json`;
+      const fragmentBytes = await readFile(join(directory, name));
+      assert.ok(JSON.parse(JSON.parse(fragmentBytes).report).suites.length > 0, `shard ${shard.current} must execute >=1 suite`);
+      await writeFile(join(fragments, name), fragmentBytes);
+    }
+    const output = join(root, 'result.json');
+    const complete = invoke(['--root', root, ...prBinding, '--default-reports', fragments, '--output', output], shardEnv);
+    assert.equal(complete.status, 0, complete.stdout + complete.stderr);
+    const result = JSON.parse(await readFile(output, 'utf8'));
+    assert.equal(result.status, 'passed');
+    assert.equal(result.selection.profile, 'specs-affected');
+    const expectedNarrowed = [...new Set([...MODULE_LANE_SMOKE_FILES, ...E2E_PLAN.slice(1).flatMap(p => p.files)])].sort();
+    assert.deepEqual(result.selected_files, expectedNarrowed);
   });
 });

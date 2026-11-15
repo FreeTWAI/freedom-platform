@@ -102,12 +102,28 @@ export const STORE_SPEC_FILES = Object.freeze(['tests/e2e/store-setup-entry.spec
 export const STORE_SPEC_PLAN = Object.freeze([
   Object.freeze({id: 'default', env: Object.freeze({}), files: STORE_SPEC_FILES}),
 ]);
-export function planE2eSelection(profile, catalog) {
+const FIXTURE_SPEC_FILES = Object.freeze(E2E_PLAN.slice(1).flatMap(pass => pass.files));
+const SPEC_NAME = /^[a-z0-9][a-z0-9-]*\.spec\.ts$/;
+
+export function planE2eSelection(profile, catalog, files) {
   if (profile === STORE_SPEC_PROFILE && STORE_SPEC_FILES.every(file => catalog.includes(file))) {
     return {profile, expectedFiles: [...STORE_SPEC_FILES], plan: STORE_SPEC_PLAN};
   }
   if (profile === 'guild-presentation' && GUILD_PRESENTATION_PROFILE.integrationFiles.every(file => catalog.includes(file))) {
     return {profile, expectedFiles: [...GUILD_PRESENTATION_PROFILE.integrationFiles].sort(), plan: GUILD_E2E_PLAN};
+  }
+  if (['module-affected', 'specs-affected'].includes(profile)
+    && Array.isArray(catalog) && Array.isArray(files) && files.length > 0
+    && files.every(file => typeof file === 'string' && file.startsWith('tests/e2e/') && SPEC_NAME.test(file.slice('tests/e2e/'.length)))
+    && new Set(files).size === files.length
+    && files.every(file => catalog.includes(file))
+    && FIXTURE_SPEC_FILES.every(file => files.includes(file))) {
+    const sorted = [...files].sort();
+    return {
+      profile,
+      expectedFiles: sorted,
+      plan: E2E_PLAN.map((pass, index) => index === 0 ? { ...pass, files: [...sorted] } : pass),
+    };
   }
   const narrow = profile === 'newcomer-guides' && GUIDE_DEFAULT_FILES.every(file => catalog.includes(file));
   const expectedFiles = narrow ? [...GUIDE_DEFAULT_FILES] : [...catalog];
@@ -115,7 +131,6 @@ export function planE2eSelection(profile, catalog) {
     plan: E2E_PLAN.map((pass, index) => narrow && index === 0 ? { ...pass, files: [...GUIDE_DEFAULT_FILES] } : pass) };
 }
 
-const SPEC_NAME = /^[a-z0-9][a-z0-9-]*\.spec\.ts$/;
 const text = value => typeof value === 'string' && !value.includes('\0');
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -181,6 +196,7 @@ function evaluatePassReports(expectedFiles, passReports, options, complete) {
     const preview = options?.profile === 'guild-preview';
     const guild = options?.profile === 'guild-presentation' || preview;
     const store = options?.profile === STORE_SPEC_PROFILE;
+    const narrowed = options?.profile === 'module-affected' || options?.profile === 'specs-affected';
     const pilot = options?.profile === 'newcomer-guides' || guild || store;
     const requiredPlan = store ? STORE_SPEC_PLAN : preview ? GUILD_PREVIEW_PLAN : guild ? GUILD_E2E_PLAN : E2E_PLAN;
     if (pilot && JSON.stringify(selected_files) !== JSON.stringify(store ? STORE_SPEC_FILES : preview ? [...GUILD_PRESENTATION_PROFILE.previewFiles].sort() : guild ? [...GUILD_PRESENTATION_PROFILE.integrationFiles].sort() : GUIDE_DEFAULT_FILES)) throw Error('invalid_expected_files');
@@ -231,7 +247,7 @@ function evaluatePassReports(expectedFiles, passReports, options, complete) {
           throw Error('invalid_test_results');
         }
         const shard = report.config.shard;
-        if (bound ? !object(shard) || Object.keys(shard).length !== 2 || shard.current !== bound.current || shard.total !== bound.total
+        if (bound && !narrowed ? !object(shard) || Object.keys(shard).length !== 2 || shard.current !== bound.current || shard.total !== bound.total
           : shard !== null) throw Error('invalid_test_results');
         if (report.errors.length || report.stats.unexpected !== 0 || report.stats.flaky !== 0) throw Error('test_not_passed');
         const observedCounts = { expected: 0, skipped: 0, unexpected: 0, flaky: 0 };
@@ -241,6 +257,9 @@ function evaluatePassReports(expectedFiles, passReports, options, complete) {
             || (suite.suites !== undefined && !Array.isArray(suite.suites))) throw Error('invalid_test_results');
           const path = prefix + file;
           if (!expected.has(path)) throw Error('unexpected_file');
+          if (narrowed && partitioned && selected_files.indexOf(path) % E2E_DEFAULT_SHARDS.length !== partIndex) {
+            throw Error('unexpected_file');
+          }
           if (pilot && index > 0 && !requiredPlan[index].files.includes(path)) throw Error('unexpected_file_in_pass');
           for (const spec of suite.specs) {
             if (!object(spec) || !text(spec.file) || !valid(spec.file) || spec.file !== file

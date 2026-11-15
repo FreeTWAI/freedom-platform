@@ -22,6 +22,13 @@ import { isModuleSourcePath } from '../../packages/contribution-tools/modules.mj
 import { artifactPath, parseJson } from '../../packages/contribution-tools/io.mjs';
 import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
 import { E2E_BASELINE, planE2eSelection, GUIDE_COMPOSITION_PROFILE, STORE_SPEC_PROFILE, STORE_SPEC_FILES } from '../../packages/contribution-tools/pinned-e2e.mjs';
+import {
+  MODULE_LANE_OVERRIDABLE_REASONS,
+  classifyLanePath,
+  collectE2eRuntimeImports,
+  decideModuleLane,
+  narrowedSpecFiles,
+} from '../../packages/contribution-tools/module-lane.mjs';
 import { GUILD_PRESENTATION_PROFILE, guildPresentationPath, guildPresentationDependenciesProven, loadGuildPresentationParsers } from '../../packages/contribution-tools/guild-presentation-profile.mjs';
 import { runtimeTextSources } from '../generate-runtime-text.mjs';
 
@@ -262,11 +269,11 @@ const EMPTY_BLOB = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391';
 const SHA = /^[0-9a-f]{40}$/;
 const EVENT = /^[a-z_]{1,40}$/;
 const PR_NUMBER = /^[1-9][0-9]{0,8}$/;
-const RUNTIME_TEXT = new Set(Object.values(runtimeTextSources));
+export const RUNTIME_TEXT = new Set(Object.values(runtimeTextSources));
 const BANNED_SEGMENTS = new Set(['test', 'tests', '__tests__', 'spec', 'specs', 'fixture', 'fixtures', '__fixtures__']);
 const CODE_OR_CONFIG = /\.(?:mjs|cjs|js|jsx|ts|tsx|mts|cts|py|sh|bash|ps1|sql|ya?ml|jsonc?|toml|ini|lock|wasm|env|rb|php|pl|exe)$/i;
 const TEST_OR_SPEC_NAME = /(?:^|[._-])(?:test|spec)(?:[._-]|$)/i;
-const FULL_SCOPE = Object.freeze([
+export const FULL_SCOPE = Object.freeze([
   '.github/', 'governance/', 'packages/contribution-tools/', 'scripts/ci/', 'scripts/runtime-full.mjs',
   'scripts/runtime-aggregate.mjs', 'docs/platform-plan/', 'contracts/', 'deploy/', 'migrations/', 'packages/db/',
   'packages/shared/', 'packages/testing/', 'tests/runtime/', 'packages/contribution-tools/suite-runner.mjs',
@@ -494,11 +501,11 @@ const affected = () => decision('affected', 'frontend_leaf_profiles', false);
 function inScope(path, entry) {
   return entry.endsWith('/') ? path.startsWith(entry) : path === entry;
 }
-function safeRepoPath(path) {
+export function safeRepoPath(path) {
   if (typeof path !== 'string') return false;
   try { artifactPath(path); return true; } catch { return false; }
 }
-function hiddenSegment(path) {
+export function hiddenSegment(path) {
   return path.split('/').some(part => part.startsWith('.'));
 }
 function bannedDocsEntry(path) {
@@ -511,6 +518,54 @@ export function isDocsAllowlisted(path) {
   if (!safeRepoPath(path) || hiddenSegment(path) || !path.endsWith('.md') || RUNTIME_TEXT.has(path) || bannedDocsEntry(path)) return false;
   if (DOCS_ALLOWLIST_PREFIXES.some(prefix => path.startsWith(prefix))) return true;
   return /^docs\/[^/]+\.md$/.test(path);
+}
+const MODULE_LANE_CONTEXT = Object.freeze({
+  fullScope: FULL_SCOPE,
+  runtimeText: RUNTIME_TEXT,
+  rootInstructions: ROOT_INSTRUCTIONS,
+  isDocsAllowlisted,
+  safeRepoPath,
+  hiddenSegment,
+  isModuleDescriptorPath,
+});
+const E2E_SPEC_PATH = /^tests\/e2e\/[a-z0-9]+(?:-[a-z0-9]+)*\.spec\.ts$/;
+
+function collectCandidateE2eRuntimeImports(root, revision, treeFiles) {
+  const ts = loadGuildPresentationParsers()?.ts;
+  if (!ts || !(treeFiles instanceof Map)) return null;
+  const cache = new Map();
+  let totalBytes = 0;
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  return collectE2eRuntimeImports({
+    listFiles: () => treeFiles.keys(),
+    readFile: path => {
+      const entry = treeFiles.get(path);
+      if (!regularBlob(entry)) throw new Error('non_regular_blob');
+      if (!cache.has(entry.oid)) {
+        const bytes = runGit(root, ['show', '--end-of-options', `${revision}:${path}`]);
+        if (bytes.length > 2_000_000) throw new Error('blob_too_large');
+        totalBytes += bytes.length;
+        if (totalBytes > 64_000_000) throw new Error('total_bytes_exceeded');
+        cache.set(entry.oid, decoder.decode(bytes));
+      }
+      return cache.get(entry.oid);
+    },
+    extractSpecifiers: source => ts.preProcessFile(source, true, true).importedFiles.map(({ fileName }) => fileName),
+  });
+}
+
+function regularNonExecutableChanges(diff) {
+  return diff?.ok === true && diff.changes.every(change =>
+    [diff.baseFiles.get(change.path), diff.candidateFiles.get(change.path)]
+      .every(entry => !entry || (entry.type === 'blob' && entry.mode === '100644')));
+}
+
+function catalogFromTree(treeFiles) {
+  if (!(treeFiles instanceof Map)) return [];
+  return [...treeFiles.entries()]
+    .filter(([path, entry]) => E2E_SPEC_PATH.test(path) && regularBlob(entry))
+    .map(([path]) => path)
+    .sort();
 }
 function rejectionReason(path) {
   if (!safeRepoPath(path)) return 'unknown_path';
@@ -706,12 +761,31 @@ export function storeSpecDependenciesProven(before, after, ts = loadGuildPresent
 
 // Browser narrowing is a separate, fixed pilot; it never narrows job selection.
 export function decideE2eProfile(input) {
-  if (input?.event === 'pull_request'
-    && decideBrowserSpecProfile(input).profile === 'browser_specs_only'
-    && input.changes.length === 1 && input.changes[0].path === STORE_SPEC_FILES[0]) {
-    return {profile: STORE_SPEC_PROFILE, reason: 'reviewed_store_spec'};
+  if (input?.event === 'pull_request' && decideBrowserSpecProfile(input).profile === 'browser_specs_only') {
+    if (input.changes.length === 1 && input.changes[0].path === STORE_SPEC_FILES[0]) {
+      return {profile: STORE_SPEC_PROFILE, reason: 'reviewed_store_spec'};
+    }
+    const files = narrowedSpecFiles({ changedSpecs: input.changes.map(change => change.path) });
+    if (!Array.isArray(input.catalog) || !files.every(file => input.catalog.includes(file))) {
+      return { profile: 'full', reason: 'missing_smoke_or_fixture_spec' };
+    }
+    return { profile: 'specs-affected', reason: 'browser_specs_only', files };
   }
   const selected = decideAffectedJobs(input);
+  if (selected.mode === 'full' && MODULE_LANE_OVERRIDABLE_REASONS.includes(selected.reason)) {
+    const lane = decideModuleLane({
+      event: input?.event,
+      existingDecision: selected,
+      changes: input?.changes,
+      baseline: input?.baseline,
+      candidate: input?.candidate,
+      catalog: input?.catalog,
+      e2eRuntimeImports: input?.e2eRuntimeImports,
+      nonExecutableBlobsProven: input?.nonExecutableBlobsProven === true,
+      context: MODULE_LANE_CONTEXT,
+    });
+    if (lane.admitted) return { profile: 'module-affected', reason: 'module_affected', files: lane.files };
+  }
   // Reuse every admission/fallback above. Only the original leaf-impact guard
   // may defer to this explicit two-module browser profile; jobs still stay full.
   if (selected.mode !== 'affected' && selected.reason !== 'leaf_profile_unproven') return { profile: 'full', reason: selected.reason };
@@ -965,11 +1039,33 @@ export function collectRepositoryDecision({ repository, event, ref = '', base = 
   if (!diff?.ok) return full('diff_unproven');
   const baseline = loadModuleDescriptors(root, base);
   const headGraph = loadModuleDescriptors(root, head);
-  return decideAffectedJobs({
+  const existingDecision = decideAffectedJobs({
     event, diffComplete: true, changes: diff.changes,
     baseline: baseline.descriptors, candidate: headGraph.descriptors,
     descriptorsProven: baseline.ok && headGraph.ok, nonExecutableBlobsProven: false,
   });
+  if (event === 'pull_request'
+    && existingDecision.mode === 'full'
+    && MODULE_LANE_OVERRIDABLE_REASONS.includes(existingDecision.reason)) {
+    const integration = loadVerifiedIntegration({
+      repository, event, ref, base, head, candidate, pullRequest, allowFetch, allowMainPush: false,
+    });
+    if (integration.ok && integration.diff?.ok && integration.baseline.ok && integration.current.ok) {
+      const lane = decideModuleLane({
+        event,
+        existingDecision,
+        changes: integration.diff.changes,
+        baseline: integration.baseline.descriptors,
+        candidate: integration.current.descriptors,
+        catalog: catalogFromTree(integration.diff.candidateFiles),
+        e2eRuntimeImports: e2eRuntimeImportsForDiff(integration.root, candidate, integration.diff),
+        nonExecutableBlobsProven: regularNonExecutableChanges(integration.diff),
+        context: MODULE_LANE_CONTEXT,
+      });
+      if (lane.admitted) return decision('affected', 'module_affected', false);
+    }
+  }
+  return existingDecision;
 }
 
 // Compare the actual checkout, including merge resolutions, rather than trusting
@@ -1038,36 +1134,58 @@ function collectDeliveryToolingProfile({repository, event, base, head, candidate
 // Host event SHAs, not a candidate profile/file list, authorize the pilot.
 // Read the exact integration tree: a head-only or stale-base comparison cannot
 // prove the browser checkout. Any missing evidence keeps the complete suite.
-export function collectRepositoryE2eDecision(input = {}) { return collectIntegrationProfile(input, decideE2eProfile); }
-export function collectRepositoryGuildDecision(input = {}) { return collectIntegrationProfile(input, decideGuildPresentationProfile); }
-function collectIntegrationProfile({ repository, event, ref = '', base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}, decide) {
-  const fallback = reason => ({ profile: 'full', reason });
-  const mainPush = [decideCiToolsProfile, decideBrowserSpecProfile].includes(decide) && event === 'push' && ref === 'refs/heads/main';
-  if (event !== 'pull_request' && !mainPush) return fallback('non_pull_request');
+function e2eRuntimeImportsForDiff(root, candidate, diff) {
+  if (!diff?.ok) return null;
+  const hasRuntimeTest = diff.changes.some(
+    change => classifyLanePath(change.path, MODULE_LANE_CONTEXT) === 'runtime-test',
+  );
+  return hasRuntimeTest ? collectCandidateE2eRuntimeImports(root, candidate, diff.candidateFiles) : new Set();
+}
+function loadVerifiedIntegration({ repository, event, ref = '', base = '', head = '', candidate = '', pullRequest = '', allowFetch = false, allowMainPush = false } = {}) {
+  const fail = reason => ({ ok: false, reason });
+  const mainPush = allowMainPush && event === 'push' && ref === 'refs/heads/main';
+  if (event !== 'pull_request' && !mainPush) return fail('non_pull_request');
   if (typeof repository !== 'string' || !isAbsolute(repository)
-    || ![base, head, candidate].every(value => SHA.test(value))) return fallback('candidate_unproven');
+    || ![base, head, candidate].every(value => SHA.test(value))) return fail('candidate_unproven');
   const root = resolve(repository);
   try {
     if (runGit(root, ['rev-parse', 'HEAD']).toString().trim() !== candidate
       || runGit(root, ['status', '--porcelain', '--untracked-files=all']).toString().trim()
-      || runGit(root, ['ls-files', '--others', '--ignored', '--exclude-standard', '--', 'tests/e2e']).toString().trim()) return fallback('candidate_unproven');
+      || runGit(root, ['ls-files', '--others', '--ignored', '--exclude-standard', '--', 'tests/e2e']).toString().trim()) return fail('candidate_unproven');
     if (!ensureCommit(root, candidate, pullRequest, allowFetch)
-      || !ensureCommit(root, base, '', allowFetch) || !ensureCommit(root, head, pullRequest, allowFetch)) return fallback('candidate_unproven');
+      || !ensureCommit(root, base, '', allowFetch) || !ensureCommit(root, head, pullRequest, allowFetch)) return fail('candidate_unproven');
     const parents = runGit(root, ['cat-file', '-p', candidate]).toString().split('\n\n')[0]
       .split('\n').filter(line => line.startsWith('parent ')).map(line => line.slice(7));
     if (parents[0] !== base || (mainPush ? head !== candidate : parents.length !== 2 || parents[1] !== head))
-      return fallback('candidate_unproven');
+      return fail('candidate_unproven');
     const diff = loadTrees(root, base, candidate);
     const baseline = loadModuleDescriptors(root, base), current = loadModuleDescriptors(root, candidate);
+    return { ok: true, root, diff, baseline, current };
+  } catch { return fail('candidate_unproven'); }
+}
+export function collectRepositoryE2eDecision(input = {}) { return collectIntegrationProfile(input, decideE2eProfile); }
+export function collectRepositoryGuildDecision(input = {}) { return collectIntegrationProfile(input, decideGuildPresentationProfile); }
+function collectIntegrationProfile({ repository, event, ref = '', base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}, decide) {
+  const fallback = reason => ({ profile: 'full', reason });
+  const integration = loadVerifiedIntegration({
+    repository, event, ref, base, head, candidate, pullRequest, allowFetch,
+    allowMainPush: [decideCiToolsProfile, decideBrowserSpecProfile].includes(decide),
+  });
+  if (!integration.ok) return fallback(integration.reason);
+  const { root, diff, baseline, current } = integration;
+  try {
+    const isE2e = decide === decideE2eProfile;
     const result = decide({ event, diffComplete: diff?.ok === true, changes: diff?.changes ?? [],
       baseline: baseline.descriptors, candidate: current.descriptors, descriptorsProven: baseline.ok && current.ok,
       nonExecutableBlobsProven: diff?.nonExecutableBlobsProven === true || decide === decideCiToolsProfile && diff?.ok === true
         && diff.changes.every(change => change.status === 'D' && RETIRED_WORKER_FILES.includes(change.path)
           ? regularBlob(diff.baseFiles.get(change.path)) && !diff.candidateFiles.has(change.path)
           : regularBlob(diff.baseFiles.get(change.path)) && regularBlob(diff.candidateFiles.get(change.path)))
-        || decide === decideMinimalProfile && diff?.ok === true
-        && diff.changes.every(change => [diff.baseFiles.get(change.path), diff.candidateFiles.get(change.path)]
-          .every(entry => !entry || entry.type === 'blob' && entry.mode === '100644')) });
+        || (decide === decideMinimalProfile || isE2e) && regularNonExecutableChanges(diff),
+      ...(isE2e ? {
+        catalog: diff?.ok === true ? catalogFromTree(diff.candidateFiles) : undefined,
+        e2eRuntimeImports: e2eRuntimeImportsForDiff(root, candidate, diff),
+      } : {}) });
     if (result.profile === STORE_SPEC_PROFILE) {
       // Fixed local imports must resolve to unchanged regular source blobs.
       // The exact one-file tree diff also preserves all transitive dependencies.
@@ -1130,7 +1248,7 @@ export function decisionFromNeeds(needs) {
   if (outputs.mode === 'full' && !selectedAll) return { ok: false, reason: 'decision_inconsistent' };
   if (outputs.mode === 'docs' && !selectedNone) return { ok: false, reason: 'decision_inconsistent' };
   if (outputs.mode === 'affected') {
-    const profile = minimalJobs(outputs.reason) ?? (outputs.reason === 'frontend_leaf_profiles' ? FRONTEND_LEAF_JOBS
+    const profile = minimalJobs(outputs.reason) ?? (['frontend_leaf_profiles', 'module_affected'].includes(outputs.reason) ? FRONTEND_LEAF_JOBS
       : outputs.reason === DELIVERY_TOOLING_REASON ? DELIVERY_TOOLING_JOBS
       : outputs.reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS
         : null);
@@ -1210,7 +1328,7 @@ function main() {
       const files = readdirSync(resolve(args.repository, 'tests/e2e'))
         .filter(name => /^[a-z0-9][a-z0-9-]*\.spec\.ts$/.test(name)).map(name => 'tests/e2e/' + name);
       const decision = collectRepositoryE2eDecision(args);
-      e2eProfile = planE2eSelection(decision.profile, [...new Set([...E2E_BASELINE, ...files])].sort()).profile;
+      e2eProfile = planE2eSelection(decision.profile, [...new Set([...E2E_BASELINE, ...files])].sort(), decision.files).profile;
     } catch { /* Unproven discovery keeps all default shards selected. */ }
   }
   appendFileSync(args.githubOutput, githubOutput(selection, e2eProfile));
