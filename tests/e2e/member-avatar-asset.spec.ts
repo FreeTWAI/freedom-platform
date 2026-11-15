@@ -153,9 +153,11 @@ if (enabled) test('no-key and revoked-key members save avatars in shared R2 whil
   const session = await page.request.get('/api/v1/session');
   expect(session.status()).toBe(200);
   const csrf = (await session.json()).csrf_token as string;
-  await navigate(page, '私人 AI 工作室');
-  await expect(page.getByRole('heading', { level: 1, name: '私人 AI 工作室' })).toBeVisible();
-  await expect(page.getByText('模型執行服務目前無法使用。尚未確認供應商登入、模型可用性或費用。', { exact: true })).toBeVisible();
+  // With private AI off, 自動化 lists no 私人工作 (UX-M-07) and the private work address opens 我的 Agent.
+  await page.goto('/#automation/work');
+  await expect(page.getByRole('region', { name: 'Agent 連線', exact: true })).toBeVisible();
+  await expect(page.getByLabel('自動化檢視', { exact: true }).locator('option', { hasText: '私人工作' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1, name: '私人 AI 工作室' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '執行一次推論', exact: true })).toHaveCount(0);
   for (const path of ['/api/v1/me/model-settings', '/api/v1/me/model-steps', '/api/v1/me/model-credentials', '/api/v1/me/credential-ingests']) {
     const unavailable = await page.request.get(path);
