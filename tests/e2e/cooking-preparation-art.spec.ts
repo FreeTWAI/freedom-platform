@@ -482,3 +482,93 @@ test('immersive kitchen: 320x568 viewport fallback keeps controls separate',asyn
   await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();
   await expect(page.locator('.fullscreen-game--viewport')).toHaveCount(0);
 });
+
+
+// Additive native evidence for all nine operations. These recipes cover every
+// operation using normal controls; no saved-run injection or test-only renderer.
+for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const id of ['rice-balls','margherita-pizza','pearl-milk-tea','egg-fried-rice'])test(`front kitchen journey: ${id} at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
+ const recipe=recipeOf(id)!,errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.setViewportSize(viewport);await page.clock.install();
+ await page.goto(`/play?game=kitchen&practice=1&recipe=${id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible();
+ await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+ await page.getByRole('button',{name:'開始料理',exact:true}).click();
+ const game=page.locator('.ck-game'),stage=page.locator('.fullscreen-game');
+ await expect.poll(()=>page.evaluate(()=>({width:innerWidth,height:innerHeight}))).toEqual(viewport);
+ const shot=async(kind:string,state:string)=>{await page.clock.runFor(40);await capturePreparationScreenshot(stage,testInfo,`front-${id}-${kind}-${state}-${viewport.width}x${viewport.height}.png`);};
+ const scenePoint=async(x:number,y:number)=>{const b=(await page.locator('.ck-scene').boundingBox())!;return {x:b.x+x*b.width,y:b.y+y*b.height};};
+ for(const [index,s] of recipe.steps.entries()){
+  await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene',s.kind);await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await page.clock.runFor(160);
+  if(viewport.width===390){
+   const spacing=await game.evaluate(el=>{const scene=el.querySelector('.ck-live-scene')!.getBoundingClientRect(),dock=el.querySelector('.ck-game-controls')!.getBoundingClientRect(),mission=el.querySelector('.ck-stage-mission')!.getBoundingClientRect();return {above:scene.top-mission.bottom,below:dock.top-scene.bottom,bottom:dock.bottom,viewport:innerHeight};});
+   expect(spacing.above).toBeGreaterThanOrEqual(10);expect(spacing.above).toBeLessThanOrEqual(14);expect(spacing.below).toBeGreaterThanOrEqual(10);expect(spacing.below).toBeLessThanOrEqual(14);expect(spacing.bottom).toBeLessThanOrEqual(spacing.viewport);
+  }
+  await shot(s.kind,'start');
+  if(s.kind==='slice')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();if(i===0)await shot(s.kind,'cut');}
+  if(s.kind==='mix'){
+   const first=await scenePoint(.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();
+   for(let i=1;i<=s.goal*32;i++){const angle=i*Math.PI/16,p=await scenePoint(.5+.3*Math.cos(angle),.52+.3*Math.sin(angle));await page.mouse.move(p.x,p.y);if(i===16)await shot(s.kind,'stir');}await page.mouse.up();
+  }
+  if(s.kind==='knead')for(let i=0;i<s.goal;i++){await game.focus();await page.keyboard.down('Space');await page.clock.runFor(s.holdMs/2);if(i===0)await shot(s.kind,'press');await page.clock.runFor(s.holdMs/2);await page.keyboard.up('Space');await page.clock.runFor(160);}
+  if(s.kind==='pan'||s.kind==='boil'||s.kind==='bake'){
+   const slider=page.getByRole('slider'),b=(await slider.boundingBox())!;await slider.click({position:{x:8+(b.width-16)*s.heat/100,y:b.height/2}});
+   if(s.kind==='pan'){await page.clock.runFor(s.durationMs*.55);await shot(s.kind,'heated');{const b=(await page.locator('.ck-scene-pan').boundingBox())!;await expect(page.getByRole('button',{name:'翻面！',exact:true})).toHaveCount(0);await page.mouse.move(b.x+b.width*.5,b.y+b.height*.65);await page.mouse.down();await page.mouse.move(b.x+b.width*.5,b.y+b.height*.42,{steps:5});await page.mouse.up();}await page.clock.runFor(s.durationMs*.65);}
+   if(s.kind==='boil'){for(let i=0;i<3;i++){await page.clock.runFor(2300);if(i===0)await shot(s.kind,'foam');const skim=page.getByRole('button',{name:/撈掉泡沫/});if(await skim.isEnabled())await skim.click();}await page.clock.runFor(3000);}
+   if(s.kind==='bake'){await page.clock.runFor(s.durationMs*.8);await shot(s.kind,'baked');await page.getByRole('button',{name:'出爐！',exact:true}).click();}
+  }
+  if(s.kind==='pour'){await game.focus();await page.keyboard.down('Space');await page.clock.runFor(s.durationMs*s.target/2);await shot(s.kind,'pouring');await page.clock.runFor(s.durationMs*s.target/2);await page.keyboard.up('Space');}
+  if(s.kind==='fold')for(const [i,direction] of s.directions.entries()){await page.clock.runFor(160);await game.focus();await page.keyboard.press(`Arrow${direction[0].toUpperCase()+direction.slice(1)}`);if(i===0)await shot(s.kind,'folded');}
+  if(s.kind==='plate')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);await page.getByRole('button',{name:'放到提示位置',exact:true}).click();if(i===0)await shot(s.kind,'placed');}
+  if(index<recipe.steps.length-1){const next=page.getByRole('button',{name:/^下一步：/});await expect(next).toBeVisible();await next.click();}
+ }
+ expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.status,COOKING_RUN_KEY)).toBe('done');await page.clock.resume();
+ await expect(page.locator('.fw-arcade-result')).toBeVisible();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible({timeout:10_000});
+ await capturePreparationScreenshot(page.locator('.fw-arcade-result'),testInfo,`front-${id}-completed-${viewport.width}x${viewport.height}.png`);expect(errors).toEqual([]);
+});
+
+// Separate evidence cases: never replace, shorten or relax the complete journeys
+// above. Record real intermediate frames through normal controls, not injected
+// run state. Frame times are requested virtual offsets, not a claimed video FPS.
+for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440,height:900}])test(`native rice scoop intermediate evidence at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
+ const recipe=recipeOf('egg-fried-rice')!,slice=recipe.steps[0],pan=recipe.steps.find(s=>s.kind==='pan')!,errors:string[]=[];
+ page.on('pageerror',error=>errors.push(error.message));await page.setViewportSize(viewport);await page.clock.install();
+ await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');await expect(page.locator('.ck-visual-3d')).toBeVisible();
+ await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'開始料理',exact:true}).click();
+ await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene','slice');
+ for(let i=0;i<slice.goal;i++){await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();}
+ await page.getByRole('button',{name:/^下一步：/}).click();await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene','pan');
+ const slider=page.getByRole('slider'),bounds=(await slider.boundingBox())!;await slider.click({position:{x:8+(bounds.width-16)*pan.heat/100,y:bounds.height/2}});await page.clock.runFor(pan.durationMs*.55);
+ const stage=page.locator('.fullscreen-game'),native=page.locator('.ck-kitchen-canvas canvas');await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(native).toBeVisible();
+ const frames:Array<{name:string;requestedVirtualMs:number;pageClockMs:number;sha256:string;nativeSha256:string}>=[];
+ const capture=async(name:string,requestedVirtualMs:number)=>{await expect(native).toBeVisible();const pageClockMs=await page.evaluate(()=>performance.now());const prefix=`scoop-${viewport.width}x${viewport.height}-${name}`;
+  const body=await capturePreparationScreenshot(stage,testInfo,`${prefix}.png`),canvas=await capturePreparationScreenshot(native,testInfo,`${prefix}-native.png`);
+  frames.push({name,requestedVirtualMs,pageClockMs,sha256:createHash('sha256').update(body).digest('hex'),nativeSha256:createHash('sha256').update(canvas).digest('hex')});
+ };
+ const panScene=page.locator('.ck-scene-pan'),b=(await panScene.boundingBox())!;
+ await expect(page.getByRole('button',{name:'翻面！',exact:true})).toHaveCount(0);
+ const flipped=()=>page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.active.flipped,COOKING_RUN_KEY);
+ // Real pointer input: tapping and dragging sideways are not a hidden flip button.
+ await page.mouse.click(b.x+b.width*.5,b.y+b.height*.65);expect(await flipped()).toBe(false);
+ await page.mouse.move(b.x+b.width*.45,b.y+b.height*.65);await page.mouse.down();await page.mouse.move(b.x+b.width*.65,b.y+b.height*.65);await page.mouse.up();expect(await flipped()).toBe(false);
+ await page.mouse.move(b.x+b.width*.1,b.y+b.height*.65);await page.mouse.down();await page.mouse.move(b.x+b.width*.5,b.y+b.height*.42);await page.mouse.up();expect(await flipped()).toBe(false);
+ await capture('before',0);
+ if(viewport.width===390){
+  // CDP feeds Chromium's native touch input path, not a dispatched DOM event or
+  // injected application state. A cancelled finger cannot complete a scoop.
+  const touch=await page.context().newCDPSession(page);
+  try{await touch.send('Emulation.setTouchEmulationEnabled',{enabled:true});
+   const points=(y:number)=>[{x:b.x+b.width*.5,y:b.y+b.height*y,id:1}];
+   await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:points(.65)});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:points(.5)});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});expect(await flipped()).toBe(false);
+   await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:points(.65)});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:points(.42)});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  }finally{await touch.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch.detach();}
+ }else{await page.mouse.move(b.x+b.width*.5,b.y+b.height*.65);await page.mouse.down();await page.mouse.move(b.x+b.width*.5,b.y+b.height*.42,{steps:5});await page.mouse.up();}
+ expect(await flipped()).toBe(true);const strokeClockMs=await page.evaluate(()=>performance.now());
+ let previous=0;for(const [name,offset] of [['push',100],['lift',225],['settled',500]] as const){await page.clock.runFor(offset-previous);await capture(name,offset);previous=offset;}
+ await testInfo.attach(`scoop-${viewport.width}x${viewport.height}-timeline.json`,{body:Buffer.from(JSON.stringify({recipe:recipe.id,seed:42,viewport,strokeClockMs,frames,note:'Native screenshots at requested virtual offsets; no synthesized frames, not a measured real-time video.'},null,2)),contentType:'application/json'});
+ expect(new Set(frames.map(f=>f.nativeSha256)).size).toBeGreaterThan(1);expect(frames[2].pageClockMs).toBeGreaterThan(frames[1].pageClockMs);expect(frames[3].pageClockMs-strokeClockMs).toBeGreaterThanOrEqual(450);
+ await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene','pan');expect(errors).toEqual([]);
+});
