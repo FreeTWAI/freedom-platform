@@ -9,7 +9,7 @@ export function registerPublicEventMediaRoutes(app: PlatformFeatureApp, context:
   app.get('/api/v1/public/events/:id',async c=>{
     const event=await publicEvent(pool,z.uuid().parse(c.req.param('id')));
     if(event.visibility==='referral')c.header('X-Robots-Tag','noindex, nofollow');
-    return c.json(event);
+    return c.json({...event,guest_registration_available:Boolean(runtime.eventEmailSender)});
   });
   app.get('/api/v1/public/events/:id/banner',async c=>{
     const bytes=await publicEventBanner(pool,z.uuid().parse(c.req.param('id')),runtime.eventBannerAssetStore);

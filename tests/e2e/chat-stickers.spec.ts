@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
 import {Pool} from 'pg';
 import {test,expect,type Page,type Browser,type Locator,type BrowserContext} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {navigate,clearMemberAgentEvents} from './navigation.js';
 import {LOCAL_DATABASE_URL} from '../../packages/db/index.js';
 import {e2eSchema} from '../../packages/testing/e2e-auth-isolation.js';
 import {DEMO_USERS,DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
@@ -36,13 +36,14 @@ test.afterEach(async()=>{
     await q.query('DELETE FROM member_notifications WHERE recipient_ref=ANY($1::uuid[])',[ids]);
     await q.query('DELETE FROM outbox WHERE transition_id IN (SELECT transition_id FROM transition_journal WHERE actor_ref=ANY($1::uuid[]))',[ids]);
     await q.query('DELETE FROM transition_journal WHERE actor_ref=ANY($1::uuid[])',[ids]);
+    await clearMemberAgentEvents(q,ids);
     await q.query('DELETE FROM users WHERE user_id=ANY($1::uuid[])',[ids]);await q.query('COMMIT');
   }catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();await db.end();}
 });
-async function member(browser:Browser,baseURL:string,index:number,width=1280,height=900){
+async function member(browser:Browser,baseURL:string,index:number,width=1280,height=900,beforeOpen?:(page:Page)=>Promise<void>){
   const context=await browser.newContext({baseURL,viewport:{width,height}});opened.push(context);
   await context.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
-  const page=await context.newPage(),account=accounts[index];await page.goto('/');
+  const page=await context.newPage(),account=accounts[index];await beforeOpen?.(page);await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill(account.email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
   await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();
   await navigate(page,'我的訊息');return page;
@@ -141,13 +142,14 @@ test('supplied pack previews before sending, preserves text and reply drafts, an
 });
 
 test('chat preview reports cold image loading and retry without sending or shifting its frame',async({browser,baseURL})=>{
-  const page=await member(browser,baseURL!,0,320),panel=await group(page);
   let release!:()=>void,allow=false,sends=0;
   const held=new Promise<void>(resolve=>{release=resolve;});
+  const page=await member(browser,baseURL!,0,320,900,async page=>{
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/messages'))sends++;});
   await page.route('**/art/chat/freetwai-v2/*-image-*.webp',async route=>{
     if(allow)return route.continue();await held;return route.abort();
   });
+  }),panel=await group(page);
   try{
     await panel.getByRole('button',{name:'選擇貼圖',exact:true}).click();await panel.getByLabel('搜尋貼圖',{exact:true}).fill('感謝');await panel.getByRole('button',{name:'預覽貼圖：謝謝',exact:true}).click();
     const feedback=panel.locator('.chat-preview-feedback'),frame=feedback.locator('.chat-preview-frame');

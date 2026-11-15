@@ -239,6 +239,8 @@ for(const light of [false,true])for(const rejected of [false,true])test(`PT-HOLI
 });
 
 for(const light of [false,true])test(`PT-HOLIDAY-SCENE: ${light?'light':'native'} input rejects secondary, duplicate, cancelled and stale contacts with honest wrong-cell penalties`,async({page})=>{
+  // Native took 23.5-35.4 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+  if(!light)test.setTimeout(75_000);
   await openHolidayScene(page,light,true);await partyAdvance(page,250);
   const cells=page.locator('.pt-hole-controls button'),targets=holidayTargets(42,0),good=cells.nth(targets.good);
   await good.click({button:'right'});await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');

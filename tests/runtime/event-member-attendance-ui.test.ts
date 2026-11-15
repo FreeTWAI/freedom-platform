@@ -104,7 +104,7 @@ const frame=(fn:()=>void)=>queueMicrotask(fn);
 document.visibilityState='visible';
 const bundled=buildSync({stdin:{contents:`export {EventsPanel} from './apps/portal-web/src/modules/EventsPanel'; export {EventAttendance} from './apps/portal-web/src/modules/EventAttendance'; export {ApiError} from './apps/portal-web/src/api';`,resolveDir:process.cwd(),sourcefile:'attendance-ui-entry.ts'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',jsx:'automatic',loader:{'.css':'empty'}});
 const production={exports:{} as any};
-runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:{language:'zh-TW',languages:['zh-TW'],clipboard:{writeText:noNetwork}},fetch:noNetwork,requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='zod')return require('zod');throw Error(name);}});
+runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:{language:'zh-TW',languages:['zh-TW'],clipboard:{writeText:noNetwork}},fetch:noNetwork,requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='react-dom')return require('react-dom');if(name==='qrcode')return require('qrcode');if(name==='zod')return require('zod');throw Error(name);}});
 const {EventsPanel,EventAttendance,ApiError}=production.exports;
 const propsOf=(node:HostNode)=>node[Object.keys(node).find(k=>k.startsWith('__reactProps$'))!];
 function host(t:TestContext,component:any,initial:any){
@@ -155,7 +155,7 @@ test('attendance styling uses real tokens and native inline controls, not new di
 
 test('actual EventsPanel registers attendance unknown in route and beforeunload guards and releases after ACK before GET',async t=>{
  document.visibilityState='visible';const {client,requests}=transport();let guard:(()=>boolean)|null=null;
- const props:any={client,session:{user:{user_id:OWNER}},locationHash:'#events/'+ID,registerLeave:(value:any)=>{guard=value;},onList(){}};
+ const props:any={client,session:{user:{user_id:OWNER}},locationHash:'#events/'+ID+'/manage/attendance',registerLeave:(value:any)=>{guard=value;},onList(){}};
  const h=host(t,EventsPanel,props);
  const settle=async(r:any,value:any,reject=false)=>{assert(r);await React.act(async()=>{r[reject?'reject':'resolve'](value);await new Promise(resolve=>setImmediate(resolve));});};
  const data={event_id:ID,organizer_ref:OWNER,title:'合成活動',description:'活動內容',starts_at:'2026-01-01T00:00:00Z',ends_at:'2026-01-01T01:00:00Z',mode:'online',location:'合成教室',capacity:null,state:'published',visibility:'open',event_kind:'other',topic:null,online_url:null,guild_key:null,review_guild_key:null,can_review:false,review_reason:null,banner_url:null,banner_orientation:null,video_url:null,video_mime:null,attending_count:1,my_rsvp:null,aggregate_version:1,registration_policy:'community_member',prize_details:[]};
@@ -174,7 +174,7 @@ test('parent ownership loss hides private data but cannot settle or discard the 
 
 for(const loss of ['late_list_owner','late_fallback_missing'])test(`actual EventsPanel ${loss} preserves unknown and both leave guards while hiding private attendance`,async t=>{
  document.visibilityState='visible';const {client,requests}=transport();let guard:(()=>boolean)|null=null;
- const h=host(t,EventsPanel,{client,session:{user:{user_id:OWNER}},locationHash:'#events/'+ID,registerLeave:(value:any)=>{guard=value;},onList(){}});
+ const h=host(t,EventsPanel,{client,session:{user:{user_id:OWNER}},locationHash:'#events/'+ID+'/manage/attendance',registerLeave:(value:any)=>{guard=value;},onList(){}});
  const settle=async(r:any,value:any,reject=false)=>{assert(r);await React.act(async()=>{r[reject?'reject':'resolve'](value);await new Promise(resolve=>setImmediate(resolve));});};
  const data={event_id:ID,organizer_ref:OWNER,title:'合成活動',description:'活動內容',starts_at:'2026-01-01T00:00:00Z',ends_at:'2026-01-01T01:00:00Z',mode:'online',location:'合成教室',capacity:null,state:'published',visibility:'open',event_kind:'other',topic:null,online_url:null,guild_key:null,review_guild_key:null,can_review:false,review_reason:null,banner_url:null,banner_orientation:null,video_url:null,video_mime:null,attending_count:1,my_rsvp:null,aggregate_version:1,registration_policy:'community_member',prize_details:[]};
  await settle(requests.find(r=>r.path==='/events/'+ID),data);

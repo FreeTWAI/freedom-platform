@@ -39,7 +39,7 @@ async function adminFixture(page:Page,unknownAck=false){
  });return {writes};
 }
 test('admin review explicitly approves and revokes, refreshes current state and preserves small-screen layout',async({page})=>{
- const fixture=await adminFixture(page);await page.setViewportSize({width:320,height:740});await page.goto('/admin?view=community-certifications');await expect(page.getByRole('heading',{name:'社群認證審核',exact:true})).toBeVisible();
+ const fixture=await adminFixture(page);await page.setViewportSize({width:320,height:740});await page.goto('/admin?view=community-certifications&manage=1');await expect(page.getByRole('heading',{name:'社群認證審核',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'審核這筆申請'}).click();await page.getByRole('textbox',{name:'私人稽核理由'}).fill('已人工檢視此合成案例。');await expect(page.getByRole('button',{name:'確認保存審核'})).toBeDisabled();await page.getByRole('checkbox',{name:'我已人工檢視此申請，確認上述決定；這不代表實名查驗。'}).check();await page.getByRole('button',{name:'確認保存審核'}).click();await expect(page.getByText('目前沒有這個狀態的申請。')).toBeVisible();
  expect(fixture.writes[0].body.decision).toBe('approve');expect(fixture.writes[0].version).toBe('"2"');await page.getByRole('combobox',{name:'審核狀態'}).selectOption('active');await page.getByRole('button',{name:'審核這筆申請'}).click();await page.getByRole('textbox',{name:'私人稽核理由'}).fill('撤銷合成測試認證。');await page.getByRole('checkbox',{name:'我已人工檢視此申請，確認上述決定；這不代表實名查驗。'}).check();await page.getByRole('button',{name:'確認保存審核'}).click();await expect(page.getByText('目前沒有這個狀態的申請。')).toBeVisible();expect(fixture.writes[1].body.decision).toBe('revoke');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -72,7 +72,7 @@ for(const status of [412,422])for(const first of ['malformed','lost','invalid_js
 });
 
 test('admin malformed JSON success ACK retains original review and leave lock until same-key ACK',async({page})=>{
- const fixture=await adminFixture(page,true);await page.goto('/admin?view=community-certifications');await page.getByRole('button',{name:'審核這筆申請'}).click();await page.getByRole('textbox',{name:'私人稽核理由'}).fill('已人工檢視此合成案例。');await page.getByRole('checkbox',{name:'我已人工檢視此申請，確認上述決定；這不代表實名查驗。'}).check();await page.getByRole('button',{name:'確認保存審核'}).click();
+ const fixture=await adminFixture(page,true);await page.goto('/admin?view=community-certifications&manage=1');await page.getByRole('button',{name:'審核這筆申請'}).click();await page.getByRole('textbox',{name:'私人稽核理由'}).fill('已人工檢視此合成案例。');await page.getByRole('checkbox',{name:'我已人工檢視此申請，確認上述決定；這不代表實名查驗。'}).check();await page.getByRole('button',{name:'確認保存審核'}).click();
  const retry=page.getByRole('button',{name:'重試同一筆審核'});await expect(retry).toBeVisible();await expect(page.getByRole('button',{name:'重新確認審核清單'})).toBeDisabled();await expect(page.getByRole('combobox',{name:'審核狀態'})).toBeDisabled();await expect(page.getByRole('button',{name:'確認保存審核'})).toBeDisabled();await retry.click();await expect(page.getByText('目前沒有這個狀態的申請。')).toBeVisible();expect(fixture.writes).toHaveLength(2);expect(fixture.writes[0]).toEqual(fixture.writes[1]);
 });
 
@@ -99,13 +99,13 @@ test('a delayed site flag reveals and focuses recognition in the existing accoun
  }finally{release();}
 });
 
-for(const width of [320,390])test(`private space keeps all three explicit profile entries reachable at ${width}px`,async({page})=>{
+for(const width of [320,390])test(`private space keeps one editor and recognition reachable at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:844});await enable(page);let writes=0;
  await page.route('**/api/v1/me/community-certification**',route=>{if(route.request().method()!=='GET')writes++;return route.fulfill({json:initial});});await login(page);
  await page.goto('/#profile');const actions=page.locator('.personal-space-hero-actions');
- for(const [name,href] of [['編輯資料與分享設定','#account'],['佈置主頁','#profile?view=settings'],['我的稱號與認證','#account?view=recognition']]){
+ for(const [name,href] of [['編輯個人頁','#me/settings']]){
   const link=actions.getByRole('link',{name,exact:true});await expect(link).toBeVisible();await expect(link).toHaveAttribute('href',href);const box=(await link.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
  }
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await actions.getByRole('link',{name:'我的稱號與認證',exact:true}).click();await expect(page.locator('[data-profile-recognition]')).toHaveAttribute('open','');expect(writes).toBe(0);
+ await actions.getByRole('link',{name:'編輯個人頁',exact:true}).click();await page.locator('[data-profile-recognition] summary').click();await expect(page.locator('[data-profile-recognition]')).toHaveAttribute('open','');expect(writes).toBe(0);
 });

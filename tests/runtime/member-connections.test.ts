@@ -94,7 +94,7 @@ test('quick entry explicitly joins a real guild, preserves private draft and gra
   assert.equal((await request('/me/onboarding/quick-start',session,body)).status,409);
   const card=await request('/members/'+session.id,session);assert.deepEqual(card.data.capabilities,[]);assert.equal(card.data.primary_guild.guild_key,'guild_ai_vibe');assert.ok(result.data.skill_books.length>0);
   assert.equal((await request('/members',session)).status,200);assert.equal((await request('/work-items',session)).status,200);
-  const guilds=(await request('/guilds/directory',session)).data.items;assert.equal(guilds.length,18);assert.ok(guilds.every((guild:any)=>Array.isArray(guild.tags)));
+  const guilds=(await request('/guilds/directory',session)).data.items;assert.equal(guilds.length,20);assert.ok(guilds.every((guild:any)=>Array.isArray(guild.tags)));
   assert.equal((await request('/admin',session)).status,404);
 });
 test('quick entry races cannot create conflicting primary guilds or double grants',async()=>{
@@ -242,7 +242,10 @@ test('AI reports reject invented guilds, duplicates, extra commands and unbounde
   assert.equal(validateAiGuildReport(await reviewer(catalog),catalog,fallback).method,'ai');assert.equal(called,true);
 });
 test('existing scheduled handler runs guild analysis even when GitHub sync fails, and releases its pool',async()=>{
-  let analyzed=false,ended=false;const handler=createWorkerHandler({createPool:()=>({end:async()=>{ended=true;}} as unknown as Pool),syncGitHub:async()=>{throw new Error('fixture');},guildDiscovery:async(_pool,options)=>{assert.equal(options?.communityId,DEMO_COMMUNITY);analyzed=true;return {updated:1};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
+  let analyzed=false,ended=false;
+  const scheduledPool={query:pool.query.bind(pool),connect:pool.connect.bind(pool),end:async()=>{ended=true;}} as unknown as Pool;
+  const handler=createWorkerHandler({createPool:()=>scheduledPool,sharesRefresh:async()=>0,syncGitHub:async()=>{throw new Error('fixture');},guildDiscovery:async(_pool,options)=>{assert.equal(options?.communityId,DEMO_COMMUNITY);analyzed=true;return {updated:1};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
   const pending:Promise<unknown>[]=[];await handler.scheduled({}, {HYPERDRIVE:{connectionString:'unused'},ASSETS:{fetch:async()=>new Response()},FREEDOM_REGISTRATION_COMMUNITY_ID:DEMO_COMMUNITY}, {waitUntil:p=>{pending.push(p);}});
   await Promise.all(pending);assert.equal(analyzed,true);assert.equal(ended,true);
+  assert.equal((await pool.query("SELECT count(*)::int n FROM github_feed_state WHERE feed_name='worker_scheduled_lease'")).rows[0].n,0);
 });

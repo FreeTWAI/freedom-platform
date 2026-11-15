@@ -1,3 +1,4 @@
+import {AgentHandoff} from './AgentHandoff';
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import type {PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
@@ -26,6 +27,7 @@ export function MemberContributionOutcomes({client,memberId,active=true,revision
   },[client,path]);
   useEffect(()=>{mounted.current=true;setData(null);setError('');if(active)void load();return()=>{mounted.current=false;sequence.current++;controller.current?.abort();};},[active,load,revision]);
   return <section className="contribution-outcomes stack" aria-label={memberId?'夥伴的成果紀錄':'我的成果紀錄'}>
+    {!memberId&&<AgentHandoff screen="credit" task="讀取我的貢獻紀錄與成果"/>}
     <div className="contribution-heading"><h3>{memberId?'合作成果':'我的成果與角色'}</h3>{data&&<span className="badge">{data.accepted_count} 件已驗收工作</span>}<button className="btn btn-ghost" type="button" disabled={loading||!active} onClick={()=>void load()}>{loading?'更新中…':'更新成果'}</button></div>
     <p className="hint">每件工作只算一次。角色確認記錄實際分工，合作前可查看成果內容與確認人。</p>
     {loading&&!data&&<p role="status">正在讀取成果紀錄…</p>}
@@ -35,7 +37,7 @@ export function MemberContributionOutcomes({client,memberId,active=true,revision
       {entry.roles.map(item=><div className="contribution-role-fact" key={item.role}><strong>{contributionRoleLabels[item.role]}</strong><p className="multiline-text">{item.summary}</p><small>{item.confirmer_name} 確認 · {formatIsoLocal(item.confirmed_at)} · <code>{item.evidence_ref}</code></small></div>)}
       <WorkContributionRoles client={client} workItemId={entry.work_item_id} onChanged={()=>void load()}/>
     </article>)}
-    {data&&!data.entries.length&&<p className="empty">尚無已驗收合作紀錄。可以先分享專長與作品，或從一件適合的工作開始。</p>}
+    {data&&!data.entries.length&&<p className="empty">尚無已驗收合作紀錄。</p>}
     {data?.next_offset!=null&&<button className="btn btn-ghost" type="button" disabled={loading} onClick={()=>void load(data.next_offset!)}>顯示更多成果</button>}
     {data&&<p className="hint">工作驗收與角色確認不代表官方認證、信用評等或履約保證。</p>}
   </section>;
@@ -92,7 +94,7 @@ export function WorkContributionRoles({client,workItemId,onChanged}:{client:Port
       <label className="field">我完成了什麼<textarea rows={3} required maxLength={1000} value={summary} disabled={busy} onChange={event=>setSummary(event.target.value)} placeholder="寫具體完成的工作與成果，例如：提出需求並完成手機版驗收。"/></label>
       <label className="field">成果引用<input required maxLength={232} value={evidence} disabled={busy} onChange={event=>setEvidence(event.target.value)} placeholder="例如 artifact:mobile-test-v1"/><span className="field-hint">使用成果代號，另行提供檔案；請勿填入私人資料或登入連結。</span></label>
       <label className="contribution-consent"><input type="checkbox" required checked={share} disabled={busy} onChange={event=>setShare(event.target.checked)}/><span>我同意把這份角色與摘要分享給本社群會員。</span></label>
-      <div className="contribution-actions"><button type="submit" className="btn btn-primary" disabled={busy||loading||!share}>{busy?'保存中…':editing?'提交修改，重新確認':'保存角色署名'}</button>{editing&&<button className="btn btn-ghost" type="button" disabled={busy} onClick={reset}>取消修改</button>}</div>
+      <div className="contribution-actions"><button type="submit" className={confirming?'btn btn-secondary':'btn btn-primary'} disabled={busy||loading||!share}>{busy?'保存中…':editing?'提交修改，重新確認':'保存角色署名'}</button>{editing&&<button className="btn btn-ghost" type="button" disabled={busy} onClick={reset}>取消修改</button>}</div>
     </form>}
   </div>}</details>;
 }

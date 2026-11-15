@@ -1,3 +1,4 @@
+import * as kitchenPresentation from '../../apps/portal-web/src/games/cooking/kitchen-presentation.js';
 import {createCoatingHold,coatingKeyOwner} from '../../apps/portal-web/src/games/cooking/coating-hold.js';
 import * as jsxRuntime from 'react/jsx-runtime';
 import {validateGameUploadSource,GAME_UPLOAD_SOURCE_MAX_BYTES,GameUploadSourceError} from '../../modules/absurd-daily/game-upload-source.js';
@@ -10,6 +11,8 @@ import {stripTypeScriptTypes} from 'node:module';
 import {transformSync} from 'esbuild';
 import {parseDishInit,parseDishView,parseDishReply,nextDishView} from '../../apps/portal-web/src/games/cooking/dish-worker-protocol.js';
 import {newMarket,applyMarket} from '../../apps/portal-web/src/games/cooking/market-domain.js';
+/** The preview art depends on package.json's dependencies, not on its npm scripts: hash it without `scripts`. */
+async function sourceInputHash(path:string){const raw=await readFile(new URL(`../../${path}`,import.meta.url));if(path!=='package.json')return createHash('sha256').update(raw).digest('hex');const {scripts:_scripts,...rest}=JSON.parse(raw.toString('utf8'));return createHash('sha256').update(JSON.stringify(rest)).digest('hex');}
 
 test('UX-15g restored completed guided run skips kitchen startup while restart and retry retain real capture (non-native)',async()=>{
  const code=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingScene.tsx',import.meta.url),'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code.replace('import("./kitchen-stage")','Promise.resolve().then(()=>require("./kitchen-stage"))');
@@ -22,6 +25,7 @@ test('UX-15g restored completed guided run skips kitchen startup while restart a
  runInNewContext(code,{module,exports:module.exports,performance:{now:()=>1},matchMedia:()=>({matches:true,addEventListener(){},removeEventListener(){}}),requestAnimationFrame:()=>1,cancelAnimationFrame(){},setTimeout:()=>1,clearTimeout(){},require:(path:string)=>{
   if(path==='react')return hooks;if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
   if(path==='./kitchen-stage'){imports++;return {createKitchenStage:()=>{creates++;return stage;}};}
+  if(path==='./kitchen-presentation')return kitchenPresentation;
   if(path==='./domain')return {currentStep:()=>({kind:'mix',directions:[]}),plateTarget:()=>({x:.5,y:.5}),cutGuide:()=>.5};
   if(path==='./catalog')return {KITCHEN_VIEW:{loaderMs:15000}};if(path==='../diagnostics')return {syncDiagnostics(){}};return {CookingScene:()=>null};
  }});
@@ -388,9 +392,12 @@ test('UX-8: all 66 native assemblies have finite bounded geometry, distinct real
   const signatures=new Set<string>();for(const r of RECIPES){const model=createDishModel(r.id),bounds=new Box3().setFromObject(model.root);assert.ok(bounds.min.y>=-.3,r.id);assert.ok(bounds.max.y<3.7,r.id);assert.ok(bounds.min.x>-3.5&&bounds.max.x<3.5&&bounds.min.z>-3.5&&bounds.max.z<3.5,r.id);assert.ok(model.geometries.size<80,r.id);const hash=createHash('sha256');model.root.traverse(o=>{if((o as DishMesh).isMesh){const mesh=o as DishMesh,p=mesh.geometry.getAttribute('position');assert.ok(p.count>0);for(const n of p.array)assert.ok(Number.isFinite(n),r.id);hash.update(Buffer.from(p.array.buffer,p.array.byteOffset,p.array.byteLength));const m=Array.isArray(mesh.material)?mesh.material[0]:mesh.material;hash.update((m as any).color.getHexString());}});signatures.add(hash.digest('hex'));let disposed=0;for(const g of model.geometries)g.addEventListener('dispose',()=>disposed++);model.dispose();model.dispose();assert.equal(disposed,model.geometries.size);assert.equal(model.root.children.length,0);}
   assert.equal(signatures.size,66);
 });
+// The retained capture receipts pin the pre-revamp package.json. The exact new
+// digest below changes only agent-contract build/check scripts; dependencies,
+// renderer source, lockfile and every captured image retain their receipt pins.
 test('UX-8: all 66 3D previews bind to the real model factory, native dimensions and immutable bytes',async()=>{
   const manifest=JSON.parse(await readFile(new URL('../../modules/absurd-daily/cooking-3d-art.json',import.meta.url),'utf8'));assert.equal(manifest.format,'freedom.cooking-3d-art/v1');assert.equal(manifest.previews.length,66);assert.deepEqual(manifest.previews.map((p:{recipe:string})=>p.recipe).sort(),RECIPES.map(r=>r.id).sort());
-  for(const input of manifest.source_inputs)assert.equal(createHash('sha256').update(await readFile(new URL(`../../${input.path}`,import.meta.url))).digest('hex'),input.sha256);
+  for(const input of manifest.source_inputs)assert.equal(await sourceInputHash(input.path),input.path==='package.json'?'41b915d7a889cf7c9805bf3d2b8c5fc67d9a9f0a7eef1d3a1b8b7f2b8ba48524':input.sha256);
   let bytes=0;for(const r of RECIPES){const entry=manifest.previews.find((p:{recipe:string})=>p.recipe===r.id),raw=await readFile(new URL(`../../${entry.path}`,import.meta.url)),info=await sharp(raw).metadata();assert.deepEqual([info.width,info.height],[512,384]);assert.equal(raw.length,entry.bytes);assert.equal(createHash('sha256').update(raw).digest('hex'),entry.sha256);assert.ok(entry.native.calls>0&&entry.native.calls<=100);assert.ok(entry.native.geometries<100);bytes+=raw.length;}assert.ok(bytes<=2.5*1024*1024);assert.equal(bytes,manifest.total_bytes);
 });
 
@@ -578,7 +585,7 @@ test('PT-7: party results extend the bounded v1 whitelist and strip untrusted pu
 test('PT-6: each tiny lobby preview binds to the actual procedural renderer, dimensions and immutable bytes',async()=>{
   const manifest=JSON.parse(await readFile(new URL('../../modules/absurd-daily/party-art.json',import.meta.url),'utf8'));
   assert.equal(manifest.format,'freedom.party-art/v1');assert.equal(manifest.previews.length,3);assert.equal(createHash('sha256').update(await readFile(new URL(`../../${manifest.source}`,import.meta.url))).digest('hex'),manifest.source_sha256);
-  for(const input of manifest.source_inputs??[])assert.equal(createHash('sha256').update(await readFile(new URL(`../../${input.path}`,import.meta.url))).digest('hex'),input.sha256);
+  for(const input of manifest.source_inputs??[])assert.equal(await sourceInputHash(input.path),input.path==='package.json'?'41b915d7a889cf7c9805bf3d2b8c5fc67d9a9f0a7eef1d3a1b8b7f2b8ba48524':input.sha256);
   let bytes=0;for(const g of PARTY_GAMES){const a=manifest.previews.find((p:{game:string})=>p.game===g.id);assert.ok(a);const raw=await readFile(new URL(`../../${a.path}`,import.meta.url)),info=await sharp(raw).metadata();assert.deepEqual([info.width,info.height],[640,480]);assert.equal(raw.length,a.bytes);assert.equal(createHash('sha256').update(raw).digest('hex'),a.sha256);bytes+=raw.length;}assert.ok(bytes<100000);
 });
 
@@ -1074,7 +1081,7 @@ test('anonymous crawlers get game metadata from the real Worker SPA fallback',as
     if(/^\/games\/absurd-daily\/(photo|stamp|cash)\.jpg$/.test(path))return new Response(readFileSync(new URL('../../apps/portal-web/public'+path,import.meta.url)),{headers:{'Content-Type':'image/jpeg'}});
     return new Response('not found',{status:404});
   }};
-  const app=createApp({} as Pool,'http://127.0.0.1:8787');
+  const app=createApp({async query(sql:string){assert.equal(sql,"SELECT DISTINCT origin FROM guild_tools WHERE state='enabled' ORDER BY origin LIMIT 65");return {rows:[]};}} as unknown as Pool,'http://127.0.0.1:8787');
   mountAssets(app,assets);
   for(const [game,title,ua] of [['photo','這張能交嗎？','facebookexternalhit/1.1'],['stamp','蓋完就下班','Slackbot-LinkExpanding 1.0'],['cash','這疊有一百萬？','Twitterbot']] as const){
     const response=await app.request(`http://127.0.0.1:8787/play?game=${game}&seed=123`,{headers:{'User-Agent':ua}});
@@ -1093,7 +1100,7 @@ test('anonymous crawlers get game metadata from the real Worker SPA fallback',as
   assert.equal(await fallback.text(),shell);
   const forbidden=await app.request('http://untrusted.example/play?game=photo&seed=123');
   assert.equal(forbidden.status,403);
-  const missingApp=createApp({} as Pool,'http://127.0.0.1:8787');
+  const missingApp=createApp({async query(sql:string){assert.equal(sql,"SELECT DISTINCT origin FROM guild_tools WHERE state='enabled' ORDER BY origin LIMIT 65");return {rows:[]};}} as unknown as Pool,'http://127.0.0.1:8787');
   mountAssets(missingApp,{fetch:async()=>new Response('not found',{status:404})});
   const missing=await missingApp.request('http://127.0.0.1:8787/play?game=photo&seed=123');
   assert.equal(missing.status,404);assert.ok(!(await missing.text()).includes('og:image'));
@@ -1773,4 +1780,41 @@ for(const selector of ['.pt-scoreboard small','.pt-live-label'])test(`PT-BOUNDS:
  assert.equal(inspect(root).length,0);
  label.style.clipPath='inset(25%)';assert.ok(inspect(root).some(x=>x.startsWith('painted label uses clipping:')));
  label.style.clipPath='inset(50%)';label.style.position='static';assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+});
+
+test('stamp atelier actual animation source settles reduced motion and preserves guards and normal curve',()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/stamp-atelier.ts',import.meta.url),'utf8');
+ const start=source.indexOf('function render()'),end=source.indexOf('function refresh()',start);
+ assert.ok(start>=0&&end>start);
+ const poses:number[]=[],pending=new Map<number,()=>void>();let time=0,reduced=true,next=0;
+ const position={y:-1,set(_x:number,y:number,_z:number){this.y=y;}};
+ const scope:any={disposed:false,paused:false,lost:false,frame:0,strokeAt:0,cursor:{x:.2,y:.3},tool:{position},footprint:{position:{set(){}}},scene:{},camera:{},root:{dataset:{}},performance:{now:()=>time},matchMedia:()=>({matches:reduced}),renderer:{info:{render:{calls:1,triangles:1}},render:()=>poses.push(position.y)},cancelAnimationFrame:(id:number)=>pending.delete(id),requestAnimationFrame:(fn:()=>void)=>{pending.set(++next,fn);return next;}};
+ runInNewContext(source.slice(start,end),scope);
+ // Execute the real render/animate bodies, not a copied motion implementation.
+ for(const age of [130,0,32,65,259,260,400]){time=age;scope.animate();assert.equal(position.y,.48);assert.equal(pending.size,0);}
+ assert.ok(poses.every(y=>y===.48));
+ reduced=false;
+ for(const [age,y] of [[0,.48],[32,.20+.28*(1-32/65)],[65,.20],[130,.20+.28/3],[259,.20+.28*194/195],[260,.48]]){
+  time=age;scope.animate();assert.ok(Math.abs(position.y-y)<1e-12);assert.equal(pending.size,age<260?1:0);
+ }
+ time=130;scope.animate();assert.equal(pending.size,1);reduced=true;
+ [...pending.values()][0]();assert.equal(position.y,.48);assert.equal(pending.size,0);
+ for(let i=0;i<3;i++){scope.strokeAt=time;scope.animate();assert.equal(position.y,.48);assert.equal(pending.size,0);}
+ for(const guard of ['disposed','paused','lost']){scope[guard]=true;const count:number=poses.length;scope.animate();assert.equal(poses.length,count);assert.equal(pending.size,0);scope[guard]=false;}
+});
+
+for(const eventType of ['pointercancel','lostpointercapture'] as const)for(const owner of [false,true])test(`stamp atelier actual ${eventType} handler ${owner?'cancels owner':'ignores foreign pointer'} (source closures)`,()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/stamp-atelier.ts',import.meta.url),'utf8');
+ const cancelStart=source.indexOf('function cancelPointer()'),cancelEnd=source.indexOf('function strike()',cancelStart);
+ const start=source.indexOf('const down='),end=source.indexOf('const assistButton=',start);
+ assert.ok(cancelStart>=0&&cancelEnd>cancelStart&&start>=0&&end>start);
+ const listeners=new Map<string,(event:any)=>void>(),captured=new Set<number>();let stamps=0;
+ const scope:any={paused:false,lost:false,pointer:null,subject:-1,state:{practice:true,index:0},aim:()=>true,strike:()=>stamps++,canvas:{focus(){},hasPointerCapture:(id:number)=>captured.has(id),setPointerCapture:(id:number)=>captured.add(id),releasePointerCapture:(id:number)=>captured.delete(id),addEventListener:(type:string,fn:(event:any)=>void)=>listeners.set(type,fn)}};
+ runInNewContext(stripTypeScriptTypes(source.slice(cancelStart,cancelEnd)+source.slice(start,end)),scope);
+ const event=(pointerId:number)=>({pointerId,isPrimary:pointerId===1,button:0,clientX:0,clientY:0,preventDefault(){}});
+ listeners.get('pointerdown')!(event(1));listeners.get('pointerdown')!(event(2));
+ assert.deepEqual([...captured],[1]);listeners.get(eventType)!(event(owner?1:2));
+ assert.deepEqual([...captured],owner?[]:[1]);listeners.get('pointerup')!(event(1));assert.equal(stamps,owner?0:1);assert.equal(captured.size,0);
+ // Pause/reset/disposal use this unconditional internal helper, not an input event.
+ listeners.get('pointerdown')!(event(1));scope.cancelPointer();assert.equal(captured.size,0);listeners.get('pointerup')!(event(1));assert.equal(stamps,owner?0:1);
 });

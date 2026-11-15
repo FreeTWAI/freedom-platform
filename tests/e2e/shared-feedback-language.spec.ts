@@ -1,6 +1,6 @@
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
-import {openChat,closeChat,navigate,openFeatureSearch} from './navigation.js';
+import {openChat,closeChat,navigate,openExploreFeatureSearch} from './navigation.js';
 
 // Expected copy is independent of the implementation's interface catalog.
 const languages=[
@@ -13,12 +13,19 @@ const languages=[
 type Language=typeof languages[number];
 const contentSearchLabels=['用此關鍵字搜尋社群內容','Search community content with this keyword','このキーワードでコミュニティ内を検索','이 검색어로 커뮤니티 콘텐츠 검색','Buscar contenido de la comunidad con esta palabra clave'];
 
+async function routeCommunitySearchFlag(page:Page,enabled:()=>boolean){
+  await page.route('**/api/v1/site',async route=>{
+    const response=await route.fetch();
+    await route.fulfill({response,json:{...await response.json(),community_search_enabled:enabled()}});
+  });
+}
+
 async function login(page:Page,language:Language=languages[0]){
   await page.goto('/');const form=page.locator('.login-card form');
   await form.locator('[name=email]').fill('maker@local.test');
   await form.locator('[name=password]').fill('freedom-local-demo');
   await form.getByRole('button',{name:language.login,exact:true}).click();
-  await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await expect(page.locator('.social-write-trigger')).toBeVisible();
 }
 
@@ -56,13 +63,13 @@ for(const [index,language] of languages.entries()){
       await expect(form.getByRole('button',{name:language.pending,exact:true})).toBeDisabled();
       await expect.poll(()=>attempts).toBe(1);
       const next=languages[(index+1)%languages.length];
-      await page.getByRole('combobox',{name:'Language',exact:true}).selectOption(next.id);
+      await page.getByRole('combobox',{name:'語言',exact:true}).selectOption(next.id);
       await expect(feedback).toHaveText(next.working);
       await expect(form.getByRole('button',{name:next.pending,exact:true})).toBeDisabled();
       await expect(form.locator('[name=email]')).toHaveValue('maker@local.test');
       await expect(form.locator('[name=password]')).toHaveValue('freedom-local-demo');
       await contained(page,feedback);expect(attempts).toBe(1);
-      release();await expect(page.getByRole('heading',{name:next.home,level:1,exact:true})).toBeVisible();
+      release();await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
       await expect(feedback).toHaveCount(0);expect(attempts).toBe(1);
     }finally{release();await context.close();}
   });
@@ -77,7 +84,7 @@ for(const [index,language] of languages.entries()){
       await expect(feedback).toHaveText(language.reading);await expect.poll(()=>reads).toBe(1);
       const input=page.locator('.login-card form [name=email]');await input.fill('kept-feedback@example.test');
       const next=languages[(index+1)%languages.length];
-      await page.getByRole('combobox',{name:'Language',exact:true}).selectOption(next.id);
+      await page.getByRole('combobox',{name:'語言',exact:true}).selectOption(next.id);
       await expect(feedback).toHaveText(next.reading);await expect(input).toHaveValue('kept-feedback@example.test');
       for(const width of [320,390,1280]){await page.setViewportSize({width,height:844});await contained(page,feedback);}
       expect(reads).toBe(1);release();await expect(feedback).toHaveCount(0);expect(reads).toBe(1);
@@ -119,7 +126,7 @@ test('a held deferred page translates in place and navigation can still leave it
     expect(await page.locator('.page-loading .request-feedback-progress').evaluate(element=>getComputedStyle(element).animationName)).toBe('none');
     await page.screenshot({path:info.outputPath('loading-es-320.png'),fullPage:true});
     await page.setViewportSize({width:1280,height:844});
-    await closeChat(page);await page.locator('#workspace-navigation').getByRole('button',{name:'Inicio',exact:true}).click();
+    await closeChat(page);await page.locator('#workspace-navigation').getByRole('button',{name:'動態',exact:true}).click();
     await expect(page.locator('.social-write-trigger')).toBeVisible();
   }finally{release();}
   expect(assets).toBe(1);
@@ -156,10 +163,12 @@ for (const [index, language] of languages.entries()) {
   test(`${language.id}: feature search recovers from no results and keeps keyboard focus`, async ({browser}) => {
     const context=await browser.newContext({locale:language.locale,viewport:{width:1280,height:844}});
     try {
-      const page=await context.newPage();await login(page,language);
-      const mobile=page.locator('.mobile-menu-toggle');
-      if(await mobile.isVisible())await mobile.click();
-      const menu=page.locator('.nav-more'),trigger=menu.locator(':scope > summary');
+      const page=await context.newPage();
+      let communitySearchEnabled=false;
+      await routeCommunitySearchFlag(page,()=>communitySearchEnabled);
+      await login(page,language);
+      await page.locator('#workspace-navigation').getByRole('button',{name:'探索',exact:true}).click();
+      const menu=page.locator('.place-feature-search'),trigger=menu.locator(':scope > summary');
       await trigger.click();
       const search=menu.locator('input[type=search]');await expect(search).toBeFocused();
       const contentSearch=menu.getByRole('button',{name:contentSearchLabels[index],exact:true});
@@ -171,7 +180,7 @@ for (const [index, language] of languages.entries()) {
       await expect(status).toContainText(results[index]);
       await expect(status).toContainText('0');
       await expect(status).not.toContainText('沒有符合的功能');
-      await expect(contentSearch).toBeVisible();
+      await expect(contentSearch).toHaveCount(0);
       await search.dispatchEvent('keydown',{key:'Escape',isComposing:true,keyCode:229});
       await expect(search).toHaveValue('zz-no-feature-93275');
       await expect(trigger).toHaveAttribute('aria-expanded','true');
@@ -182,14 +191,13 @@ for (const [index, language] of languages.entries()) {
       await expect(trigger).toBeFocused();
       await trigger.press('Enter');await expect(search).toBeFocused();await expect(search).toHaveValue('');
       await search.fill('zz-no-feature-93275');
-      const panel=(await menu.locator('.nav-more-content').boundingBox())!;expect(panel).not.toBeNull();
-      await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toHaveCount(1);
-      // The home heading is screen-reader-only. Use the visible composer's
-      // non-interactive left padding, outside the panel, without opening a form.
-      const outside=page.locator('.home-timeline .social-composer-start');
+      const panel=(await menu.locator('.place-feature-search-content').boundingBox())!;expect(panel).not.toBeNull();
+      await expect(page.getByRole('heading',{name:'探索',level:1,exact:true})).toHaveCount(1);
+      // Click the visible Explore view label above the lookup without selecting a destination.
+      const outside=page.getByLabel('探索檢視',{exact:true}).locator('..');
       await expect(outside).toBeVisible();
       const box=(await outside.boundingBox())!;
-      expect(box.x+4).toBeLessThan(panel.x);
+      expect(box.y+4).toBeLessThan(panel.y);
       await outside.click({position:{x:4,y:4}});
       await expect(page.locator('.social-publish-dialog[open]')).toHaveCount(0);
       await expect(trigger).toHaveAttribute('aria-expanded','false');
@@ -198,7 +206,7 @@ for (const [index, language] of languages.entries()) {
       await search.fill('   ');await expect(contentSearch).toHaveCount(0);
       await search.fill(language.home);
       await expect(menu.getByRole('region',{name:results[index]}).getByRole('button',{name:language.home,exact:true})).toBeVisible();
-      await expect(contentSearch).toBeVisible();
+      await expect(contentSearch).toHaveCount(0);
       const original='  資安 GitHub & C++ #?= / 🛠  ';
       let contentReads=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/community-search')contentReads++;});
       await search.fill(original);
@@ -213,19 +221,26 @@ for (const [index, language] of languages.entries()) {
       await expect(search).toHaveValue(original);await expect(search).toBeFocused();
       await expect(trigger).toHaveAttribute('aria-expanded','true');
       expect(page.url()).toBe(before);expect(contentReads).toBe(0);
+      // Content search owns its own input when community search is enabled.
+      communitySearchEnabled=true;await page.reload();
+      await expect(page.locator('.place-feature-search')).toHaveCount(0);
+      const contentInput=page.getByRole('searchbox',{name:'關鍵字',exact:true});
+      await contentInput.fill(language.home);
+      await expect(page.getByRole('region',{name:'功能搜尋結果',exact:true}).getByRole('button',{name:language.home,exact:true})).toBeVisible();
       const request=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/v1/community-search'&&new URL(request.url()).searchParams.get('q')===original);
-      // The explicit secondary action, not Enter in feature search, starts content search.
-      await contentSearch.focus();await contentSearch.press('Enter');await request;
+      await contentInput.fill(original);await contentInput.press('Enter');await request;
       await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue(original);
       await expect.poll(()=>new URLSearchParams(new URL(page.url()).hash.split('?')[1]).get('q')).toBe(original);
-      await expect(trigger).toHaveAttribute('aria-expanded','false');
     } finally {await context.close();}
   });
 }
 
 test('Safari Escape with keyCode 229 alone keeps the feature query and menu open',async({page})=>{
-  await page.setViewportSize({width:1280,height:844});await login(page);
-  const menu=page.locator('.nav-more'),trigger=menu.locator(':scope > summary');
+  await page.setViewportSize({width:1280,height:844});
+  await routeCommunitySearchFlag(page,()=>false);
+  await login(page);
+  await page.locator('#workspace-navigation').getByRole('button',{name:'探索',exact:true}).click();
+  const menu=page.locator('.place-feature-search'),trigger=menu.locator(':scope > summary');
   await trigger.click();
   const search=menu.getByRole('searchbox',{name:'搜尋功能'});await expect(search).toBeFocused();
   await search.fill('zz-no-feature-93275');
@@ -239,30 +254,32 @@ test('Safari Escape with keyCode 229 alone keeps the feature query and menu open
   await expect(trigger).toHaveAttribute('aria-expanded','true');await expect(search).toBeFocused();
 });
 
-for(const [index,width] of [320,390,1280].entries())test(`${width}px content search handoff closes navigation and retains query history`,async({page})=>{
+for(const [index,width] of [320,390,1280].entries())test(`${width}px content search owns its search box and retains query history`,async({page})=>{
   await page.setViewportSize({width,height:844});await login(page);
   await page.locator('.settings-menu-button').click();await openSettingsPanel(page,'appearance');
   await page.getByRole('menuitemradio',{name:['自由工坊－明亮','自由工坊－夜航','自由工坊－敘生'][index],exact:true}).click();
   await closeSettingsMenu(page);
-  const menu=page.locator('.nav-more'),trigger=menu.locator(':scope > summary');
-  const search=menu.getByRole('searchbox',{name:'搜尋功能',exact:true});
-  const handoff=menu.getByRole('button',{name:contentSearchLabels[0],exact:true});
+  const search=page.getByRole('searchbox',{name:'關鍵字',exact:true});
+  const handoff=page.getByRole('button',{name:contentSearchLabels[0],exact:true});
   const original='  資安 GitHub & C++ #?= / 🛠  ';
   for(const query of [original,'作品']){
-    await openFeatureSearch(page);await expect(search).toHaveValue('');await search.fill(query);
-    await expect(handoff).toBeVisible();await contained(page,handoff);
-    const box=(await handoff.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);
-    await handoff.click();
-    await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue(query);
+    await openExploreFeatureSearch(page);
+    await expect(page.locator('.place-feature-search')).toHaveCount(0);
+    await expect(handoff).toHaveCount(0);
+    await expect(search).toHaveValue('');await search.fill(query);
+    await page.getByRole('region',{name:'社群內容搜尋條件',exact:true}).getByRole('button',{name:'搜尋',exact:true}).click();
+    await expect(search).toHaveValue(query);
     await expect(page.getByRole('region',{name:'社群內容搜尋結果',exact:true})).toHaveAttribute('aria-busy','false');
-    await expect(trigger).toHaveAttribute('aria-expanded','false');
     if(width<861){
       await expect(page.locator('.mobile-menu-toggle')).toHaveAttribute('aria-expanded','false');
       await expect(page.locator('#workspace-navigation')).toBeHidden();
     }
+    if(query===original)await navigate(page,'會員首頁');
   }
-  // A second handoff while already on the content page updates its existing controller.
+  // Typing replaces the current search URL; explicit navigation preserves each return path.
+  await page.goBack();await expect(page).toHaveURL(/#home$/);
   await page.goBack();await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue(original);
+  await page.goForward();await expect(page).toHaveURL(/#home$/);
   await page.goForward();await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue('作品');
 });
 
@@ -274,8 +291,8 @@ for(const capability of ['disabled','missing'] as const)test(`feature search has
     await route.fulfill({response,json:site});
   });
   let contentReads=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/community-search')contentReads++;});
-  await login(page);await openFeatureSearch(page);
-  const menu=page.locator('.nav-more'),search=menu.getByRole('searchbox',{name:'搜尋功能',exact:true});
+  await login(page);await openExploreFeatureSearch(page);
+  const menu=page.locator('.place-feature-search'),search=menu.getByRole('searchbox',{name:'搜尋功能',exact:true});
   await search.fill('zz-no-feature-93275');
   await expect(menu.getByRole('status')).toContainText('0');
   await expect(menu.getByRole('button',{name:contentSearchLabels[0],exact:true})).toHaveCount(0);
@@ -293,34 +310,38 @@ test('content search handoff respects unsaved page departure protection',async({
   let discard=false,prompts=0,writes=0;
   page.on('dialog',async dialog=>{prompts++;await(discard?dialog.accept():dialog.dismiss());});
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/events')writes++;});
-  const menu=page.locator('.nav-more');
   for(const accepted of [false,true]){
-    discard=accepted;await openFeatureSearch(page);
-    await menu.getByRole('searchbox',{name:'搜尋功能',exact:true}).fill('資安');
-    await menu.getByRole('button',{name:contentSearchLabels[0],exact:true}).click();
+    discard=accepted;await navigate(page,'搜尋社群內容');
     if(!accepted){
-      await expect(page).toHaveURL(/#events$/);
+      await expect(page).toHaveURL(/#explore\/events$/);
       await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('必須保留的搜尋測試草稿');
       expect(prompts).toBe(1);
     }
   }
+  await expect(page.locator('.place-feature-search')).toHaveCount(0);
+  await page.getByRole('searchbox',{name:'關鍵字',exact:true}).fill('資安');await page.getByRole('region',{name:'社群內容搜尋條件'}).getByRole('button',{name:'搜尋',exact:true}).click();
   await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue('資安');
   expect(prompts).toBe(2);expect(writes).toBe(0);
 });
 
 test('390px feature search consumes two Escapes before the phone menu closes',async({page})=>{
-  await page.setViewportSize({width:390,height:844});await login(page);
-  const toggle=page.locator('.mobile-menu-toggle');await toggle.click();
-  const nav=page.locator('#workspace-navigation');await expect(nav).toBeVisible();
-  const menu=nav.locator('.nav-more'),trigger=menu.locator(':scope > summary');
-  await trigger.click();
+  await page.setViewportSize({width:390,height:844});
+  await routeCommunitySearchFlag(page,()=>false);
+  await login(page);
+  await openExploreFeatureSearch(page);
+  const toggle=page.locator('.mobile-menu-toggle'),nav=page.locator('#workspace-navigation');
+  await expect(nav).toBeHidden();
+  const menu=page.locator('.place-feature-search'),trigger=menu.locator(':scope > summary');
   const search=menu.getByRole('searchbox',{name:'搜尋功能'});await expect(search).toBeFocused();
   await search.fill('zz-no-feature-93275');
   await search.press('Escape');await expect(search).toHaveValue('');await expect(search).toBeFocused();
-  await expect(trigger).toHaveAttribute('aria-expanded','true');await expect(toggle).toHaveAttribute('aria-expanded','true');
+  await expect(trigger).toHaveAttribute('aria-expanded','true');await expect(toggle).toHaveAttribute('aria-expanded','false');
   await search.press('Escape');await expect(trigger).toHaveAttribute('aria-expanded','false');await expect(trigger).toBeFocused();
-  await expect(toggle).toHaveAttribute('aria-expanded','true');await expect(nav).toBeVisible();
-  await trigger.press('Escape');await expect(toggle).toHaveAttribute('aria-expanded','false');
+  await expect(toggle).toHaveAttribute('aria-expanded','false');await expect(nav).toBeHidden();
+  // The lookup now lives outside the phone menu. Its two Escapes leave that menu closed;
+  // opening the five-place menu still gives it its own single Escape dismissal.
+  await toggle.click();await expect(nav).toBeVisible();
+  await page.keyboard.press('Escape');await expect(toggle).toHaveAttribute('aria-expanded','false');
   await expect(nav).toBeHidden();await expect(toggle).toBeFocused();
 });
 
@@ -335,7 +356,7 @@ test('failed lazy import recovers by loading a new document after the network re
   const documentLoaded=page.waitForEvent('load');
   await alert.getByRole('button',{name:languages[0].reload,exact:true}).click();
   await documentLoaded;
-  await expect(page.getByRole('heading',{name:languages[0].home,level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await openChat(page);
   await expect(page.getByRole('tab',{name:/^私人訊息/})).toBeVisible();
   await expect(page.getByRole('alert').filter({hasText:languages[0].failed})).toHaveCount(0);

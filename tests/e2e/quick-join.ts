@@ -12,6 +12,10 @@ export async function answerGuildQuestions(root: Page | Locator) {
 export async function quickJoin(page: Page, guild = 'guild_ai_vibe') {
   const quick = page.getByRole('region', {name: '快速加入公會'});
   await expect(quick).toBeVisible();
+  if (await quick.locator(`input[value="${guild}"]`).count() === 0) {
+    const showAll = quick.getByRole('button', {name: '查看全部公會', exact: true});
+    if (await showAll.isVisible()) await showAll.click();
+  }
   await quick.locator(`input[value="${guild}"]`).check();
   await quick.getByRole('button', {name: /下一步：回答 \d+ 個小問題/}).click();
   await answerGuildQuestions(quick);

@@ -3,7 +3,7 @@ import {openSettingsPanel} from './settings-menu-helpers.js';
 
 async function login(page:Page){
  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
- await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+ await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
  await expect(page.locator('.home-timeline .social-zone')).toHaveAttribute('aria-busy','false');
 }
 async function selectSeason(page:Page,label:string){

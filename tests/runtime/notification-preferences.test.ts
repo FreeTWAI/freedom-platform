@@ -36,6 +36,28 @@ async function notices(index:number,kind:string,count:number,created:string){
   return ids;
 }
 
+test('notification summaries print canonical people, team and event routes',async()=>{
+  const owner=await member(0);
+  const original=body(await preferences(owner));
+  const created=await owner.request('events',{title:'合成通知活動',description:'活動通知路徑測試',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'測試參與位置',visibility:'open',capacity:null},undefined,randomUUID(),'POST');
+  assert.equal(created.status,201,await created.clone().text());const {event_id:eventId}=await created.json() as {event_id:string};
+  const friend=(await notices(0,'friend_request',1,'2026-10-07T01:00:00Z'))[0];
+  const squad=(await notices(0,'squad_invitation',1,'2026-10-07T01:00:00Z'))[0];
+  const event=(await notices(0,'event_approved',1,'2026-10-07T01:00:00Z'))[0];
+  try{
+    await pool.query("UPDATE member_notifications SET action_tab='events',action_resource_id=$1 WHERE notification_id=$2",[eventId,event]);
+    const value=body(await preferences(owner));value.categories.friends='summary';value.categories.squads='summary';value.categories.events='summary';value.quiet_hours.enabled=false;await save(owner,value);
+    const summary=await (await owner.request(endpoint+'/summary')).json() as {items:{id:string;path:string|null}[]};
+    assert.equal(summary.items.find(item=>item.id===friend)?.path,'#explore/people');
+    assert.equal(summary.items.find(item=>item.id===squad)?.path,'#me/teams');
+    assert.equal(summary.items.find(item=>item.id===event)?.path,`#explore/events/${eventId}`);
+  }finally{
+    await pool.query('DELETE FROM member_notifications WHERE notification_id=ANY($1::uuid[])',[[friend,squad,event]]);
+    await pool.query('DELETE FROM community_event_bulletins WHERE event_id=$1',[eventId]);
+    await pool.query('DELETE FROM community_events WHERE event_id=$1',[eventId]);await save(owner,original);
+  }
+});
+
 test('owner preferences survive re-login, serialize first writes and reject foreign fields or Email opt-in',async()=>{
   const owner=await member(0),other=await member(1),initial=await preferences(owner);
   const value=body(initial);value.categories.friends='off';value.muted_channel_ids=['world:world'];
@@ -125,6 +147,11 @@ test('event bulletins obey event modes and quiet hours while pending subjects st
   const owner=await member(0),other=await member(2);
   const created=await owner.request('events',{title:'公告偏好與待審核255',description:'尚未公开細節',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'測試參與位置',visibility:'open',capacity:null},undefined,randomUUID(),'POST');
   assert.equal(created.status,201,await created.clone().text());
+  const event=await created.json() as {event_id:string;state:string};assert.equal(event.state,'published');
+  const foreign=body(await preferences(other));foreign.categories.events='instant';foreign.quiet_hours.enabled=false;await save(other,foreign);
+  assert.equal(JSON.stringify(await (await other.request(endpoint+'/event-reminders')).json()).includes('公告偏好與待審核255'),true);
+  // Retain the old pending-source privacy check with an explicit historical fixture.
+  await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[event.event_id]);
   const value=body(await preferences(owner));value.categories.events='instant';value.quiet_hours.enabled=false;await save(owner,value);
   assert.equal(JSON.stringify(await (await owner.request(endpoint+'/event-reminders')).json()).includes('公告偏好與待審核255'),true);
   assert.deepEqual((await (await other.request(endpoint+'/event-reminders')).json() as {items:unknown[]}).items,[]);
@@ -133,8 +160,9 @@ test('event bulletins obey event modes and quiet hours while pending subjects st
   assert.equal(JSON.stringify(await (await owner.request('events/bulletins')).json()).includes('公告偏好與待審核255'),true);
   value.categories.events='summary';await save(owner,value);
   assert.deepEqual((await (await owner.request(endpoint+'/event-reminders')).json() as {items:unknown[]}).items,[]);
-  assert.equal(JSON.stringify(await (await owner.request(endpoint+'/summary')).json()).includes('公告偏好與待審核255'),true);
-  const foreign=body(await preferences(other));foreign.categories.events='summary';await save(other,foreign);
+  const eventSummary=await (await owner.request(endpoint+'/summary')).json() as {items:{title:string;path:string|null}[]};
+  assert.equal(eventSummary.items.some(item=>item.title.includes('公告偏好與待審核255')&&item.path===`#explore/events/${event.event_id}`),true);
+  foreign.categories.events='summary';await save(other,foreign);
   assert.equal(JSON.stringify(await (await other.request(endpoint+'/summary')).json()).includes('公告偏好與待審核255'),false);
   value.categories.events='instant';value.quiet_hours={enabled:true,time_zone:'Asia/Taipei',start:'11:00',end:'13:00'};await save(owner,value);
   assert.deepEqual((await (await owner.request(endpoint+'/event-reminders')).json() as {items:unknown[]}).items,[]);

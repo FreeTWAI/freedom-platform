@@ -8,7 +8,7 @@ function fixture(enabled?:boolean){let queries=0;const fail=async()=>{queries++;
 for(const enabled of [undefined,false,true])test(`certification registration and site flag are explicitly ${String(enabled)}`,async()=>{
  const {app,queries}=fixture(enabled),paths=app.routes.map(route=>`${route.method} ${route.path}`);
  for(const path of ['GET /api/v1/me/community-certification','POST /api/v1/me/community-certification/apply','POST /api/v1/me/community-certification/display','POST /api/v1/me/community-certification/withdraw','GET /admin/api/community-certifications','POST /admin/api/community-certifications/:id/review'])assert.equal(paths.includes(path),enabled===true,path);
- const response=await app.request(origin+'/api/v1/site');assert.equal(response.status,200);assert.equal((await response.json() as any).community_certification_enabled,enabled===true);assert.equal(queries(),0);
+ const response=await app.request(origin+'/api/v1/site');assert.equal(response.status,200);assert.equal((await response.json() as any).community_certification_enabled,enabled===true);assert.equal(queries(),1, 'public book cache lookup only');
 });
 for(const action of ['', '/apply','/display','/withdraw'])test(`member certification ${action||'read'} cannot enter through missing cookie`,async()=>{
  const {app,queries}=fixture(true),response=await app.request(origin+'/api/v1/me/community-certification'+action,{method:action?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json'},body:action?'{}':undefined});assert.equal(response.status,401);assert.equal(queries(),0);

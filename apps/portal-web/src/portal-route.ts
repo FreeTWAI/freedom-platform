@@ -1,0 +1,112 @@
+import type {TabId} from './types';
+
+export type PortalPlace = 'home' | 'explore' | 'guilds' | 'automation' | 'me';
+export const PORTAL_PLACES = [
+  {id:'home', title:'動態', tab:'home'}, {id:'explore', title:'探索', tab:'community-search'},
+  {id:'guilds', title:'公會', tab:'guilds'}, {id:'automation', title:'自動化', tab:'private-ai'},
+  {id:'me', title:'我的', tab:'profile'},
+] as const;
+
+/** One compatibility table. IDs/suffixes and raw query bytes are never decoded or discarded. */
+export const LEGACY_ROUTES: Readonly<Record<TabId, string>> = {
+  home:'home', social:'home', profile:'me', account:'me/settings', 'my-content':'me/content', todos:'me/start',
+  members:'explore/people', skills:'explore/resources', showcase:'explore/works', events:'explore/events',
+  services:'explore/services', highlights:'explore/events/results', 'community-search':'explore',
+  opensource:'home/share/resource', guilds:'guilds', community:'guilds/community', 'community-hub':'guilds/community/hub',
+  'private-ai':'automation/work', messages:'me/messages', friends:'me/messages/contacts', squads:'me/teams',
+  business:'me/workspaces', reservations:'me/orders', promotion:'me/credit',
+  stores:'guilds/guild_commerce_sales/tools/store', retail:'guilds/guild_commerce_sales/tools/retail-kit',
+  'virtual-commerce':'guilds/guild_commerce_sales/tools/rehearsal',
+  supplier:'guilds/guild_product_quality_supply/tools/supplier-kit',
+  marketing:'guilds/guild_marketing/tools/marketing', cocreation:'guilds/guild_ai_vibe/tools/cocreation',
+  workbench:'guilds/guild_ai_project/tools/work', tasks:'guilds/guild_ai_project/tools/work/discovery',
+  engagement:'guilds/guild_opportunity_partnership/tools/engagement',
+  positioning:'guilds/guild_talent_direction/tools/assessment', 'newbie-village':'guilds/guild_talent_direction/tools/village',
+  'tester-map':'guilds/guild_custom_032fd02e754549e9b1e056e2b95b8d50/tools/tester-map',
+  ar:'guilds/guild_ar/tools/ar', 'guild-workspace':'guilds/manage',
+};
+const catalog = 'guilds/guild_product_quality_supply/tools/catalog';
+const matches = (path:string, prefix:string) => path===prefix || path.startsWith(prefix+'/');
+const split = (hash:string) => {const raw=hash.replace(/^#/, ''); const i=raw.indexOf('?'); return i<0?[raw,'']:[raw.slice(0,i),raw.slice(i)];};
+export function canonicalHash(hash:string):string {
+  let [path,query]=split(hash);
+  const eventControl=/^(?:events|explore\/events)\/([0-9a-f-]{36})\/(attendance|attendees|schedule|waitlist-policy)$/.exec(path);
+  if(eventControl)return '#explore/events/'+eventControl[1]+'/manage'+(eventControl[2]==='attendance'?'/attendance':'')+query;
+  if(path==='automation')return '#automation/agent'+query;
+  if(matches(path,'me/shares'))return '#me/credit'+path.slice('me/shares'.length)+query;
+  if(matches(path,'stores/supply'))return '#'+catalog+path.slice('stores/supply'.length)+query;
+  if(/^stores\/[^/]+\/[^/]+\/supply(?:-orders)?(?:\/|$)/.test(path))return '#'+catalog+path.slice('stores'.length)+query;
+  if(matches(path,'squad-outcomes'))return '#me/teams/outcomes'+path.slice('squad-outcomes'.length)+query;
+  const first=path.split('/')[0] as TabId;
+  if(Object.hasOwn(LEGACY_ROUTES,first))path=LEGACY_ROUTES[first]+path.slice(first.length);
+  if(path==='me/content')path='me';
+  path=path.replace(/^(guilds\/(?:guild_games|guild_ar))\/tools$/,'$1/start');
+  if(path==='me'&&!new URLSearchParams(query).has('member')&&new URLSearchParams(query).get('view')==='settings'){
+    path='me/settings';
+    query=query.replace(/([?&])view=settings(?=&|$)/,'$1view=page');
+  }
+  return '#'+path+query;
+}
+export function portalHash(tab:TabId,suffix='',query=''):string {
+  return canonicalHash('#'+tab+suffix+(query?(query.startsWith('?')?query:'?'+query):''));
+}
+export function legacyHash(hash:string):string {
+  const [path,query]=split(canonicalHash(hash));
+  if(matches(path,catalog)){const suffix=path.slice(catalog.length);return '#stores'+(/^\/[^/]+\/[^/]+\/supply(?:-orders)?(?:\/|$)/.test(suffix)?suffix:'/supply'+suffix)+query;}
+  if(matches(path,'me/teams/outcomes'))return '#squad-outcomes'+path.slice('me/teams/outcomes'.length)+query;
+  const rows=Object.entries(LEGACY_ROUTES).filter(([tab])=>tab!=='social').sort((a,b)=>b[1].length-a[1].length);
+  for(const [tab,prefix] of rows)if(matches(path,prefix))return '#'+tab+path.slice(prefix.length)+query;
+  return '#'+path+query;
+}
+export type PortalRoute = {hash:string; legacyHash:string; place:PortalPlace; tab:TabId; ownerOnly:boolean; guildKey?:string; toolId?:string};
+export function resolvePortalRoute(hash:string):PortalRoute {
+  const canonical=canonicalHash(hash), legacy=legacyHash(canonical);
+  const [path]=split(canonical);
+  const first=path.split('/')[0];
+  const shareObject=/^shares\/[0-9a-f-]{36}$/i.test(path);
+  const place:PortalPlace=shareObject?'explore':PORTAL_PLACES.some(p=>p.id===first)?first as PortalPlace:'home';
+  const old=split(legacy)[0].split('/')[0];
+  const tab:TabId=shareObject?'community-search':place==='automation'?'private-ai':old==='squad-outcomes'?'squads':Object.hasOwn(LEGACY_ROUTES,old)?old as TabId:'home';
+  const tool=/^guilds\/(guild_[a-zA-Z0-9_]+)\/tools\/([^/?]+)(?:\/|$)/.exec(path);
+  // This is a presentation hint, never authorization. Guest rendering still uses the original ACL path.
+  const visitor=/^#profile\?member=[0-9a-f-]{36}$/i.test(legacy);
+  return {hash:canonical,legacyHash:legacy,place,tab,ownerOnly:(place==='me'&&!visitor)||place==='automation',guildKey:tool?.[1],toolId:tool?.[2]};
+}
+export function currentLegacyHash():string {return legacyHash(window.location.hash);}
+export function privateWorkId(hash:string):string|undefined {
+  const [path,query]=split(legacyHash(hash));
+  if(!matches(path,'private-ai'))return undefined;
+  const id=path.slice('private-ai/'.length)||new URLSearchParams(query).get('work');
+  return id&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)?id:undefined;
+}
+/** Call only after existing navigation/leave checks; replace never creates an extra Back step. */
+export function replaceLegacyAddress():string {
+  const next=canonicalHash(window.location.hash);
+  if(window.location.hash&&next!==window.location.hash)window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search+next);
+  return window.location.hash;
+}
+
+/** Validate a portal fragment before using it as an authentication return target. */
+export function safePortalReturn(value:unknown):value is string {
+  if(typeof value!=='string'||value.length+1>512||!value.startsWith('#')||/[\\\u0000-\u0020\u007f]/.test(value))return false;
+  let decoded:string;
+  try{decoded=decodeURIComponent(value)}catch{return false;}
+  if(/[\\\u0000-\u001f\u007f]/.test(decoded)||decoded.includes('//')||/(?:^#?|[?&=])\s*[a-z][a-z0-9+.-]*:/i.test(decoded))return false;
+  const [path,query]=split(value);
+  if(!/^[A-Za-z0-9_/-]+$/.test(path)||path.split('/').some(segment=>!segment))return false;
+  if(path.startsWith('join/'))return /^join\/(?:supplier|showcase|tasks)$/.test(path)&&!query;
+  const uuid='[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
+  if(path.startsWith('shares/'))return new RegExp('^shares/'+uuid+'$','i').test(path);
+  const canonical=split(canonicalHash(value))[0];
+  if(canonical.startsWith('explore/events/')&&!canonical.startsWith('explore/events/results')&&!new RegExp('^explore/events/'+uuid+'(?:/|$)','i').test(canonical))return false;
+  if(new RegExp('^explore/events/'+uuid+'$','i').test(canonical)&&query){
+    const params=new URLSearchParams(query);
+    if([...params].some(([key,item])=>key!=='ref'||params.getAll(key).length!==1||!/^[A-Za-z0-9_-]{16,32}$/.test(item)))return false;
+  }
+  if(['home','explore','guilds','me'].includes(canonical))return true;
+  if(/^guilds\/(?:community(?:\/hub)?|manage)$/.test(canonical))return true;
+  if(/^guilds\/guild_[a-zA-Z0-9_]+(?:\/(?:start|work|skills|information|tools(?:\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?))?$/.test(canonical))return true;
+  if(new RegExp('^me/(?:publication|'+uuid+')$','i').test(canonical))return true;
+  const prefixes=[...Object.values(LEGACY_ROUTES),'me/saved','automation/agent','automation/connections','automation/devices','automation/models','me/teams/outcomes'].filter(prefix=>!['home','explore','guilds','me'].includes(prefix));
+  return prefixes.some(prefix=>matches(canonical,prefix));
+}

@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {communityCatalog} from '../../modules/community/catalog.js';
+import {distinctCopyUrl} from '../../modules/community/book-urls.js';
 import {getSkillCollaboration,type SkillEditorial} from '../../modules/community/skill-collaboration.js';
 import {developmentMap,skillAgentMarkdown,pageAgentMarkdown} from '../../modules/development/service.js';
 import {createDevelopmentRoutes} from '../../apps/platform-api/src/routes/development.js';
@@ -13,8 +14,10 @@ test('all books default contributions to their original source and keep workshop
  const map=developmentMap();assert.equal(map.skill_books.length,55);
  for(const book of communityCatalog.skill_books){
   const data=getSkillCollaboration(book.id);assert.ok(data,book.id);
-  const metadata=map.repositories.find(repo=>repo.repository===new URL(book.repository_url).pathname.slice(1))!;
-  assert.equal(data.repository.url,book.repository_url);assert.equal(data.repository.default_branch,metadata.default_branch);
+  const copyUrl=distinctCopyUrl(book.fork_url,book.repository_url)??book.repository_url;
+  const metadata=map.repositories.find(repo=>repo.repository===new URL(copyUrl).pathname.slice(1))!;
+  assert.equal(book.repository_url,book.upstream_url,book.id);
+  assert.equal(data.repository.url,copyUrl);assert.equal(data.repository.default_branch,metadata.default_branch);
   assert.equal(data.repository.fork_url,book.fork_url);assert.equal(data.repository.upstream_url,book.upstream_url);
   assert.equal(data.contribution.url,book.upstream_url);assert.equal(data.contribution.fork_url,book.upstream_url+'/fork');
   assert.equal(data.contribution.default_branch,metadata.contribution_default_branch);assert.equal(metadata.contribution_target,book.upstream_url);
@@ -64,10 +67,10 @@ test('public share HTML keeps canonical metadata and cooperation in collapsed de
  const html=await response.text();
  assert.match(html,/<link rel="canonical" href="https:\/\/freetwai\.com\/development\/skills\/video-autopilot">/);
  assert.match(html,/<meta property="og:image" content="https:\/\/freetwai\.com\/brand\/skill-illustrations\/video-autopilot.webp">/);
- const usage=html.indexOf('id="skill-start"'),details=html.indexOf('<details class="public-skill-details"><summary>作者、版本與參與開發</summary>');
+ const usage=html.indexOf('id="skill-start"'),details=html.indexOf('id="skill-usage-notes"');
  const cooperation=html.indexOf('id="collaboration-title"');
  assert.ok(usage>=0&&usage<details);
- assert.ok(details<cooperation&&cooperation<html.indexOf('</details>',details));
+ assert.ok(details<cooperation&&cooperation<html.indexOf('data-share-root',details));
  assert.ok(html.includes('href="https://github.com/Hao0321/video-autopilot-kit/fork">從原作開始共創'));
  assert.ok(html.includes('預設 PR → Hao0321/video-autopilot-kit:main'));
  assert.ok(!html.includes('Fork 共創版本'));assert.ok(html.includes('/development/skills/video-autopilot/SKILL.md'));
@@ -87,7 +90,7 @@ test('maintainer editorial changes cannot redirect the original fork or take own
  const markdown=await(await app.request(origin+'/development/skills/video-autopilot/SKILL.md')).text();
  assert.ok(markdown.includes('預設 PR 目標：Hao0321/video-autopilot-kit:main'));
  assert.ok(markdown.includes('不把工坊新增的規則當成原作者的規則'));
- assert.ok(markdown.includes('工坊整合參考路徑'));
+ assert.ok(markdown.includes('使用筆記（核對版本'));
  assert.ok(markdown.includes('由原作維護者決定是否合併'));
 });
 

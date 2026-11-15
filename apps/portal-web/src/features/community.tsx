@@ -1,8 +1,8 @@
 import React, { lazy } from 'react';
 import type { PortalFeatureEntries } from './types';
-import { CommunityPanel } from '../modules/Community';
-import { CommunitySearch } from '../modules/CommunitySearch';
-import { MyContent } from '../modules/MyContent';
+const CommunityPanel = lazy(() => import('../modules/Community').then(m => ({default: m.CommunityPanel})));
+const CommunitySearch = lazy(() => import('../modules/CommunitySearch').then(m => ({default: m.CommunitySearch})));
+const MyContent = lazy(() => import('../modules/MyContent').then(m => ({default: m.MyContent})));
 
 const CommunityArPanel=lazy(()=>import('../modules/community-ar/Panel').then(m=>({default:m.CommunityArPanel})))
 const EventsPanel = lazy(() => import('../modules/EventsPanel').then(m => ({default: m.EventsPanel})))
@@ -10,6 +10,7 @@ const EventMissions = lazy(() => import('../modules/EventMissions').then(m => ({
 const EventMemberCards = lazy(() => import('../modules/EventMemberCards').then(m => ({default: m.EventMemberCards})))
 const SocialZone = lazy(() => import('../modules/SocialZone').then(m => ({default: m.SocialZone})))
 const MemberServices = lazy(() => import('../modules/MemberServices').then(m => ({default: m.MemberServices})))
+const MyCredit = lazy(() => import('../share/MyCredit').then(m => ({default: m.MyCredit})))
 const PromotionBoards = lazy(() => import('../modules/PromotionBoards').then(m => ({default: m.PromotionBoards})))
 const EventHighlights = lazy(() => import('../modules/EventHighlights').then(m => ({default: m.EventHighlights})))
 const TesterMap = lazy(() => import('../modules/TesterMap').then(m => ({default: m.TesterMap})))
@@ -60,7 +61,7 @@ export const communityFeatures = {
   },
   "promotion": {
     moduleId: "community", placement: 'page',
-    render: ({client}) => <PromotionBoards client={client} />,
+    render: ({client}) => <><MyCredit client={client}/><details className="legacy-promotion"><summary>舊的推廣紀錄</summary><PromotionBoards client={client} boardsOnly/></details></>,
   },
   "tester-map": {
     moduleId: "tester-map", placement: 'page',

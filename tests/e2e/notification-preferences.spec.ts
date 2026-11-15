@@ -7,7 +7,7 @@ import {signOut} from './navigation.js';
 
 async function login(page:Page,email='maker@local.test',preferences=true){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
-  await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await page.goto('/#account');if(preferences)await openAccountSettings(page,'通知設定');
 }
 test.describe('default-off notification preferences',()=>{

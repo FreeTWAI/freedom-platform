@@ -49,14 +49,16 @@ export function gameChallengeLink(token:string,origin:string){
  if(/[\u0000-\u0020\u007f-\u009f\p{Cf}%\\]/u.test(token)||!/^https?:\/\//.test(origin))return null;
  try{if(new URL(origin).origin!==origin)return null;}catch{return null;}
  const match=/^([（(「『【]*)(https?:\/\/.*?)([.,!;，。！？、；：)）」』】]*)$/u.exec(token);
- if(!match||!match[2].startsWith(origin+'/play?'))return null;
- const route=match[2].slice(origin.length);
+ if(!match||!match[2].startsWith(origin+'/'))return null;
+ const fullRoute=match[2].slice(origin.length),base=fullRoute.startsWith('/#guilds/guild_games/tools/arcade?')?'/#guilds/guild_games/tools/arcade':'/play';
+ const route='/play'+fullRoute.slice(base.length);
+ if(!fullRoute.startsWith(base+'?'))return null;
  const challenge=/^\/play\?game=(photo|stamp|cash|chair|tofu|holiday)&seed=([1-9][0-9]{0,9})$/.exec(route);
- const kitchen=/^\/play\?game=kitchen&recipe=([a-z][a-z-]{1,40})&seed=([1-9][0-9]{0,9})$/.exec(route);
- const seed=challenge?.[2]??kitchen?.[2];
+ const kitchen=/^\/play\?game=kitchen&recipe=([a-z][a-z-]{1,40})(&practice=1)?&seed=([1-9][0-9]{0,9})$/.exec(route);
+ const seed=challenge?.[2]??kitchen?.[3];
  if(!seed||Number(seed)>4294967295)return null;
  // Recipe syntax is bounded; existence belongs to the game router and its lobby.
- const href=challenge?`/play?game=${challenge[1]}&seed=${seed}`:`/play?game=kitchen&recipe=${kitchen![1]}&seed=${seed}`;
+ const href=challenge?`${base}?game=${challenge[1]}&seed=${seed}`:`${base}?game=kitchen&recipe=${kitchen![1]}${kitchen![2]??''}&seed=${seed}`;
  return {prefix:match[1],label:match[2],suffix:match[3],href};
 }
 /** Link ordinary external HTTPS text without normalizing away query or fragment.

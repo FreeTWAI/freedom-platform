@@ -41,7 +41,7 @@ async function login(page: Page) {
     && response.request().method() === 'POST');
   await page.getByRole('button', {name: '登入', exact: true}).click();
   expect((await authenticated).status()).toBe(200);
-  await expect(page.getByRole('heading', {name: '會員首頁', level: 1, exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: '動態', level: 1, exact: true})).toBeVisible();
   await openHomeGuide(page);
   await openHomeLearning(page);
 }
@@ -139,7 +139,7 @@ test('automatic same-guild refresh keeps the open book, claim draft, focus and w
   const originalResume = await resume.elementHandle();
   await guidance(page).getByRole('button', {name: '閱讀技能書', exact: true}).click();
   const dialog = page.getByRole('dialog', {name: book.title, exact: true});
-  await dialog.getByText('作者與共同開發（進階）', {exact: true}).click();
+  await dialog.locator('.skill-intro-usage-notes > summary').click();
   const statement = dialog.getByRole('textbox', {name: '聲明', exact: true});
   const draft = '這是尚未送出的原作認領聲明，返回分頁後應保留。';
   await statement.fill(draft);
@@ -195,7 +195,7 @@ test('automatic same-guild refresh to a different guide book discards the old cl
   const trigger = guidance(page).getByRole('button', {name: '閱讀技能書', exact: true});
   await trigger.click();
   const dialog = page.getByRole('dialog', {name: book.title, exact: true});
-  await dialog.getByText('作者與共同開發（進階）', {exact: true}).click();
+  await dialog.locator('.skill-intro-usage-notes > summary').click();
   const draft = '這是只屬於第一本技能書、尚未送出的原作認領聲明。';
   const evidence = 'https://example.com/first-book-evidence';
   await dialog.getByRole('textbox', {name: '聲明', exact: true}).fill(draft);
@@ -211,7 +211,7 @@ test('automatic same-guild refresh to a different guide book discards the old cl
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await trigger.click();
     await expect(nextDialog).toHaveJSProperty('open', true);
-    await nextDialog.getByText('作者與共同開發（進階）', {exact: true}).click();
+    await nextDialog.locator('.skill-intro-usage-notes > summary').click();
     await expect.poll(() => claimReads).toBe(1);
     const panel = nextDialog.getByRole('region', {name: '認領這件原作', exact: true});
     await expect(panel.getByRole('status')).toHaveText('正在讀取認領狀態…');

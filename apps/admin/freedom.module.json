@@ -26,7 +26,14 @@
     "apps/platform-api/src/admin-sync-worker.ts",
     "modules/platform-admin/**",
     "apps/portal-web/src/modules/AdminCommunityCertification.tsx",
-    "apps/portal-web/src/modules/AdminCommunityCertification.css"
+    "apps/portal-web/src/modules/AdminCommunityCertification.css",
+    "apps/portal-web/src/modules/admin-places.ts",
+    "apps/portal-web/src/modules/AdminInbox.tsx",
+    "apps/portal-web/src/modules/AdminPeople.tsx",
+    "apps/portal-web/src/modules/AdminOrganizerClaims.tsx",
+    "tests/e2e/admin-places.spec.ts",
+    "tests/e2e/admin-navigation.ts",
+    "tests/runtime/admin-places.test.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/AdminPanel.tsx"

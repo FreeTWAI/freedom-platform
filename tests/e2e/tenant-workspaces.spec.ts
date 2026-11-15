@@ -56,7 +56,7 @@ test('two members create, invite, accept and switch tenants without sharing the 
   const guestSession = await open(browser, baseURL!, guest, { width: 1280, height: 900 });
   try {
     await navigate(ownerSession.page, '業務空間');
-    await expect(ownerSession.page.getByRole('heading', { name: '業務空間', level: 1, exact: true })).toBeVisible();
+    await expect(ownerSession.page.getByRole('heading', { name: '我的', level: 1, exact: true })).toBeVisible();
     await ownerSession.page.getByLabel('業務空間名稱', { exact: true }).fill('品牌甲');
     await ownerSession.page.getByLabel('工作區名稱（可略過）', { exact: true }).fill('櫃檯甲');
     await ownerSession.page.getByRole('button', { name: '建立業務空間', exact: true }).click();
@@ -101,14 +101,14 @@ test('two members create, invite, accept and switch tenants without sharing the 
     expect(Math.abs((revoke!.y + revoke!.height) - (role!.y + role!.height))).toBeLessThanOrEqual(2);
 
     await ownerSession.page.setViewportSize({ width: 390, height: 844 });
-    await expect(ownerSession.page.getByRole('heading', { name: '業務空間', level: 1, exact: true })).toBeVisible();
+    await expect(ownerSession.page.getByRole('heading', { name: '我的', level: 1, exact: true })).toBeVisible();
     await noOverflow(ownerSession.page);
     await tallEnough(ownerSession.page);
     await guestSession.page.setViewportSize({ width: 390, height: 844 });
     await noOverflow(guestSession.page);
     await tallEnough(guestSession.page);
     await ownerSession.page.setViewportSize({ width: 360, height: 800 });
-    await expect(ownerSession.page.getByRole('heading', { name: '業務空間', level: 1, exact: true })).toBeVisible();
+    await expect(ownerSession.page.getByRole('heading', { name: '我的', level: 1, exact: true })).toBeVisible();
     await noOverflow(ownerSession.page);
     await tallEnough(ownerSession.page);
     await guestSession.page.setViewportSize({ width: 360, height: 800 });

@@ -1,3 +1,4 @@
+import {adminNavigate} from './admin-navigation.js';
 import { navigate } from './navigation.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 
@@ -59,7 +60,7 @@ test('Access admins assign and revoke a skill maintainer with a reason and admin
     if(path==='/skill-maintainers/video-autopilot'){expect(route.request().headers()['x-admin-csrf']).toBe('synthetic-csrf');const body=route.request().postDataJSON();if(maintainers.length)expect(route.request().headers()['if-match']).toBe(`"${maintainers[0].aggregate_version}"`);else expect(route.request().headers()['if-match']).toBeUndefined();writes.push(body);maintainers=[{user_id:'synthetic-member',display_name:'測試維護者',active:body.active,aggregate_version:(maintainers[0]?.aggregate_version??0)+1}];return route.fulfill({json:{book_id:'video-autopilot',maintainers}});}
     return route.fulfill({status:404,json:{detail:'unexpected fixture'}});
   });
-  await page.goto('/admin');await page.getByRole('button',{name:'會長與維護者',exact:true}).click();await page.getByLabel('任命或解除原因',{exact:true}).fill('負責這一輪剪輯共創');await page.getByLabel('搜尋姓名或 E-mail',{exact:true}).fill('測試維護者');await page.getByRole('button',{name:'搜尋會員',exact:true}).click();await page.getByRole('combobox',{name:'選擇會員',exact:true}).selectOption('synthetic-member');await page.getByRole('button',{name:'任命為技能書維護者',exact:true}).click();await expect(page.locator('.guild-workspace').getByRole('status')).toContainText('已任命技能書維護者');await page.getByLabel('任命或解除原因',{exact:true}).fill('交接完成解除職務');await page.getByRole('button',{name:'解除維護職務',exact:true}).click();await expect(page.locator('.guild-workspace').getByRole('status')).toContainText('已解除技能書維護職務');await expect(page.getByText('尚未任命維護者。',{exact:true})).toBeVisible();await page.getByLabel('任命或解除原因',{exact:true}).fill('重新承接維護工作');await page.getByRole('button',{name:'搜尋會員',exact:true}).click();await page.getByRole('combobox',{name:'選擇會員',exact:true}).selectOption('synthetic-member');await page.getByRole('button',{name:'任命為技能書維護者',exact:true}).click();await expect(page.locator('.guild-workspace').getByRole('status')).toContainText('已任命技能書維護者');expect(writes.map(value=>value.active)).toEqual([true,false,true]);expect(writes.every(value=>value.user_id==='synthetic-member'&&value.reason.length>0)).toBe(true);
+  await page.goto('/admin');await adminNavigate(page,'guild-workspace');await page.getByLabel('任命或解除原因',{exact:true}).fill('負責這一輪剪輯共創');await page.getByLabel('搜尋姓名或電子信箱',{exact:true}).fill('測試維護者');await page.getByRole('button',{name:'搜尋會員',exact:true}).click();await page.getByRole('combobox',{name:'選擇會員',exact:true}).selectOption('synthetic-member');await page.getByRole('button',{name:'任命為技能書維護者',exact:true}).click();await expect(page.locator('.guild-workspace').getByRole('status')).toContainText('已任命技能書維護者');await page.getByLabel('任命或解除原因',{exact:true}).fill('交接完成解除職務');await page.getByRole('button',{name:'解除維護職務',exact:true}).click();await expect(page.locator('.guild-workspace').getByRole('status')).toContainText('已解除技能書維護職務');await expect(page.getByText('尚未任命維護者。',{exact:true})).toBeVisible();await page.getByLabel('任命或解除原因',{exact:true}).fill('重新承接維護工作');await page.getByRole('button',{name:'搜尋會員',exact:true}).click();await page.getByRole('combobox',{name:'選擇會員',exact:true}).selectOption('synthetic-member');await page.getByRole('button',{name:'任命為技能書維護者',exact:true}).click();await expect(page.locator('.guild-workspace').getByRole('status')).toContainText('已任命技能書維護者');expect(writes.map(value=>value.active)).toEqual([true,false,true]);expect(writes.every(value=>value.user_id==='synthetic-member'&&value.reason.length>0)).toBe(true);
 });
 
 test('a slower council detail cannot replace the thread selected more recently',async({page})=>{
@@ -522,4 +523,47 @@ test('a held announcement ACK after logout cannot enter the replacement session 
     await page.unroute(pattern,handler);
     if(!page.isClosed())await page.evaluate(()=>{const root=window as any;root.__guildLifetimeProbe?.restore();delete root.__guildLifetimeProbe;});
   }
+});
+
+test('jumping directly back in history targets the skill book on screen and resets pending forms',async({page})=>{
+  const writes:{path:string;body:any}[]=[];
+  await page.route('**/admin/api/**',route=>{
+    const path=new URL(route.request().url()).pathname.replace('/admin/api','');
+    if(path==='/bootstrap')return route.fulfill({json:{admin:{admin_id:'synthetic-admin',display_name:'管理員',email:'admin@example.test',role:'super_admin',community_id:'synthetic-community'},csrf_token:'synthetic-csrf',summary:{members:1,active_members:1,pending_guild_applications:0,guilds:0,admins:1},available_skill_books:[],pending_guild_appointments:[]}});
+    if(path==='/credentials'||path==='/guilds'||path==='/admins')return route.fulfill({json:{items:[]}});
+    if(path==='/members')return route.fulfill({json:{items:[{user_id:'synthetic-member',display_name:'測試維護者',email:'member@example.test',active:true,onboarding_required:false,onboarding_completed_at:null,aggregate_version:1,guilds:[]}],next_offset:null}});
+    if(path==='/skill-maintainers')return route.fulfill({json:{items:[
+      {book_id:'book-a',title:'技能書甲',maintainers:[{user_id:'holder-a',display_name:'維護甲',active:true,aggregate_version:1}]},
+      {book_id:'book-b',title:'技能書乙',maintainers:[{user_id:'holder-b',display_name:'維護乙',active:true,aggregate_version:1}]},
+    ]}});
+    if(path.startsWith('/skill-maintainers/')){
+      writes.push({path,body:route.request().postDataJSON()});
+      return route.fulfill({json:{book_id:path.split('/').pop(),maintainers:[]}});
+    }
+    return route.fulfill({status:404,json:{detail:'unexpected fixture'}});
+  });
+
+  await page.goto('/admin?view=people');
+  await page.getByRole('button',{name:'技能書甲 技能書',exact:true}).click();
+  await expect(page).toHaveURL(/view=guild-workspace&object=book-a/);
+  await expect(page.getByText('維護甲',{exact:true})).toBeVisible();
+
+  await page.getByRole('button',{name:'返回人員與公會',exact:true}).click();
+  await page.getByRole('button',{name:'技能書乙 技能書',exact:true}).click();
+  await expect(page).toHaveURL(/view=guild-workspace&object=book-b/);
+  await expect(page.getByText('維護乙',{exact:true})).toBeVisible();
+  await page.getByLabel('任命或解除原因',{exact:true}).fill('留在乙書的未送出原因');
+
+  await page.evaluate(()=>window.history.go(-2));
+  await expect(page).toHaveURL(/view=guild-workspace&object=book-a/);
+  await expect(page.getByText('維護甲',{exact:true})).toBeVisible();
+  await expect(page.getByText('維護乙',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('任命或解除原因',{exact:true})).toHaveValue('');
+
+  await page.getByLabel('任命或解除原因',{exact:true}).fill('任命給技能書甲');
+  await page.getByRole('button',{name:'搜尋會員',exact:true}).click();
+  await page.getByRole('combobox',{name:'選擇會員',exact:true}).selectOption('synthetic-member');
+  await page.getByRole('button',{name:'任命為技能書維護者',exact:true}).click();
+  await expect(page.locator('.guild-workspace').getByRole('status')).toContainText('已任命技能書維護者');
+  expect(writes).toEqual([{path:'/skill-maintainers/book-a',body:{user_id:'synthetic-member',active:true,reason:'任命給技能書甲'}}]);
 });

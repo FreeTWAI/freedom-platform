@@ -150,15 +150,19 @@ async function skillResumeHost(initialResume: string | null) {
  const {client,calls,pending}=transport();(client as any).sessionGeneration=1;
  const reads:{path:string;resolve:(value:unknown)=>void}[]=[];
  (client as any).get=(path:string)=>path==='/me/skill-submissions'?Promise.resolve({items:[]}):new Promise(resolve=>reads.push({path,resolve}));
- const source=readFileSync(new URL('../../apps/portal-web/src/modules/SimpleSkillSubmission.tsx',import.meta.url),'utf8');
+ const source=readFileSync(new URL('../../apps/portal-web/src/modules/SkillSubmission.tsx',import.meta.url),'utf8');
  const compiled=transformSync(source,{loader:'tsx',format:'cjs',target:'es2023',jsx:'automatic'}).code;
  const module={exports:{} as any};
  runInNewContext(compiled,{module,exports:module.exports,AbortController,require:(name:string)=>{
   if(name==='react')return hooks;
   if(name==='react/jsx-runtime')return {jsx:()=>null,jsxs:()=>null,Fragment:'fragment'};
   if(name==='../api')return {requireItems};
-  if(name==='./WorkSharing.css')return {};
-  if(name==='./SkillUpload')return {relationshipLabels:{curator:'推薦／整理者'}};
+  if(name==='../format')return {formatIsoLocal:(v:string)=>v};
+  if(name==='../game-console-core')return {logConsoleEvent:()=>{}};
+  if(name==='../game-console-routing')return {consoleChannel:(c:string)=>c};
+  if(name==='./WorkSharing.css'||name==='./SkillUpload.css')return {};
+  if(name==='./skill-upload-instruction')return {agentInstruction:()=>'',SKILL_UPLOAD_GUIDE:'/development/skill-upload'};
+  if(name==='./skill-upload-chat')return {CHAT_JSON_MAX_BYTES:800*1024,chatSkillInstruction:()=>'',parseChatSkillJson:()=>({ok:false,message:''}),repositoryKey:()=>null};
   if(name==='./SkillPublication')return {skillPublicationPath,PublishedSkillLinks:()=>null};
   if(name==='../../../../modules/skill-submissions/page-draft.js')return pageDraft;
   if(name==='../../../../modules/community/skill-page-content.js')return pageContent;
@@ -168,7 +172,7 @@ async function skillResumeHost(initialResume: string | null) {
   if(name==='./shared')return {useModuleMutation:(_client:PortalClient,scope:{userId:string;type:string})=>{const mutation=sharingMutationState(scope);return {...mutation.snapshot,setError:()=>{},mutate:(path:string,body:unknown,version?:number)=>performModuleMutation(client,mutation,path,body,version)};}};
   throw Error('Unexpected skill resume dependency '+name);
  }});
- function render(){cursor=0;dirty=false;module.exports.SimpleSkillSubmission({client,userId:'owner',resumeId,onPublished:async()=>{}});while(effects.length)effects.shift()!();}
+ function render(){cursor=0;dirty=false;module.exports.SkillSubmission({client,userId:'owner',resumeId,onPublished:async()=>{}});while(effects.length)effects.shift()!();}
  async function flush(){await new Promise<void>(resolve=>setImmediate(resolve));let renders=0;while(dirty){assert(++renders<20,'resume effects must settle');render();await new Promise<void>(resolve=>setImmediate(resolve));}}
  return {client,calls,pending,reads,render,flush,resume:(id:string|null)=>{resumeId=id;render();},dispose:()=>{for(const slot of slots)slot?.cleanup?.();}};
 }

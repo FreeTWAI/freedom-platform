@@ -1,3 +1,4 @@
+import {adminNavigate} from './admin-navigation.js';
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './fixtures.js';
@@ -147,7 +148,7 @@ test('an admin claims, assigns, pauses and reads the review center on desktop an
       await route.continue({ headers });
     });
     await page.goto('/admin');
-    await page.getByRole('button', { name: 'PR 審核', exact: true }).click();
+    await adminNavigate(page,'review-center');await page.getByText('紀錄與設定',{exact:true}).click();await page.getByText('維護設定',{exact:true}).click();
     await expect(page.getByRole('heading', { name: 'PR 審核', exact: true })).toBeVisible();
     await expect(countOf(page, '待審')).toHaveText('1');
     await expect(countOf(page, '審核中')).toHaveText('0');
@@ -325,7 +326,7 @@ test('an admin claims, assigns, pauses and reads the review center on desktop an
     await owned.getByRole('button', { name: '儲存歸屬', exact: true }).click();
     await expect(page.locator(`[data-pull-id="${PULL_LOW}"] span.badge-open`)).toHaveText('開放認領');
 
-    await page.getByRole('button', { name: '操作紀錄', exact: true }).click();
+    await adminNavigate(page,'audit');
     for (const label of ['認領審核', '釋放審核認領', '指派審核', '暫停拉取請求', '恢復拉取請求', '變更 PR 審核歸屬']) {
       await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
     }
@@ -333,7 +334,7 @@ test('an admin claims, assigns, pauses and reads the review center on desktop an
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('button', { name: '開啟管理選單', exact: true }).click();
-    await page.getByRole('button', { name: 'PR 審核', exact: true }).click();
+    await adminNavigate(page,'review-center');await page.getByText('紀錄與設定',{exact:true}).click();await page.getByText('維護設定',{exact:true}).click();
     await page.getByRole('tab', { name: '待審', exact: true }).click();
     const phone = page.locator(`[data-pull-id="${PULL_LOW}"]`);
     await expect(phone).toBeVisible();
@@ -357,6 +358,22 @@ test('an admin claims, assigns, pauses and reads the review center on desktop an
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     expect(await phone.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await page.goto(`/admin?view=review-center&object=${PULL_LOW}`);
+    const singleRow=page.locator(`[data-pull-id="${PULL_LOW}"]`);
+    await expect(page.getByLabel('決定',{exact:true})).toBeVisible();
+    await singleRow.getByRole('button',{name:'收合',exact:true}).click();
+    await expect(page.getByLabel('決定',{exact:true})).toHaveCount(0);
+    await expect(singleRow).toBeVisible();
+    await expect(page.getByText('這個佇列目前沒有拉取請求。',{exact:true})).toHaveCount(0);
+    await singleRow.getByRole('button',{name:'詳情',exact:true}).click();
+    await expect(page.getByLabel('決定',{exact:true})).toBeVisible();
+    await page.getByLabel('決定',{exact:true}).selectOption('pause');
+    await page.getByLabel('暫停理由',{exact:true}).fill('合成物件頁暫停審核');
+    await expect(page.getByRole('button',{name:'確認',exact:true})).toHaveCount(1);
+    const objectPause=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith(`/review-center/pulls/${PULL_LOW}/pause`));
+    await page.getByRole('button',{name:'確認',exact:true}).click();
+    const pauseResponse=await objectPause;expect(pauseResponse.status()).toBe(200);expect(pauseResponse.request().postDataJSON()).toEqual({reason:'合成物件頁暫停審核'});expect(pauseResponse.request().headers()['if-match']).toBeTruthy();
+
   } finally {
     if (previousOfficer) {
       await e2eAuthPool.query(`INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,$2,$3)
@@ -444,7 +461,7 @@ test('an admin hands a pull and an issue to a local AI', async ({ page, e2eAuthP
       await route.continue({ headers });
     });
     await page.goto('/admin');
-    await page.getByRole('button', { name: 'PR 審核', exact: true }).click();
+    await adminNavigate(page,'review-center');await page.getByText('紀錄與設定',{exact:true}).click();await page.getByText('維護設定',{exact:true}).click();
     const low = page.locator(`[data-pull-id="${PULL_LOW}"]`);
     await low.getByRole('button', { name: '詳情', exact: true }).click();
     await low.getByRole('button', { name: '交給本機 AI…', exact: true }).click();
@@ -539,5 +556,50 @@ test('an admin hands a pull and an issue to a local AI', async ({ page, e2eAuthP
     expect(issuedAgainResponse.request().headers()['idempotency-key']).not.toBe(issueKey);
   } finally {
     await wipe(e2eAuthPool);
+  }
+});
+test('UX-G-12: review center fetches pulls, summary, and reviewers in parallel, shows queue tabs visibly, and keeps 44px summaries', async ({ page }) => {
+  const seenAtPulls: string[] = [];
+  const requested = new Set<string>();
+  let releasePulls: (() => void) | null = null;
+  await page.route('**/admin/api/**', async route => {
+    const path = new URL(route.request().url()).pathname.replace('/admin/api', '');
+    if (path === '/bootstrap') return route.fulfill({ json: { admin: { admin_id: randomUUID(), community_id: DEMO_COMMUNITY, email: 'admin@example.test', display_name: '合成管理員', role: 'super_admin' }, csrf_token: 'synthetic-csrf', available_skill_books: [], summary: { members: 1, active_members: 1, pending_guild_applications: 0, guilds: 1, admins: 1 } } });
+    if (path === '/credentials') return route.fulfill({ json: { items: [] } });
+    if (path === '/review-center/summary') {
+      requested.add('summary');
+      if (requested.has('reviewers')) releasePulls?.();
+      return route.fulfill({ json: { viewer: { status: 'ready', github_login: 'synthetic-reviewer' }, counts: { awaiting_review: 1, in_review: 0, waiting_ci: 0, needs_author: 0, ci_not_run: 0, needs_decision: 0, ready: 0 }, repositories: [] } });
+    }
+    if (path === '/review-center/reviewers') {
+      requested.add('reviewers');
+      if (requested.has('summary')) releasePulls?.();
+      return route.fulfill({ json: { admins: [], guilds: [], open_repositories: [], admin_only_repositories: [], guild_choices: [], skill_book_choices: [] } });
+    }
+    if (path === '/review-center/pulls') {
+      requested.add('pulls');
+      await new Promise<void>(resolve => {
+        if (requested.has('summary') && requested.has('reviewers')) resolve();
+        else {
+          releasePulls = resolve;
+          setTimeout(resolve, 400);
+        }
+      });
+      seenAtPulls.splice(0, seenAtPulls.length, ...requested);
+      return route.fulfill({ json: { items: [], next_offset: null } });
+    }
+    return route.fulfill({ json: { items: [] } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/admin?view=review-center&manage=1');
+  const waitingTab = page.getByRole('tab', { name: '待審', exact: true });
+  await expect(waitingTab).toBeVisible();
+  await expect(waitingTab).toHaveAttribute('aria-selected', 'true');
+  expect(seenAtPulls.sort()).toEqual(['pulls', 'reviewers', 'summary']);
+  expect((await waitingTab.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  for (const label of ['紀錄與設定', '維護設定']) {
+    const summary = page.locator('summary', { hasText: label });
+    await expect(summary).toBeVisible();
+    expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
 });

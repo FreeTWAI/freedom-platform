@@ -147,11 +147,11 @@ test('T-001 catalog shape, empty slots, rejected writes, and flag-off 404', asyn
   const catalog = await member(flagged, '/guild-categories');
   assert.equal(catalog.status, 200);
   const items = [...catalog.data.categories.flatMap((group: {items: {guild_key: string; category: string}[]}) => group.items), ...catalog.data.pending];
-  assert.equal(items.length, 18);
+  assert.equal(items.length, 20);
   assert.deepEqual(catalog.data.categories.map((group: {category: string}) => group.category), ['internal', 'external', 'professional_industry']);
   assert.deepEqual(catalog.data.categories[0].items.map((item: {guild_key: string}) => item.guild_key).sort(), [...internal].sort());
   assert.deepEqual(catalog.data.categories[1].items.map((item: {guild_key: string}) => item.guild_key), external);
-  assert.equal(catalog.data.pending.length, 6);
+  assert.equal(catalog.data.pending.length, 8);
   assert.ok(catalog.data.pending.some((item: {guild_key: string}) => item.guild_key === 'guild_ai_vibe'));
   assert.match(catalog.data.catalog_revision, /^[1-9][0-9]*$/);
 

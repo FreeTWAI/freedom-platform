@@ -1,3 +1,4 @@
+import {distinctOriginalRepoCount} from '../../apps/portal-web/src/modules/SkillBookCover.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {stripTypeScriptTypes} from 'node:module';
@@ -75,7 +76,7 @@ test('current authority still precedes receipt replay; the original key recovers
 const cardSource=readFileSync('apps/portal-web/src/modules/GuildCard.tsx','utf8');
 const cardStart=cardSource.indexOf('type GuildPanel='),cardEnd=cardSource.indexOf('// Measure intrinsic content',cardStart);assert.ok(cardStart>=0&&cardEnd>cardStart);
 const cardCode=transformSync(cardSource.slice(cardStart,cardEnd),{loader:'tsx',jsxFactory:'React.createElement',target:'es2023'}).code;
-const GuildCard=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,useState:(value:unknown)=>[value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null});
+const GuildCard=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,distinctOriginalRepoCount,useState:(value:unknown)=>[value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null});
 const nodes=(value:any):any[]=>Array.isArray(value)?value.flatMap(nodes):React.isValidElement(value)?[value,...nodes((value.props as any).children)]:[];
 const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):React.isValidElement(value)?text((value.props as any).children):typeof value==='string'?value:'';
 test('GuildCard unknown-write blocking affects mutation controls only, with the default unchanged',()=>{
@@ -183,21 +184,21 @@ test('GuildCard separates workspace navigation, introduction and optional member
   const tree=GuildCard({guild:{...guild,membership:active?{...guild.membership,state:'active'}:null,skill_books:[],purpose:'Synthetic',first_step:'Read',is_primary:false},client:{sessionGeneration:1},busy:false,onPrimary:()=>calls.push('primary'),onMembership:()=>calls.push('membership'),onSecondary:()=>calls.push('secondary'),launchpadEnabled:enabled,onLaunchpad:()=>calls.push('workspace')});
   const elements=nodes(tree),buttons=elements.filter(n=>n.type==='button');
   const settings=elements.filter(n=>n.type==='details'&&n.props.className==='guild-membership-settings');
-  assert.equal(settings.length,active?1:0);
+  assert.equal(settings.length,1);
+  assert.equal(settings[0].props.open,undefined,'settings begin collapsed');
   if(active){
-   assert.equal(settings[0].props.open,undefined,'settings begin collapsed');
    const labels=nodes(settings[0]).filter(n=>n.type==='button').map(n=>text(n.props.children));
    assert.ok(labels.includes('設為主要公會'));assert.ok(labels.includes('退出Synthetic guild'));
    assert.ok(buttons.some(n=>text(n.props.children)==='查看公會介紹'));
   }else {
    const join=buttons.find(n=>text(n.props.children)==='加入Synthetic guild');
-   assert.match(join.props.className,/\bbtn-primary\b/);
-   assert.equal(buttons.filter(n=>/\bbtn-primary\b/.test(n.props.className??'')).length,1,'join is the only primary action before membership');
+   assert.match(join.props.className,/\bbtn-secondary\b/);
+   assert.equal(buttons.filter(n=>/\bbtn-primary\b/.test(n.props.className??'')).length,0,'unjoined card is secondary unless designated as primaryJoin');
   }
   const workspace=buttons.find(n=>text(n.props.children)===(active?'進入公會工作區':'預覽公會工作區'));
   assert.equal(Boolean(workspace),enabled);
   assert.deepEqual(calls,[],'rendering and discovery do not join or change preferences');
-  if(workspace){assert.match(workspace.props.className,active?/\bbtn-primary\b/:/\bbtn-ghost\b/);workspace.props.onClick();assert.deepEqual(calls,['workspace']);}
+  if(workspace){assert.match(workspace.props.className,active?/\bbtn-secondary\b/:/\bbtn-ghost\b/);workspace.props.onClick();assert.deepEqual(calls,['workspace']);}
  }
 });
 
@@ -213,9 +214,9 @@ test('legacy primary exit explanation stays beside its disabled action inside se
 });
 
 // Execute the actual panel resolver; field errors must not disappear in a hidden editor section.
-const launchpadSource=readFileSync('apps/portal-web/src/modules/GuildLaunchpad.tsx','utf8');
+const launchpadSource=readFileSync('apps/portal-web/src/modules/GuildLaunchpadEditor.tsx','utf8');
 function launchpadFunction(from:string,to:string){const start=launchpadSource.indexOf(from),end=launchpadSource.indexOf(to,start);assert.ok(start>=0&&end>start);return launchpadSource.slice(start,end);}
-const editorErrorPanel=runInNewContext(stripTypeScriptTypes(launchpadFunction('function fieldHits(', 'function fieldMessage(')+launchpadFunction('function editorErrorPanel(', 'type BookRef ='))+';editorErrorPanel');
+const editorErrorPanel=runInNewContext(stripTypeScriptTypes(launchpadFunction('function fieldHits(', 'function fieldMessage(')+launchpadFunction('function editorErrorPanel(', 'type RevisionMeta ='))+';editorErrorPanel');
 for(const [path,panel] of [['mission_override','layout'],['body.blocks.2.title','layout'],['blocks.1.enabled','layout'],['body.application_refs.0.release_ref','tools'],['starter.title_label','tools'],['body.support.public_url','tools'],['principal_id','delegations'],['capabilities.0','delegations'],['expires_at','delegations'],['reason',null],['body.reason',null],['schema_version',null]] as const){
  test(`launchpad editor reveals ${path} in ${panel??'the existing global or dialog error surface'}`,()=>{assert.equal(editorErrorPanel([{path,code:'invalid'}]),panel);});
 }
@@ -228,4 +229,22 @@ test('launchpad scoped hidden rule overrides both grid editor panels and the car
   if(rule.selector.includes('.guild-editor-panel')||rule.selector.includes('.guild-launchpad-editor'))rule.walkDecls('display',declaration=>{assert.equal(Boolean(declaration.important),false,'editor display cannot override the important hidden rule');});
  });
  assert.ok(protectedHidden,'all hidden descendants, including the editor form and its sections, remain display:none!important');
+});
+
+test('GuildCard and PositioningPanels tolerate partial directory and onboarding payloads without skill_books',()=>{
+ const partialGuild={guild_key:'test_guild',name:'測試公會',entry_questions:{questions:[{id:'q1',prompt:'想練習什麼？',options:[{id:'a',label:'練習寫作'},{id:'b',label:'練習設計'}]}]}};
+ const tree=GuildCard({guild:partialGuild as any,client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{}});
+ const elements=nodes(tree),buttons=elements.filter(n=>n.type==='button');
+ assert.ok(buttons.some(n=>[n.props.children].flat().join('')==='公會技能書庫 · 0 個原作資源'));
+ assert.ok(elements.some(n=>n.type==='p'&&text(n.props.children)==='技能書整理中'));
+ const booksLauncher=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,distinctOriginalRepoCount,useState:(value:unknown)=>[value===null?'books':value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null,GuildMembers:()=>null});
+ const openBooks=nodes(booksLauncher({guild:partialGuild as any,client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{}}));
+ assert.ok(openBooks.some(n=>n.props?.className==='guild-library-books'&&text(n.props.children).includes('技能書整理中')));
+ const filterCode=stripTypeScriptTypes(extract('  const search=query.trim().toLocaleLowerCase();','  const chosenKeys='));
+ const visible=runInNewContext(filterCode+';visible',{query:'測試',scope:'all',topic:'',classified:[partialGuild],guildMasterLabel:()=>'待任命'});
+ assert.equal(visible.length,1);
+ const bookCode=stripTypeScriptTypes(extract('  const assessment=summary?.assessment','  return <section className="module-panel positioning-panel"'));
+ const derived=runInNewContext(bookCode+';({abilityLabels,equipmentLabels,featuredLabels,firstBook})',{summary:{assessment:{},member:{primary_guild:{guild_key:'test_guild',name:'測試公會'}},labels:{}},SECTION_LABELS:{}});
+ assert.equal(derived.firstBook,undefined);
+ assert.equal(JSON.stringify([derived.abilityLabels,derived.equipmentLabels,derived.featuredLabels]),'[[],[],[]]');
 });

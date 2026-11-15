@@ -9,12 +9,12 @@ async function login(page:Page){
   await expect(page.getByLabel('社群顯示名稱',{exact:true})).toBeVisible();
 }
 
-test('account puts share settings first, keeps three account groups, and disclosures preserve drafts without writes',async({page})=>{
+test('account puts profile and public page first, keeps existing account groups, and disclosures preserve drafts without writes',async({page})=>{
   const recommendations:string[]=[],writes:string[]=[];
   page.on('request',request=>{if(request.url().includes('/members/recommendations'))recommendations.push(request.url());if(request.method()==='POST'&&request.url().includes('/api/v1/me/'))writes.push(request.url());});
   await login(page);
   const sections=page.locator('.account-settings-section');
-  await expect(sections.locator(':scope > summary strong')).toHaveText(['分享名片設定（免登入）','個人資料','誰能看到我','帳號與安全']);
+  await expect(sections.locator(':scope > summary strong')).toHaveText(['個人資料','公開個人頁','分享名片設定（免登入）','誰能看到我','帳號與安全']);
   const section=(label:string)=>sections.getByText(label,{exact:true}).locator('xpath=ancestor::details[1]');
   const share=section('分享名片設定（免登入）'),personal=section('個人資料'),privacy=section('誰能看到我'),securitySection=section('帳號與安全');
   await expect(share).toHaveJSProperty('open',false);
@@ -27,13 +27,15 @@ test('account puts share settings first, keeps three account groups, and disclos
   await expect(privacy).toHaveJSProperty('open',false);
   await page.keyboard.press('Enter');await expect(share).toHaveJSProperty('open',false);
   await expect(page.getByRole('region',{name:'認識一位工坊夥伴'})).toHaveCount(0);
+  await openAccountSettings(page,'個人資料');
   const name=page.getByLabel('社群顯示名稱',{exact:true});await name.fill('尚未儲存的測試名字');
   await personal.locator(':scope > summary').click();
+  await openAccountSettings(page,'個人資料');await expect(name).toHaveValue('尚未儲存的測試名字');
+  page.once('dialog',dialog=>dialog.accept());
   await openAccountSettings(page,'誰能看到我');
   await page.getByRole('group',{name:'聯絡 E-mail可見範圍',exact:true}).getByRole('checkbox',{name:'不公開',exact:true}).check();
   await page.getByRole('group',{name:'聯絡 E-mail可見範圍',exact:true}).getByRole('checkbox',{name:'平台好友',exact:true}).check();
   await privacy.locator(':scope > summary').click();
-  await openAccountSettings(page,'個人資料');await expect(name).toHaveValue('尚未儲存的測試名字');
   await openAccountSettings(page,'誰能看到我');
   await expect(page.getByRole('group',{name:'聯絡 E-mail可見範圍',exact:true}).getByRole('checkbox',{name:'平台好友',exact:true})).toBeChecked();
   expect(recommendations).toEqual([]);expect(writes).toEqual([]);
@@ -42,6 +44,7 @@ test('account puts share settings first, keeps three account groups, and disclos
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     for(const summary of await sections.locator(':scope > summary').all())expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
+  page.once('dialog',dialog=>dialog.accept());
   const security=securitySection.locator(':scope > summary');await security.focus();await page.keyboard.press('Enter');
   await expect(securitySection).toHaveJSProperty('open',true);await expect(security).toBeFocused();
   await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
@@ -51,21 +54,21 @@ test('account puts share settings first, keeps three account groups, and disclos
 test('cancelled navigation keeps account edits and accepted back discards only local drafts',async({page})=>{
   await login(page);
   // Establish a real prior history entry without changing account settings.
-  await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
+  await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');
   await page.goto('/#account');
   const name=page.getByLabel('社群顯示名稱',{exact:true});await name.fill('保留中的草稿');
   page.once('dialog',dialog=>dialog.dismiss());
-  await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
-  await expect(page).toHaveURL(/#account$/);await expect(name).toHaveValue('保留中的草稿');
+  await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');
+  await expect(page).toHaveURL(/#me\/settings$/);await expect(name).toHaveValue('保留中的草稿');
   page.once('dialog',dialog=>dialog.dismiss());await page.goBack();
-  await expect(page).toHaveURL(/#account$/);await expect(name).toHaveValue('保留中的草稿');
-  page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
-  await expect(page).toHaveURL(/#profile$/);
+  await expect(page).toHaveURL(/#me\/settings$/);await expect(name).toHaveValue('保留中的草稿');
+  page.once('dialog',dialog=>dialog.accept());await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');
+  await expect(page).toHaveURL(/#me$/);
 });
 
 test('uncertain profile save locks edits and retries the exact body, version and idempotency key',async({page})=>{
   await login(page);
-  await page.getByRole('button',{name:'返回我的個人空間',exact:true}).click();
+  await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');
   await page.goto('/#account');
   await expect(page.getByLabel('社群顯示名稱',{exact:true})).toBeVisible();
   const original=await (await page.request.get('/api/v1/me/account')).json();
@@ -81,8 +84,8 @@ test('uncertain profile save locks edits and retries the exact body, version and
   await page.getByRole('button',{name:'儲存修改',exact:true}).click();
   await expect(page.getByRole('button',{name:'確認儲存結果',exact:true})).toBeVisible();
   await expect(page.getByLabel('社群顯示名稱',{exact:true})).toBeDisabled();
-  await expect(page.getByRole('button',{name:'返回我的個人空間',exact:true})).toBeDisabled();
-  await page.goBack();await expect(page).toHaveURL(/#account$/);
+  await page.getByRole('combobox',{name:'我的檢視',exact:true}).selectOption('#me');await expect(page).toHaveURL(/#me\/settings$/);
+  await page.goBack();await expect(page).toHaveURL(/#me\/settings$/);
   await page.getByRole('button',{name:'確認儲存結果',exact:true}).click();
   await expect(page.getByText('修改已儲存。',{exact:true})).toBeVisible();
   expect(requests).toHaveLength(2);expect(requests[1]).toEqual(requests[0]);

@@ -16,10 +16,10 @@ async function scanQr(svg:Locator){
 }
 async function shareUrl(settings:Locator){const link=settings.getByRole('link',{name:'開啟名片',exact:true});await expect(link).toHaveAttribute('href',/\/member-cards\//);return (await link.getAttribute('href'))!;}
 async function signup(page:Page){
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill('Hao');await page.getByLabel('電子郵件',{exact:true}).fill(`editorial-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-editorial-password');await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
-  await quickJoin(page);await navigate(page,'我的名片');await openAccountSettings(page,'更換頭像','分享名片設定（免登入）','查看目前的會員名片');
+  await quickJoin(page);await navigate(page,'我的名片');
 }
 
 test('a dense public QR stays decodable and contained at phone and desktop widths',async({page})=>{
@@ -49,14 +49,16 @@ test('real profile fills the template, opt-in QR and downloaded image follow rot
     SELECT $1,community_id,user_id,'fixture',$2,'completed',$3,'不公開職業','{"private":"私人答案"}' FROM users WHERE user_id=$4`,[randomUUID(),'0'.repeat(64),JSON.stringify({capabilities:[],custom_capabilities:['產品設計','使用者體驗','開源共創'],featured_capabilities:['custom:產品設計','custom:使用者體驗','custom:開源共創'],equipment:['私人設備']}),account.user_id]);
   // A generated geometric avatar is test data, not a portrait of a real member.
   const avatar=await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#f6f8fb"/><circle cx="128" cy="96" r="48" fill="#3044ff"/><path d="M40 256v-35a88 88 0 0 1 176 0v35" fill="#08090b"/></svg>')).png().toBuffer();
+  await openAccountSettings(page,'更換頭像');
   await page.getByLabel('選擇頭像',{exact:true}).setInputFiles({name:'synthetic-avatar.png',mimeType:'image/png',buffer:avatar});
   await page.getByRole('button',{name:'保存頭像',exact:true}).click();
+  await expect(page.locator('.avatar-editor').getByRole('status')).toHaveText('頭像已保存，工坊夥伴現在可以看見。');
+  await openAccountSettings(page,'分享名片設定（免登入）');
   const settings=page.getByRole('region',{name:'分享我的工坊名片'}),preview=settings.getByRole('complementary',{name:'名片預覽'});
   await expect(settings.getByRole('button',{name:'工坊誌',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(preview.locator('.ecard-name')).toHaveText('Hao');await expect(preview.locator('.ecard-capabilities')).toContainText('使用者體驗');
   await expect(preview.getByRole('img',{name:'這張名片的專屬 QR Code'})).toHaveCount(0);await expect(preview.getByRole('img',{name:'Hao的頭像'})).toHaveCount(0);
   await settings.getByRole('checkbox',{name:'在分享頁顯示我的頭像'}).check();await expect(preview.getByRole('img',{name:'Hao的頭像'})).toBeVisible();
-  await settings.getByLabel('一句話介紹').fill('讓創意，成為一起完成的作品。');
   await settings.getByLabel('連結名稱',{exact:true}).fill('探索我的作品');await settings.getByLabel('連結網址',{exact:true}).fill('https://example.com/portfolio');await settings.getByRole('button',{name:'加入連結',exact:true}).click();
   await settings.getByRole('button',{name:'建立分享連結',exact:true}).click();
   const first=await shareUrl(settings);await expect(preview.getByRole('img',{name:'這張名片的專屬 QR Code'})).toBeVisible();
@@ -73,13 +75,22 @@ test('real profile fills the template, opt-in QR and downloaded image follow rot
     await downloaded.saveAs(`${SHOTS}/downloaded-card.png`);
     const firstOwnerDownload=page.waitForEvent('download');await preview.getByRole('button',{name:'下載名片 PNG',exact:true}).click();const ownerImageBefore=readFileSync((await (await firstOwnerDownload).path())!);
     const beforeAvatar=await preview.locator('.member-avatar img').getAttribute('src');
+    await openAccountSettings(page,'更換頭像');
     await page.getByLabel('選擇頭像',{exact:true}).setInputFiles({name:'updated-avatar.png',mimeType:'image/png',buffer:await sharp({create:{width:256,height:256,channels:3,background:'#3044ff'}}).png().toBuffer()});
-    await page.getByRole('button',{name:'保存頭像',exact:true}).click();await expect(preview.locator('.member-avatar img')).not.toHaveAttribute('src',beforeAvatar!);
+    await page.getByRole('button',{name:'保存頭像',exact:true}).click();
+    await expect(page.locator('.avatar-editor').getByRole('status')).toHaveText('頭像已保存，工坊夥伴現在可以看見。');
+    await openAccountSettings(page,'分享名片設定（免登入）');
+    await expect(preview.locator('.member-avatar img')).not.toHaveAttribute('src',beforeAvatar!);
     const afterAvatar=await preview.locator('.member-avatar img').getAttribute('src');expect(Number(new URL(afterAvatar!,page.url()).searchParams.get('v'))).toBeGreaterThan(Number(new URL(beforeAvatar!,page.url()).searchParams.get('v')));
     const secondOwnerDownload=page.waitForEvent('download');await preview.getByRole('button',{name:'下載名片 PNG',exact:true}).click();const ownerImageAfter=readFileSync((await (await secondOwnerDownload).path())!);
     expect(ownerImageAfter.equals(ownerImageBefore)).toBe(false);expect(await decode(ownerImageAfter)).toBe(first);
-    await settings.getByLabel('一句話介紹').fill('尚未保存的介紹');await expect(preview.getByRole('button',{name:'下載名片 PNG',exact:true})).toBeDisabled();
-    await expect(settings.locator('.ecard-save-status')).toContainText('已自動儲存，分享頁就是這個樣子。');await expect(preview.getByRole('button',{name:'下載名片 PNG',exact:true})).toBeEnabled();
+    let releaseSave=()=>{};const heldSave=new Promise<void>(resolve=>{releaseSave=()=>resolve();});let gated=false;
+    const gateHandler=async(route:import('@playwright/test').Route)=>{if(route.request().method()==='POST'&&!gated){gated=true;await heldSave;}await route.continue().catch(()=>{});};
+    await page.route('**/api/v1/me/member-card-share',gateHandler);
+    try{
+      await settings.getByRole('button',{name:'夜空',exact:true}).click();await expect(preview.getByRole('button',{name:'下載名片 PNG',exact:true})).toBeDisabled();
+      releaseSave();await expect(settings.locator('.ecard-save-status')).toContainText('已自動儲存，分享頁就是這個樣子。');await expect(preview.getByRole('button',{name:'下載名片 PNG',exact:true})).toBeEnabled();
+    }finally{releaseSave();await page.unroute('**/api/v1/me/member-card-share',gateHandler);}
     const oldImage=await guest.getByRole('img',{name:'Hao的頭像'}).getAttribute('src');
     await settings.getByRole('button',{name:'更新連結',exact:true}).click();await expect(settings.getByRole('link',{name:'開啟名片',exact:true})).not.toHaveAttribute('href',first);const second=await shareUrl(settings);
     expect(await scanQr(preview.locator('.ecard-qr svg'))).toBe(second);expect((await guest.request.get(oldImage!)).status()).toBe(404);
@@ -93,7 +104,10 @@ test('long names, absent avatar and empty optional fields fit mobile; profile ed
   test.setTimeout(120000);await signup(page);
   const settings=page.getByRole('region',{name:'分享我的工坊名片'}),preview=settings.getByRole('complementary',{name:'名片預覽'}),longName='W'.repeat(60);
   await page.locator('.account-settings').getByLabel('社群顯示名稱',{exact:true}).fill(longName);await page.getByRole('button',{name:'儲存修改',exact:true}).click();
+  await expect(page.locator('.account-settings').getByText('修改已儲存。',{exact:true})).toBeVisible();
+  await openAccountSettings(page,'分享名片設定（免登入）');
   await expect(preview.locator('.ecard-name')).toHaveText(longName);await settings.getByRole('button',{name:'建立分享連結',exact:true}).click();const url=await shareUrl(settings);
+  await openAccountSettings(page,'查看目前的會員名片');
   const privateCard=page.locator('.member-profile-card');
   for(const theme of ['light','dark','versefolk']){
     await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;window.dispatchEvent(new Event('freedom-theme-changed'));},theme);
@@ -112,7 +126,7 @@ test('long names, absent avatar and empty optional fields fit mobile; profile ed
 });
 
 test('export failure has a usable fallback and a retry stays available',async({page,browser})=>{
-  await signup(page);const settings=page.getByRole('region',{name:'分享我的工坊名片'});await settings.getByRole('button',{name:'建立分享連結',exact:true}).click();
+  await signup(page);await openAccountSettings(page,'分享名片設定（免登入）');const settings=page.getByRole('region',{name:'分享我的工坊名片'});await settings.getByRole('button',{name:'建立分享連結',exact:true}).click();
   const context=await browser.newContext(),guest=await context.newPage();try{
     await guest.goto(await shareUrl(settings));await expect(guest.locator('.ecard-qr')).toBeVisible();
     // Simulate the browser refusing canvas export rather than altering production code.

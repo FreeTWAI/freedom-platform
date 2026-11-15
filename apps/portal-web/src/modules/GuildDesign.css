@@ -375,7 +375,7 @@ html[data-theme="dark"] .guilds-panel .guild-application-status.is-declined { ba
 .guild-hub-next{grid-template-columns:minmax(0,1fr) fit-content(55%);column-gap:.75rem;padding-left:.65rem;border-left:3px solid var(--focus)}
 .guild-hub-next strong{grid-column:1;font-size:1.05rem}.guild-hub-next p{grid-column:1}.guild-hub-next .btn{grid-column:2;grid-row:1 / span 2;align-self:center;justify-self:start;min-width:0;max-width:100%;min-height:44px;white-space:normal;overflow-wrap:anywhere}
 .guild-membership-settings{border-top:1px solid var(--line);padding-top:.25rem;min-width:0}
-.guild-membership-settings summary{min-height:44px;padding:.6rem .25rem;cursor:pointer;font-size:.875rem;color:var(--muted)}
+.guild-membership-settings summary{min-height:44px;display:flex;align-items:center;padding:.6rem .25rem;cursor:pointer;font-size:.875rem;color:var(--muted)}
 .guild-membership-settings summary:hover,.guild-membership-settings summary:focus-visible{color:var(--ink)}
 .guild-membership-settings summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
 .guild-membership-settings[open]>.actions{padding-top:.5rem}

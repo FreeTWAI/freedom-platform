@@ -1,4 +1,5 @@
-import { test, before, after } from 'node:test';
+import {forgetFrameOrigins} from '../../modules/guild-tools/service.js';
+import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -22,19 +23,26 @@ import { currentImageProcessor } from '../../packages/shared/image-runtime.js';
 import { assertPublicDatabase, assertStagingDatabase } from '../../apps/platform-api/src/readiness.js';
 import { githubSocialCss, skillUploadProtocolMarkdown, skillUploadSkillMarkdown } from '../../apps/platform-api/src/generated/runtime-text.js';
 
+beforeEach(()=>forgetFrameOrigins());
+
+const leaseQuery=async(sql:string)=>{if(sql.includes('INSERT INTO github_feed_state'))return {rows:[{}]};if(sql.includes('DELETE FROM github_feed_state'))return {rows:[]};throw Error('unexpected query');};
 const SHA_A = 'a'.repeat(40), SHA_B = 'b'.repeat(40);
 const COMMUNITY = '10000000-0000-4000-8000-00000000000b';
 const SECRET_DSN = 'postgres://candidate_user:do-not-print@db.internal.example:5432/freedom_candidate_secret';
 const SHELL = '<!doctype html><title>shell</title>';
 
 /** Records every query and whether the request pool was ended; answers readiness probes. */
-function fakePool(facts: { name?: string; rolsuper?: boolean; community?: boolean; demo?: boolean; fail?: boolean; endFails?: boolean; emptyReads?: boolean } = {}) {
+function fakePool(facts: { name?: string; rolsuper?: boolean; community?: boolean; demo?: boolean; fail?: boolean; endFails?: boolean; emptyReads?: boolean; frameOriginsFail?: boolean } = {}) {
   const state = { queries: [] as string[], ended: 0 };
   const pool = {
     state,
     async query(sql: string) {
       state.queries.push(sql);
       if (facts.fail) throw new Error('connection refused ' + SECRET_DSN);
+      if (sql.includes('FROM guild_tools')) {
+        if (facts.frameOriginsFail) throw new Error('tool registry unavailable');
+        return { rows: [], rowCount: 0 };
+      }
       if (sql.includes('current_database()')) return { rows: [{ name: facts.name ?? 'freedom_candidate', rolsuper: facts.rolsuper ?? false }], rowCount: 1 };
       if (sql.includes('FROM communities')) return { rows: [], rowCount: facts.community === false ? 0 : 1 };
       if (sql.includes('@local.test')) return { rows: [], rowCount: facts.demo ? 1 : 0 };
@@ -404,6 +412,18 @@ test('static files and navigation fallback come from ASSETS with platform securi
   assert.equal((await missingShell.fetch('http://127.0.0.1:8787/guilds', bare)).status, 404);
 });
 
+test('tool origin read failure keeps the shell available and is cached briefly', async () => {
+  const h = harness({ frameOriginsFail: true }), e = env();
+  for (const path of ['/', '/play', '/play/']) {
+    const shell = await h.fetch('http://127.0.0.1:8787' + path, e);
+    assert.equal(shell.status, 200); assert.equal(await shell.text(), SHELL);
+    assert.equal(shell.headers.get('content-security-policy')!.split('frame-src ')[1].split(';')[0],
+      "'self' https://aisns.evitina.tw https://freetwai.github.io");
+  }
+  assert.equal(h.pools.flatMap(p => p.state.queries).filter(sql => sql.includes('FROM guild_tools')).length, 1);
+  await h.settle();
+});
+
 test('embedded public text is the canonical source and is served without filesystem access', async () => {
   execFileSync(process.execPath, ['scripts/generate-runtime-text.mjs', '--check']);
   assert.equal(githubSocialCss, readFileSync('apps/portal-web/src/modules/GitHubSocial.css', 'utf8'));
@@ -438,7 +458,7 @@ test('candidate origin: canonical, og, share, guidance and upload examples point
     assert.ok(upload.includes(`<link rel="canonical" href="${origin}/development/skill-upload">`) && upload.includes(`npm install -g ${origin}/downloads/freedom-skill-client.tgz`));
     const skillMd = await get('/development/skill-upload/SKILL.md'), protocol = await get('/development/skill-upload/protocol.md');
     assert.ok(skillMd.includes(`init --origin ${origin} --key-stdin`));
-    assert.ok(protocol.includes(`"submit_url": "${origin}/agent-api/v1/skill-submissions/`) && protocol.includes(`"review_url": "${origin}/#skills"`));
+    assert.ok(protocol.includes(`"submit_url": "${origin}/agent-api/v1/skill-submissions/`) && protocol.includes(`"review_url": "${origin}/#explore/resources"`));
     for (const [path, text] of Object.entries({ skillPage, pageHtml, pageSkill, upload, skillMd, protocol })) assert.deepEqual(liveLinks(text), [], `${origin} ${path}`);
   }
 });
@@ -511,7 +531,8 @@ test('startup readiness mirrors the Node public guard, isolates staging and cach
   const h = harness(), e = publicEnv();
   assert.equal((await h.fetch('https://next.freetwai.com/', e)).status, 200);
   assert.equal((await h.fetch('https://next.freetwai.com/', e)).status, 200);
-  assert.equal(h.pools[0].state.queries.length, 3); assert.equal(h.pools[1].state.queries.length, 0);
+  // The first shell read adds the enabled-tool origins query; the next uses its resolved cache.
+  assert.equal(h.pools[0].state.queries.length, 4); assert.equal(h.pools[1].state.queries.length, 0);
   // Failure is not cached: the next request checks again.
   const flaky = harness({ fail: true }), fe = publicEnv();
   await quietly(() => flaky.fetch('https://next.freetwai.com/', fe));
@@ -657,7 +678,7 @@ test('Worker commerce email requires EMAIL and COMMERCE_JOURNAL before opening a
   const { randomBytes } = await import('node:crypto');
   const dueDepsSeen: any[] = [];
   const sweepSeen: any[] = [];
-  const schedPool = { end: async () => {} } as unknown as Pool;
+  const schedPool = { query: leaseQuery, end: async () => {} } as unknown as Pool;
   const schedHandler = createWorkerHandler({
     createPool: () => schedPool,
     commerceApplyDeferred: async () => ({ applied: 0, failed: 0, skipped: 0 }),
@@ -742,7 +763,7 @@ test('order bell installation is default OFF, exact, checkout-dependent and shar
 test('scheduled offline expiry receives the order-notice port only when both flags are ON and quarantine stops due work',async()=>{
   const seen:unknown[]=[];
   const handler=createWorkerHandler({
-    createPool:()=>({end:async()=>{}} as unknown as Pool),
+    createPool:()=>({query:leaseQuery,end:async()=>{}} as unknown as Pool),
     commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),commerceSweep:async()=>0,
     commerceDueWork:async(_pool,deps)=>{seen.push(deps.orderNotifications);return {claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0};},
     commerceEmailSweep:async()=>({expired:0,deleted:0}),
@@ -774,11 +795,44 @@ test('categories flag is an exact default-OFF boolean requiring only guild launc
 
 test('scheduled contact retention runs with checkout OFF and during quarantine without dispatching business due work',async()=>{
  let privacy=0,business=0;
- const handler=createWorkerHandler({createPool:()=>({end:async()=>{}} as unknown as Pool),
+ const handler=createWorkerHandler({createPool:()=>({query:leaseQuery,end:async()=>{}} as unknown as Pool),
   commerceRetention:async()=>{privacy++;return {claimed:1,completed:1,failed:0,externalCalls:0,released:0,unknown:0};},
   commerceDueWork:async()=>{business++;throw Error('business work must stay quarantined');},
   syncGitHub:async()=>({requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'}),
   authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
  const pending:Promise<unknown>[]=[];await handler.scheduled({},stagingEnv({FREEDOM_COMMERCE_CONTACT_RETENTION:'all',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false',FREEDOM_COMMERCE_QUARANTINE:'true'}),{waitUntil:p=>{pending.push(p);}});await Promise.all(pending);
  assert.equal(privacy,1);assert.equal(business,0);
+});
+
+test('Worker installs the restricted guild tool transport without a signing key',async()=>{
+ const {workerGuildToolFetch}=await import('../../apps/platform-api/src/worker-guild-tool-fetch.js');
+ const configuration=env(),runtime=workerRuntime(configuration,readWorkerConfig(configuration));
+ assert.equal(runtime.guildToolFetch,workerGuildToolFetch);assert.equal(runtime.guildToolSigner,undefined);
+ await assert.rejects(runtime.guildToolFetch!('https://other.example.test/'),/tool_destination_rejected/);
+});
+
+test('Worker startup installs the generated optional signer once and hides exchange for absent or malformed secrets',async()=>{
+ const generated=execFileSync(process.execPath,['scripts/generate-guild-tool-signing-key.mjs'],{encoding:'utf8'});
+ for(const secret of [undefined,generated,'invalid:'+generated]){
+  const configuration=env({FREEDOM_GUILD_TOOL_SIGNING_KEY:secret}),signers:unknown[]=[],pending:Promise<unknown>[]=[];
+  const handler=createWorkerHandler({createPool:()=>fakePool() as unknown as Pool,createApp:(...args)=>{
+   signers.push(args[3]?.guildToolSigner);assert.equal(typeof args[3]?.guildToolFetch,'function');return createPlatformApp(...args);
+  }});
+  const {result:responses,logged}=await quietly(async()=>{
+   const results:Response[]=[];
+   for(let i=0;i<2;i++)results.push(await handler.fetch(new Request(configuration.APP_ORIGIN+'/.well-known/guild-tool-jwks.json'),configuration,{waitUntil:p=>pending.push(p)}));
+   await Promise.all(pending);return results;
+  });
+  assert.equal(signers.length,2);assert.equal(signers[0],signers[1]);
+  if(secret===generated){
+   assert.ok(signers[0]);assert.equal(responses[0].status,200);
+   const body=await responses[0].json() as {keys:Record<string,unknown>[]};assert.equal(body.keys.length,1);
+   assert.equal(body.keys[0].kid,JSON.parse(generated).kid);assert.equal(body.keys[0].d,undefined);assert.deepEqual(logged,[]);
+  }else{
+   assert.equal(signers[0],undefined);assert.equal(responses[0].status,503);
+   assert.deepEqual(logged,secret===undefined?[]:['guild_tool_signing_key_invalid']);
+  }
+  for(const response of responses){const body=response.bodyUsed?'':await response.text();assert.ok(!body.includes(JSON.parse(generated).d));}
+  assert.ok(!logged.join('\n').includes(JSON.parse(generated).d));
+ }
 });

@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { RepositoryLibrary } from './Community';
 import type { ModulePanelProps } from './shared';
-import { SkillUpload, type SkillOpenRequest } from './SkillUpload';
 import { CommunitySkillBooks } from './CommunitySkillBooks';
 import { GitHubConnectionSummary } from './GitHubSocial';
 
@@ -11,10 +10,7 @@ export function SkillsPanel({ client, onNavigate, onManageGitHub }: ModulePanelP
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [reload, setReload] = useState(0);
-  const [submissionsRevision,setSubmissionsRevision]=useState(0);
-  const [draftTick,setDraftTick]=useState(0);
-  const [openRequest,setOpenRequest]=useState<SkillOpenRequest | null>(null);
-  const openNonce = useRef(0);
+  const [submissionsRevision] = useState(0);
   const shown = useRef<string[] | null>(null), pending = useRef<string[] | null>(null), refocus = useRef(false), unlockedTab = useRef<HTMLButtonElement>(null);
   const guildHeading = useId(), communityHeading = useId();
   useEffect(() => {
@@ -55,21 +51,24 @@ export function SkillsPanel({ client, onNavigate, onManageGitHub }: ModulePanelP
   return <section className="module-panel skills-panel" aria-label="技能書目錄">
 
     <div className="skill-library-welcome">
-      <div><p className="eyebrow">從一個想做的事開始</p><p className="skill-library-lead">找到工具，讀懂做法，動手試試。</p><p className="muted">技能書是開源工具與實作指南。先看用途與準備事項，再依步驟練習；不需要先懂 GitHub。</p></div>
-      <div className="actions skill-library-jumps"><a className="btn btn-primary" href={`#${communityHeading}`} onClick={event=>{event.preventDefault();document.getElementById(communityHeading)?.scrollIntoView({block:'start'});document.getElementById(communityHeading)?.focus();}}>探索社群技能書 ↓</a><a className="btn btn-ghost" href={`#${guildHeading}`} onClick={event=>{event.preventDefault();document.getElementById(guildHeading)?.scrollIntoView({block:'start'});document.getElementById(guildHeading)?.focus();}}>查看公會技能書 ↓</a></div>
+      <div className="stack">
+        <p className="skill-library-lead">找到工具，讀懂做法，動手試試。</p>
+        <div className="actions skill-library-jumps"><a className="btn btn-ghost" href={`#${guildHeading}`} onClick={event=>{event.preventDefault();document.getElementById(guildHeading)?.scrollIntoView({block:'start'});document.getElementById(guildHeading)?.focus();}}>查看公會技能書 ↓</a></div>
+        <details className="skills-guide"><summary>說明</summary><div className="stack"><p className="muted">技能書是開源工具與實作指南。先看用途與準備事項，再依步驟練習；不需要先懂 GitHub。</p><p className="muted">社群技能書可自由閱讀與分享；公會指定技能書加入對應公會即可解鎖，未解鎖也能先免費預覽。</p></div></details>
+      </div>
     </div>
     <div className="skill-shelves">
       <section className="skill-shelf" aria-labelledby={communityHeading}>
         <header className="page-toolbar skill-shelf-heading">
-          <div><p className="eyebrow">自由探索，不需加入公會</p><h2 id={communityHeading} tabIndex={-1}>社群技能書</h2><p className="muted">社群成員分享的技能書，不需加入公會就能閱讀、分享與參與開發。</p></div>
-          <div className="actions"><button className="btn btn-ghost" onClick={() => onNavigate?.('opensource')}>投稿開源工具</button><SkillUpload client={client} openRequest={openRequest} onChanged={()=>setDraftTick(value=>value+1)} onPublished={()=>setSubmissionsRevision(value=>value+1)} secondary/></div>
+          <div><h2 id={communityHeading} tabIndex={-1}>社群技能書</h2></div>
+          <div className="actions"><button className="btn btn-ghost" onClick={() => onNavigate?.('opensource')}>投稿開源工具</button></div>
         </header>
-        <SkillDraftCallout client={client} revision={submissionsRevision+draftTick} onOpen={(submissionId, mode) => { openNonce.current += 1; setOpenRequest({ submissionId, mode, nonce: openNonce.current }); }}/>
+        <SkillDraftCallout client={client} revision={submissionsRevision} onOpen={(submissionId) => { const nextHash = `#opensource?submission=${encodeURIComponent(submissionId)}`; if (onNavigate) onNavigate('opensource', nextHash); else window.location.hash = nextHash; }}/>
         <CommunitySkillBooks client={client} revision={submissionsRevision} guildIds={ids ?? []}/>
       </section>
       <section className="skill-shelf" aria-labelledby={guildHeading}>
         <header className="page-toolbar skill-shelf-heading">
-          <div><p className="eyebrow">跟著公會練習</p><h2 id={guildHeading} tabIndex={-1}>公會指定技能書</h2><p className="muted">依公會主題整理，加入對應公會即可解鎖；未解鎖也能先免費預覽。</p></div>
+          <div><h2 id={guildHeading} tabIndex={-1}>公會指定技能書</h2></div>
           <div className="scope-tabs" role="group" aria-label="技能書範圍">
             <button data-guide-anchor="skills:unlocked" ref={unlockedTab} className="btn btn-ghost" aria-pressed={scope === 'unlocked'} onClick={() => setScope('unlocked')}>已解鎖{ids ? ` · ${ids.length}` : ''}</button>
             <button data-guide-anchor="skills:locked" className="btn btn-ghost" aria-pressed={scope === 'locked'} onClick={() => setScope('locked')}>未解鎖</button>
@@ -79,7 +78,7 @@ export function SkillsPanel({ client, onNavigate, onManageGitHub }: ModulePanelP
         {error && <div role="alert" className="banner banner-error">{error}<button className="btn btn-ghost" onClick={() => setReload(value => value + 1)}>重新載入解鎖紀錄</button></div>}
         {ids === null ? !error && <p role="status">正在載入解鎖紀錄…</p>
           : <>
-            {(scope === 'locked' || ids.length === 0) && <div className="skill-unlock-prompt"><p>{scope === 'locked'?'加入公會即可解鎖對應技能書，也可先免費預覽。':'還沒有已解鎖的技能書。加入公會即可領取，也可先免費預覽。'}</p><div className="actions"><button className="btn btn-ghost" onClick={() => onNavigate?.('guilds')}>選擇公會</button>{scope === 'unlocked' && <button className="btn btn-primary" onClick={() => setScope('locked')}>免費預覽技能書</button>}</div></div>}
+            {(scope === 'locked' || ids.length === 0) && <div className="skill-unlock-prompt"><p>{scope === 'locked' ? '加入公會即可解鎖，也可免費預覽。' : '尚未解鎖，加入公會即可領取。'}</p><div className="actions"><button className="btn btn-ghost" onClick={() => onNavigate?.('guilds')}>選擇公會</button>{scope === 'unlocked' && <button className="btn btn-primary" onClick={() => setScope('locked')}>免費預覽技能書</button>}</div></div>}
             {(scope === 'locked' || ids.length > 0) && <RepositoryLibrary key={scope} client={client} ids={scope === 'unlocked' ? ids : undefined} excludeIds={scope === 'locked'?ids:undefined} access={scope} title={scope === 'unlocked' ? '已解鎖技能書' : '未解鎖技能書'} shelf="guild" headingLevel={3} compact/>}
           </>}
       </section>
@@ -135,5 +134,5 @@ function SkillDraftCallout({ client, revision, onOpen }: { client: ModulePanelPr
       setError(cause instanceof Error ? cause.message : '升級沒有完成。');
     } finally { setBusy(false); }
   }
-  return <div className="banner banner-info skill-draft-callout" role="status"><p>{view.text}</p><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void open()}>{view.label}</button>{error && <p role="alert" className="banner banner-error">{error}</p>}</div>;
+  return <div className="banner banner-info skill-draft-callout" role="status"><p>{view.text}</p><button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void open()}>{view.label}</button>{error && <p role="alert" className="banner banner-error">{error}</p>}</div>;
 }

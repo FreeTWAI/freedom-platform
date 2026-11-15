@@ -41,7 +41,9 @@
 .review-center .review-row-main > .btn,
 .review-center > .btn { justify-self: start; align-self: start; width: fit-content; max-width: 100%; }
 .review-center .review-settings { min-width: 0; }
+.review-center details > summary,
 .review-center .review-settings > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: .875rem; }
+.review-center details > summary:focus-visible,
 .review-center .review-settings > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .review-center input, .review-center select, .review-center textarea { max-width: 100%; }
 .review-center .checkbox-row { min-height: 44px; align-items: center; }

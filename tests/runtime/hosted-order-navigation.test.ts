@@ -2,6 +2,17 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {createRequire} from 'node:module';
+import {transformSync as transformPlace} from 'esbuild';
+import {runInNewContext as runPlace} from 'node:vm';
+import {readFileSync as readPlace} from 'node:fs';
+const placeUrl=new URL('../../apps/portal-web/src/features/PlaceView.tsx',import.meta.url);
+const placeRequire=createRequire(placeUrl),placeModule={exports:{} as any};
+runPlace(transformPlace(readPlace(placeUrl,'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{
+ module:placeModule,exports:placeModule.exports,require:(id:string)=>id==='../frame-tools/RegisteredTools'?{RegisteredTools:()=>null}:placeRequire(id),
+});
+const PlaceView=placeModule.exports.PlaceView;
+import type {PortalFeatureContext} from '../../apps/portal-web/src/features/types.js';
 import {Navigation, TAB_TITLES} from '../../apps/portal-web/src/Navigation.js';
 import {interfaceText, LANGUAGES} from '../../apps/portal-web/src/language.js';
 import {buyerOrderNotificationAction,orderNotificationDestination,sellerOrderNotificationAction} from '../../modules/agent-commerce/checkout/notification-action.js';
@@ -19,7 +30,10 @@ test('buyer order navigation uses the order-list label in every supported langua
   assert.equal(interfaceText('zh-Hant', 'nav.reservations'), TAB_TITLES.reservations);
   const markup = renderToStaticMarkup(createElement(Navigation, {current: 'reservations', onSelect() {},
     canManageGuild: false, guildLaunchpadEnabled: false, communitySearchEnabled: false, personalContentEnabled: false, mobileOpen: true}));
-  assert.match(markup, /購買與預留紀錄/);
+  assert.match(markup, /aria-current="page">我的<\/button>/);
+  const context={locationHash:'#me/orders',site:null,selectTab(){}} as unknown as PortalFeatureContext;
+  const orders=renderToStaticMarkup(createElement(PlaceView,{context,defaultTab:'reservations',render:(tab:string)=>{assert.equal(tab,'reservations');return null;}}));
+  assert.match(orders, /<option value="#me\/orders" selected="">訂單<\/option>/);
   assert.doesNotMatch(markup, /查詢我的預留/);
 });
 

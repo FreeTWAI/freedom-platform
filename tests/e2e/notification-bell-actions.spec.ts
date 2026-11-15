@@ -7,7 +7,7 @@ async function login(page:Page,email:string){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
 }
 async function inviteMaker(page:Page){
   const status=await page.evaluate(async()=>{
@@ -58,7 +58,7 @@ test('clicking an older notification opens its friend response beyond the first 
   const read=await readResponse;
   expect(read.status()).toBe(200);
   expect((await read.json()).read_at).toEqual(expect.any(String));
-  await expect(page).toHaveURL(/#members$/);
+  await expect(page).toHaveURL(/#explore\/people$/);
   await expect(popover).toBeHidden();
   await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName(`通知，${unreadBefore-1} 則未讀`);
   const afterResponse=await page.request.get('/api/v1/me/notifications?limit=6&offset=0');
@@ -77,6 +77,9 @@ test('clicking an older notification opens its friend response beyond the first 
   await page.screenshot({path:'test-results/notification-action-phone.png'});
   await page.getByRole('button',{name:'查看完整好友邀請',exact:true}).click();
   const friends=page.locator('.friends-panel');
+  const filters=friends.locator('.friends-filters');
+  await expect(filters).toBeVisible();
+  if(!(await filters.evaluate(element=>(element as HTMLDetailsElement).open)))await filters.locator('> summary').click();
   await expect(friends.getByRole('button',{name:'收到的邀請',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(friends.getByRole('button',{name:'接受邀請',exact:true})).toHaveCount(20);
   await expect(friends.getByText('共 102 則邀請等你回覆',{exact:true})).toBeVisible();

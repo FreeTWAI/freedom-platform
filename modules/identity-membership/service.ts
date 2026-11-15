@@ -5,6 +5,7 @@ import { Problem, requireCondition } from '../../packages/shared/problem.js';
 import { consumeTotp, lockTotp } from './totp.js';
 
 export interface Actor {
+  agent?: {connection_id:string;token_hash:string;scopes:string[];scope?:string;operation?:string;public_item?:boolean};
   user_id: string; community_id: string; email: string; display_name: string;
   profession_membership_ref: string; session_hash: string; csrf_token: string;
   onboarding_required?: boolean; onboarding_completed_at?: string|null;

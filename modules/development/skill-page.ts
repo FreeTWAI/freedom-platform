@@ -82,13 +82,16 @@ html.skill-page .sp-title[data-size="long"]{font-size:clamp(1.85rem,3.4vw,2.7rem
 .sp-title .sp-rest{color:var(--sp-ink-soft);font-weight:800}
 .sp-headline{margin:0 0 18px;font-size:clamp(1.25rem,2.3vw,1.7rem);font-weight:850;line-height:1.45;letter-spacing:-.01em}
 .sp-headline span{padding:0 .12em;background:linear-gradient(transparent 60%,var(--sp-lime) 60%,var(--sp-lime) 94%,transparent 94%);-webkit-box-decoration-break:clone;box-decoration-break:clone}
-html.skill-page .public-skill-purpose{max-width:38em;margin:0 0 30px;color:var(--sp-ink-soft);font-size:1.1rem;line-height:1.8}
-html.skill-page .public-skill-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px}
-html.skill-page .public-skill-actions a{box-sizing:border-box;max-width:100%;min-height:48px;padding:10px 20px;border:1px solid var(--sp-ink);border-radius:999px;background:rgba(255,255,255,.5);color:var(--sp-ink);font-size:.92rem;font-weight:850;text-decoration:none;transition:transform .16s ease}
-html.skill-page .public-skill-actions a:first-child{background:var(--sp-ink);border-color:var(--sp-ink);color:#fff;box-shadow:0 8px 24px rgba(17,29,25,.18)}
-html.skill-page .public-skill-actions a:first-child::after{content:"↓";margin-left:8px}
-html.skill-page .public-skill-actions a:nth-child(n+3){padding:10px 6px;border-color:transparent;background:none;text-decoration:underline;text-underline-offset:.3em}
-html.skill-page .public-skill-actions a:hover{transform:translateY(-2px)}
+html.skill-page .public-skill-purpose{max-width:38em;margin:20px 0 0;color:var(--sp-ink-soft);font-size:1.05rem;line-height:1.8}
+html.skill-page .public-skill-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;margin:20px 0 0}
+html.skill-page .public-skill-actions>a{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;max-width:100%;min-height:48px;padding:10px 20px;border:1px solid var(--sp-ink);border-radius:999px;background:rgba(255,255,255,.5);color:var(--sp-ink);font-size:.92rem;font-weight:850;text-decoration:none;transition:transform .16s ease}
+html.skill-page .public-skill-actions>a:first-child{background:var(--sp-ink);border-color:var(--sp-ink);color:#fff;box-shadow:0 8px 24px rgba(17,29,25,.18)}
+html.skill-page .public-skill-actions>a:first-child::after{content:"↓";margin-left:8px}
+html.skill-page .public-skill-actions>a.sp-share-launch{border-color:var(--sp-line-strong);background:var(--sp-card);color:var(--sp-ink)}
+html.skill-page .public-skill-actions>a:last-child:not(:first-child){padding:10px 14px;border-color:var(--sp-line-strong);background:rgba(255,255,255,.5);text-decoration:none}
+html.skill-page .public-skill-actions>a:hover{transform:translateY(-2px)}
+html.skill-page .public-skill-actions .public-github-social{margin:0;padding:0;border:0;border-radius:0;background:none}
+html.skill-page .public-skill-actions .public-skill-support>a,html.skill-page .public-skill-actions .github-book-social .skill-book-star{min-height:48px;padding:10px 18px;border:1px solid var(--sp-line-strong);border-radius:999px;background:var(--sp-card);color:var(--sp-ink);font-size:.92rem;font-weight:800}
 .sp-hero-notes{margin-top:24px;color:var(--sp-ink-soft);font-size:.86rem;font-weight:650}
 .sp-hero-notes p{margin:0 0 8px}
 html.skill-page .public-skill-badges{margin:10px 0 0;gap:8px}
@@ -278,4 +281,21 @@ html.skill-page .sp-author-dialog .ecard footer{box-sizing:border-box;width:100%
 .sp-author-dialog .member-avatar{display:grid;place-items:center;overflow:hidden;background:var(--ecard-accent);color:var(--ecard-surface);font-size:1.6rem;font-weight:800}
 .sp-author-dialog .member-avatar img{width:100%;height:100%;object-fit:cover}
 @media(max-width:480px){html.skill-page .public-skill-entry>.sp-hero{padding-top:28px}.sp-engagement{gap:12px;margin-bottom:22px}.sp-author-dialog{padding:14px}.sp-author-dialog-head{top:-14px}.sp-engagement-actions{width:100%}}
+.sp-original-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:0 0 8px;color:var(--sp-ink-soft);font-size:.9rem;font-weight:700}
+.sp-original-bar .sp-author{margin-right:0}
+.sp-original-stat{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border:1px solid var(--sp-line-strong);border-radius:999px;background:var(--sp-card);color:var(--sp-ink);font-size:.82rem;font-variant-numeric:tabular-nums;text-decoration:none}
+.sp-upstream-notice{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:12px 0 4px;padding:8px 14px;border:1px solid rgba(42,89,201,.35);border-radius:12px;background:var(--sp-info-soft);color:var(--sp-ink);font-size:.9rem;font-weight:750}
+.sp-upstream-notice a{color:var(--sp-info);font-weight:850}
+.sp-readme-cache{margin-top:28px;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:20px;background:var(--sp-dark-2)}
+.sp-readme-cache h3{margin:0 0 16px;font-size:1.05rem}
+.sp-readme-body{color:#d8e2dc;line-height:1.75;overflow-wrap:anywhere}
+.sp-readme-body :is(img,svg,table,pre){max-width:100%;height:auto}
+.sp-readme-body pre{overflow:auto;padding:16px;border-radius:12px;background:#0a120f;border:1px solid rgba(255,255,255,.14)}
+.sp-notes-banner{margin:0 0 20px;padding:14px 18px;border:1px solid rgba(59,104,0,.28);border-radius:14px;background:var(--sp-lime-soft);color:var(--sp-ink);font-size:.92rem;font-weight:700}
+.sp-usage-notes .public-skill-cover{width:96px;max-width:none;margin:16px 0}
+html.skill-page .sp-usage-notes .public-skill-cover img{width:96px;height:64px;max-height:none;aspect-ratio:3/2;border:1px solid var(--sp-line);border-radius:12px}
+.sp-usage-notes .sp-headline,.sp-usage-notes .public-skill-purpose{margin:14px 0}
+.sp-usage-notes .public-skill-introduction{margin:20px 0}
+.sp-share-panel{margin-top:16px}
+.sp-share-panel>summary{cursor:pointer;font-weight:750;min-height:44px;display:flex;align-items:center}
 `;

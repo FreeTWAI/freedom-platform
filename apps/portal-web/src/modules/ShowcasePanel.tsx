@@ -1,14 +1,16 @@
+import {currentLegacyHash} from '../portal-route';
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { requireItems } from '../api'
 import { client, usePortal, describeError, type ActionError, type PortalContextValue } from '../portal-session'
 import { Section, EmptyState, ErrorPanel } from '../portal-feedback'
-import { WorkSharingEntry } from './WorkSharingEntry'
+import { WorkPublicSharing } from './WorkPublicSharing'
 import { looksLikeUrl, opportunityStateLabel, parseMajorToMinor } from '../format'
 import type { Opportunity, Showcase } from '../types'
 import { authoringDraftState, useAuthoringDraft } from './authoring-drafts'
 import { useModuleMutation } from './shared'
 import {EventOutcomeBacklinks} from './EventOutcomeBacklinks';
 import { useShowcaseEditor, showcaseBody, showcaseInput, performShowcaseRequest, reconcilePublishedShowcase, type PersonalShowcase, type ShowcaseInput, type ShowcaseRequest } from './showcase-drafts'
+import './WorkSharing.css'
 export type { PersonalShowcase } from './showcase-drafts'
 
 const SHOWCASE_PAGE = 20
@@ -26,6 +28,7 @@ export function ShowcasePanel() {
   const [moreLoading, setMoreLoading] = useState(false)
   const [moreError, setMoreError] = useState<ActionError | null>(null)
   const [opportunities, setOpportunities] = useState<Opportunity[] | null>(null)
+  const [opportunityLimit, setOpportunityLimit] = useState(20)
   const [published, , current] = useAuthoringDraft<Showcase | null>(session.user.user_id, 'showcase:published', null)
   const [latestOpportunity] = useAuthoringDraft<Opportunity | null>(session.user.user_id, 'opportunity:latest', null)
   const loadSequence = useRef(0)
@@ -100,8 +103,8 @@ export function ShowcasePanel() {
   }, [loading, nextOffset, moreLoading])
   useEffect(() => {
     const reveal = () => {
-      const id = window.location.hash.slice('#showcase/'.length);
-      if (!window.location.hash.startsWith('#showcase/') || !showcases) return;
+      const id = currentLegacyHash().slice('#showcase/'.length);
+      if (!currentLegacyHash().startsWith('#showcase/') || !showcases) return;
       // A deep link may point past the first page: keep paging until it appears or the list ends.
       if (!showcases.some(item => item.showcase_id === id)) { if (nextOffset !== null && !moreError) void loadMore(); return; }
       const card = document.getElementById(`showcase-${id}`);
@@ -119,13 +122,12 @@ export function ShowcasePanel() {
   }
 
   return (
-    <div className="panels">
-      <WorkSharingEntry current="showcase" />
+    <div className="panels showcase-panel">
       <CreateShowcaseForm pending={pending} onCreated={created => setShowcases(items => [created, ...(items ?? []).filter(item => item.showcase_id !== created.showcase_id)])} />
       <Section title="社群作品" description="看看夥伴的作品，找到適合一起合作的人。">
         <div data-share-entry="collaboration" tabIndex={-1}>
         {showcases.length === 0 ? (
-          <EmptyState title="把第一件作品放上來" body="設計、影片、文章、工具都可以。分享後，社群成員可以向你提出合作需求。" />
+          <EmptyState title="還沒有作品" body="點擊上方發布第一件作品。" />
         ) : (
           <div className="card-grid">
             {showcases.map((showcase) => (
@@ -133,6 +135,7 @@ export function ShowcasePanel() {
                 key={showcase.showcase_id}
                 showcase={showcase}
                 mine={isMe(showcase.owner_ref)}
+                onReload={load}
                 pending={pending}
               />
             ))}
@@ -144,10 +147,11 @@ export function ShowcasePanel() {
       </Section>
       <Section data-guide-anchor="showcase:opportunities" title="與你相關的商機" description="只顯示你是提出者或作品作者的商機。">
         {opportunities.length === 0 ? (
-          <EmptyState title="還沒有商機" body="從其他人的作品提出需求後，雙方才會在這裡看到。" />
+          <EmptyState title="還沒有商機" body="從作品提出需求會在此顯示。" />
         ) : (
+          <>
           <div className="card-grid">
-            {opportunities.map((opportunity) => (
+            {opportunities.slice(0, opportunityLimit).map((opportunity) => (
               <OpportunityCard
                 key={opportunity.opportunity_id}
                 opportunity={opportunity}
@@ -157,6 +161,8 @@ export function ShowcasePanel() {
               />
             ))}
           </div>
+          {opportunities.length > opportunityLimit && <div className="actions"><button type="button" className="btn btn-secondary" onClick={() => setOpportunityLimit(count => count + 20)}>更多</button></div>}
+          </>
         )}
       </Section>
     </div>
@@ -180,6 +186,19 @@ function CreateShowcaseForm({
   const success = useRef<HTMLElement>(null)
   useEffect(() => { if (published) success.current?.focus() }, [published])
   const [consent, setConsent] = useAuthoringDraft(userId, 'showcase:consent', false)
+  const [open, setOpen] = useState(() => Boolean(title || description || publicUrl || artifactRef || consent))
+  const titleInput = useRef<HTMLInputElement>(null)
+  const createTrigger = useRef<HTMLButtonElement>(null)
+  const pendingFocus = useRef<'title' | 'trigger' | null>(null)
+  useEffect(() => {
+    if (open && pendingFocus.current === 'title') {
+      pendingFocus.current = null
+      titleInput.current?.focus()
+    } else if (!open && pendingFocus.current === 'trigger') {
+      pendingFocus.current = null
+      createTrigger.current?.focus()
+    }
+  }, [open])
   const [formError, setFormError] = useState<string | null>(null)
   const authoring = useModuleMutation(client, { userId, type: 'showcase' })
   const busy = Boolean(pending) || authoring.busy
@@ -216,9 +235,42 @@ function CreateShowcaseForm({
     }
   }
 
+  if (!open) {
+    return (
+      <div className="actions work-sharing-entry">
+        <button
+          ref={createTrigger}
+          type="button"
+          className="btn btn-primary"
+          data-guide-anchor="showcase:create"
+          disabled={Boolean(pending)}
+          onClick={() => {
+            pendingFocus.current = 'title'
+            setOpen(true)
+          }}
+        >
+          發布作品
+        </button>
+      </div>
+    )
+  }
+
   return (
     <section className="card stack work-sharing-form">
-      <h2>分享作品</h2>
+      <div className="section-head">
+        <h2>分享作品</h2>
+        <button
+          type="button"
+          className="btn btn-secondary btn-small"
+          disabled={busy}
+          onClick={() => {
+            pendingFocus.current = 'trigger'
+            setOpen(false)
+          }}
+        >
+          取消
+        </button>
+      </div>
       <p className="lede">寫名稱、說用途，就能讓社群看到你的作品。</p>
       {published && <section ref={success} tabIndex={-1} className="work-sharing-success stack" aria-label="作品發布成功">
         <h3>「{published.title}」已分享！</h3><p>社群成員可以看見這件作品，並向你提出合作需求。</p>
@@ -232,7 +284,7 @@ function CreateShowcaseForm({
       <form className="stack" aria-busy={busy} onSubmit={(event) => void onSubmit(event)}>
         <label className="field">
           <span className="field-label">作品標題</span>
-          <input required maxLength={120} data-guide-anchor="showcase:title" placeholder="例如：我的品牌識別設計" value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} />
+          <input ref={titleInput} required maxLength={120} data-guide-anchor="showcase:title" placeholder="例如：我的品牌識別設計" value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} />
         </label>
         <label className="field">
           <span className="field-label">一句話介紹</span>
@@ -260,8 +312,10 @@ function ShowcaseCard({
   showcase,
   mine,
   pending,
+  onReload,
 }: {
   showcase: Showcase
+  onReload: () => Promise<void>
   mine: boolean
   pending: string | null
 }) {
@@ -305,6 +359,7 @@ function ShowcaseCard({
         </div>
       </dl>
       {showcase.public_url && <div className="actions"><a className="btn btn-ghost" href={showcase.public_url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">查看作品 ↗</a></div>}
+      {mine && <WorkPublicSharing showcaseId={showcase.showcase_id} title={showcase.title} workVersion={showcase.aggregate_version} status="published" onReload={onReload} />}
       <details><summary>成果紀錄</summary><code>{showcase.artifact_ref}</code></details>
       {authoring.error && <p className="banner banner-error" role="alert">{authoring.error}</p>}
       {submitted && <section className="stack" role="status" aria-label="合作需求已送出"><p>已送出合作需求。這是你與作品作者的合作需求，不是公開貼文。</p><div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => { const card = document.getElementById(`opportunity-${submitted.opportunity_id}`); card?.scrollIntoView({ block: 'center', behavior: 'instant' }); card?.focus(); }}>查看這份合作需求</button></div></section>}
@@ -314,7 +369,7 @@ function ShowcaseCard({
       ) : (
         <div className="actions">
           {!open ? (
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setOpen(true)}>
+            <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setOpen(true)}>
               我想找你合作
             </button>
           ) : (
@@ -324,7 +379,7 @@ function ShowcaseCard({
                 <textarea required rows={3} value={need} onChange={(event) => setNeed(event.target.value)} disabled={busy} />
               </label>
               <div className="actions">
-                <button className="btn btn-primary" type="submit" disabled={busy}>
+                <button className="btn btn-secondary" type="submit" disabled={busy}>
                   送出合作需求
                 </button>
                 <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setOpen(false)}>
@@ -410,7 +465,7 @@ function OpportunityCard({
       {provider && opportunity.state === 'open' && (
         <div className="actions">
           {!open ? (
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setOpen(true)}>
+            <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setOpen(true)}>
               提出合作
             </button>
           ) : (
@@ -434,7 +489,7 @@ function OpportunityCard({
                 <span className="field-hint">這是雙方約定價格，不是已收款。超過兩位小數會被拒絕，不會四捨五入。</span>
               </label>
               <div className="actions">
-                <button className="btn btn-primary" type="submit" disabled={busy}>
+                <button className="btn btn-secondary" type="submit" disabled={busy}>
                   送出合作提案
                 </button>
                 <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setOpen(false)}>
@@ -449,7 +504,7 @@ function OpportunityCard({
   )
 }
 
-export function ShowcaseDraftEditor({ id, onChanged, onClose }: { id: string | null; onChanged: () => void; onClose: () => void }) {
+export function ShowcaseDraftEditor({ id, onChanged, onClose }: { id: string | null; onChanged: (id?: string) => void; onClose: () => void }) {
   const { session } = usePortal()
   const userId = session.user.user_id
   const [{ row, input, busy, error, notice, conflict, confirm, consent, retry }, state] = useShowcaseEditor(userId, id)
@@ -494,7 +549,7 @@ export function ShowcaseDraftEditor({ id, onChanged, onClose }: { id: string | n
   async function execute(request: ShowcaseRequest) {
     const current = generation.current
     const result = await performShowcaseRequest(client, userId, state, request)
-    if (result && state.live() && current === generation.current) onChanged()
+    if (result && state.live() && current === generation.current) onChanged(result.showcase_id)
   }
   function save(event: React.FormEvent) {
     event.preventDefault()
@@ -524,6 +579,7 @@ export function ShowcaseDraftEditor({ id, onChanged, onClose }: { id: string | n
       <div className="actions">{row?.status !== 'published' && <button className="btn btn-secondary btn-small" disabled={disabled || conflict}>儲存私人草稿</button>}{row && row.status !== 'published' && <button type="button" className="btn btn-secondary btn-small" disabled={disabled || conflict || dirty} onClick={() => { setConfirm(true); setConsent(false) }}>確認發布範圍</button>}{row && row.status !== 'withdrawn' && <button type="button" className="btn btn-secondary btn-small" disabled={disabled || conflict} onClick={() => command('withdraw')}>撤下作品</button>}</div>
       {row?.status !== 'published' && dirty && <p className="hint">先儲存目前輸入，才可確認發布。</p>}
       {confirm && <section className="stack" aria-label="確認作品發布"><h3>發布為會員可見</h3><p>只有本社群會員可見，不提供「僅分享連結」或「公開可索引」發布範圍。</p><label className="choice"><input type="checkbox" checked={consent} disabled={disabled} onChange={event => setConsent(event.target.checked)}/>我同意將已儲存版本分享給本社群會員</label><div className="actions"><button type="button" className="btn btn-primary btn-small" disabled={disabled || !consent || dirty || conflict} onClick={() => command('publish')}>確認發布</button><button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={() => { setConfirm(false); setConsent(false) }}>取消發布</button></div></section>}
+      {row?.status === 'published' && <WorkPublicSharing showcaseId={row.showcase_id} title={row.title} workVersion={dirty ? undefined : row.aggregate_version} status={row.status} onReload={() => reload(false)} />}
     </form>}
     {!loading && id && !row && <div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => void reload(false)}>重新載入作品</button></div>}
   </section>

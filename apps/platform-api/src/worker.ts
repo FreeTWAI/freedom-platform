@@ -1,3 +1,7 @@
+import { installWorkerGuildToolSigner, type GuildToolSigningBindings } from './worker-guild-tool-signer.js';
+import { workerGuildToolFetch } from './worker-guild-tool-fetch.js';
+import { withSendLimit } from './mail-send-limit.js';
+import { refreshDueRepositories } from '../../../modules/shares/repository-cache.js';
 import {runContactRetentionWork} from '../../../modules/agent-commerce/operations/contact-retention.js';
 import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefront-gallery.js';
 import {createStorefrontAppearanceLifecycle} from '../../../modules/assets/storefront-appearance.js';
@@ -46,7 +50,7 @@ import { commerceCheckoutQueryDeps } from './routes/hosted-checkout.js';
 import { GITHUB_SYNC_REQUEST_BUDGET, syncGitHubRepositories } from '../../../modules/community/github-sync.js';
 import {refreshGuildDiscoveryReports} from '../../../modules/community/guild-discovery.js';
 import {pruneExpiredAuthRecords} from '../../../modules/identity-membership/auth-pruning.js';
-import {processEventWaitlist} from '../../../modules/community/event-waitlist.js';
+import {processEventWaitlist,processEventNotices} from '../../../modules/community/event-waitlist.js';
 import {processEventReminders} from '../../../modules/community/event-reminders.js';
 import {createEventVideoAssetService,resolveEventVideoUploadPolicy} from '../../../modules/assets/event-video.js';
 import {createEventBannerAssetService,resolveEventBannerUploadPolicy} from '../../../modules/assets/event-banner.js';
@@ -72,7 +76,7 @@ import { workerPreviewFetch } from './worker-preview-fetch.js';
  * Secrets arrive as bindings and are only passed into explicit per-request
  * options; process.env is never read or written here.
  */
-export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
+export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings,GuildToolSigningBindings {
   COMMERCE_CREDENTIAL_KEYS?:string;
   FREEDOM_COMMERCE_CHECKOUT_ENABLED?:string;
   FREEDOM_COMMERCE_SELF_SHIP_ENABLED?:string;
@@ -302,6 +306,14 @@ export function workerAdminVerifier(env: WorkerEnv): AdminAccessVerifier {
   try { return createAdminAccessVerifier({ issuer, audience, csrfSecret }); } catch { return unavailable; }
 }
 
+const limitedEventEmailSender=(binding:NonNullable<WorkerEnv['EMAIL']>)=>withSendLimit(async(to:string,subject:string,text:string)=>{
+  await binding.send({to,from:'no-reply@mail.freetwai.com',subject,text});
+});
+const limitedCommerceEmailSender=(binding:NonNullable<WorkerEnv['EMAIL']>)=>{
+  const raw=createWorkerEmailSender(binding);
+  return {send:withSendLimit(raw.send.bind(raw))};
+};
+
 export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{queryTransport?:PaymentQueryTransport}={}): PlatformRuntime {
   const settings=config.commerceSettings??readCommerceSettings(env),environment=providerEnvironment(config.freedomEnv),admission=createStoreAdmissionPort(environment,settings.providerProfiles);
   const queryTransport=options.queryTransport??createEcpayQueryTransport();
@@ -310,7 +322,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
   const payments=ecpayListed&&journal?{gateway:createEcpayPaymentGateway(environment,config.origin),journal,profiles:settings.providerProfiles}:undefined;
   const cardPorts=payments?createCheckoutPaymentPorts({environment,admission,settings,...payments,keyring:config.commerceCredentialKeyring??null},commerceCheckoutQueryDeps({transport:queryTransport,keyring:config.commerceCredentialKeyring??null,freedomEnv:config.freedomEnv,quarantine:settings.quarantine,emailEnabled:settings.emailEnabled})):undefined;
   const paymentMethods=settings.providerProfiles.length?createPaymentMethodsPort({environment,profiles:settings.providerProfiles,card:cardPorts?.payment}):undefined;
-  const emailSender=settings.emailEnabled&&env.EMAIL?createWorkerEmailSender(env.EMAIL):undefined;
+  const emailSender=settings.emailEnabled&&env.EMAIL?limitedCommerceEmailSender(env.EMAIL):undefined;
   const community = env.FREEDOM_REGISTRATION_COMMUNITY_ID || undefined, tokenKey = env.GITHUB_SOCIAL_TOKEN_KEY || undefined;
   const metricsToken = env.GITHUB_METRICS_TOKEN || undefined;
   const maintainerWebhookSecret = env.GITHUB_MAINTAINER_WEBHOOK_SECRET || undefined;
@@ -338,11 +350,12 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     publicOrigin: config.origin,
     guildReviewer: guildReviewerFromBindings(env),
     passwordEmailSender:env.FREEDOM_PASSWORD_RESET_EMAIL_ENABLED==='true'&&env.EMAIL
-      ?async(to,url)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject:'自由工坊：重設密碼',text:`有人申請重設自由工坊帳號的密碼。\n\n請在 30 分鐘內開啟以下連結：\n${url}\n\n若不是你提出申請，請忽略此信。`});}
+      ?withSendLimit(async(to,url)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject:'自由工坊：重設密碼',text:`有人申請重設自由工坊帳號的密碼。\n\n請在 30 分鐘內開啟以下連結：\n${url}\n\n若不是你提出申請，請忽略此信。`});})
       :undefined,
-    eventEmailSender:env.EMAIL?async(to,subject,text)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject,text});}:undefined,
+    eventEmailSender:env.EMAIL?limitedEventEmailSender(env.EMAIL):undefined,
     health: { runtime: 'cloudflare-workers', release_sha: config.release },
     linkPreviewFetch: workerPreviewFetch,
+    guildToolFetch: workerGuildToolFetch,
     moduleProviders: undefined,
     guildLaunchpadEnabled: env.FREEDOM_GUILD_LAUNCHPAD_ENABLED === 'true',
     commerceQueryTransport:queryTransport,commercePayments:payments,commerceJournal:journal,commerceEmailSender:emailSender,commerceSettings:settings,commerceOrderNotificationsEnabled:readCommerceOrderNotificationsEnabled(env),commerceSelfShipEnabled:readCommerceSelfShipEnabled(env),commerceDropShipEnabled:readCommerceDropShipEnabled(env),
@@ -420,6 +433,7 @@ export type WorkerDependencies = {
   syncGitHub?: typeof syncGitHubRepositories;
   githubFetcher?: typeof fetch;
   guildDiscovery?: typeof refreshGuildDiscoveryReports;
+  sharesRefresh?: typeof refreshDueRepositories;
   /** Test seam. Production uses pruneExpiredAuthRecords. */
   authPrune?: typeof pruneExpiredAuthRecords;
   commerceDueWork?:typeof runDueCommerceWork;
@@ -439,6 +453,22 @@ export type WorkerDependencies = {
  */
 export function workerScope(env: WorkerEnv, run: () => Promise<Response>): Promise<Response> {
   return runWithImageProcessor(env.IMAGES ? createCloudflareImageProcessor(env.IMAGES) : createUnavailableImageProcessor(), run);
+}
+
+// Current Free/Paid Workers limit a cron invocation to 15 minutes, so a
+// 20-minute lease outlives a terminated run. Only its owner may release it.
+const SCHEDULED_GITHUB_REQUEST_BUDGET=18;
+const SCHEDULED_REPOSITORY_REQUEST_BUDGET=8;
+const SCHEDULED_REPOSITORY_LIMIT=2;
+async function acquireScheduledLease(pool:Pool,owner:string){
+  const result=await pool.query(`INSERT INTO github_feed_state(feed_name,etag,checked_at,next_sync_at)
+    VALUES('worker_scheduled_lease',$1,clock_timestamp(),clock_timestamp()+interval '20 minutes')
+    ON CONFLICT(feed_name) DO UPDATE SET etag=EXCLUDED.etag,checked_at=EXCLUDED.checked_at,next_sync_at=EXCLUDED.next_sync_at
+    WHERE github_feed_state.next_sync_at<=clock_timestamp() RETURNING etag`,[owner]);
+  return result.rows.length===1;
+}
+async function releaseScheduledLease(pool:Pool,owner:string){
+  await pool.query("DELETE FROM github_feed_state WHERE feed_name='worker_scheduled_lease' AND etag=$1",[owner]);
 }
 
 export function createWorkerHandler(deps: WorkerDependencies = {}) {
@@ -492,6 +522,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
           }
         }
         const runtime=(deps.createRuntime??workerRuntime)(env,config,{queryTransport:deps.commerceQueryTransport}),privateAi=await workerPrivateAiPorts(pool,env,config);
+        runtime.guildToolSigner=await installWorkerGuildToolSigner(env);
         runtime.afterResponse=work=>{afterResponse.push(work);};
         if(deps.commerceQueryTransport)runtime.commerceQueryTransport=deps.commerceQueryTransport;
         if(privateAi)Object.assign(runtime,privateAi);
@@ -558,16 +589,36 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
     async scheduled(_controller: {readonly cron?: string; readonly scheduledTime?: number}, env: WorkerEnv, ctx: WorkerContext): Promise<void> {
       const token = env.GITHUB_METRICS_TOKEN || undefined;
       let pool: Pool | undefined;
+      const owner=crypto.randomUUID();let leased=false;
+      let githubRequests=0,repositoryRequests=0;
+      const githubFetch:typeof fetch=async(input,init)=>{
+        if(githubRequests>=SCHEDULED_GITHUB_REQUEST_BUDGET)throw Error('scheduled_github_budget_exhausted');
+        githubRequests++;return (deps.githubFetcher??globalThis.fetch)(input,init);
+      };
+      const repositoryFetch:typeof fetch=async(input,init)=>{
+        if(repositoryRequests>=SCHEDULED_REPOSITORY_REQUEST_BUDGET)throw Error('scheduled_repository_budget_exhausted');
+        repositoryRequests++;return githubFetch(input,init);
+      };
       const work = (async () => {
         try {
           pool = createPool(env);
+          leased=await acquireScheduledLease(pool,owner);if(!leased)return;
+          try{await (deps.authPrune??pruneExpiredAuthRecords)(pool);}
+          catch{console.error('auth_prune_failed');}
+          if(env.FREEDOM_GUILD_LAUNCHPAD_ENABLED==='true'){
+            try{await sweepDueOperations(pool);}
+            catch{console.error('module_provision_sweep_failed');}
+          }
           if(env.FREEDOM_EVENT_PARTICIPATION_ENABLED==='true'){
             try{
               const config=readWorkerConfig(env);
-              const send=async(to:string,subject:string,text:string)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject,text});};
+              const send=limitedEventEmailSender(env.EMAIL!);
               try{await processEventWaitlist(pool,send,config.origin);}catch{console.error('event_waitlist_failed');}
-              try{await processEventReminders(pool,send,{enabled:true});}catch{console.error('event_reminders_failed');}
+              try{await processEventReminders(pool,send,{enabled:true,limit:3});}catch{console.error('event_reminders_failed');}
             }catch{console.error('event_participation_not_ready');}
+          }
+          if(env.FREEDOM_EVENT_PARTICIPATION_ENABLED!=='true'&&env.EMAIL){
+            try{const config=readWorkerConfig(env);await processEventNotices(pool,limitedEventEmailSender(env.EMAIL),config.origin);}catch{console.error('event_notices_failed');}
           }
           let contactRetention:CommerceContactRetention|undefined;
           try{contactRetention=readCommerceContactRetention(env);}catch{console.error('commerce_contact_retention_invalid');}
@@ -584,36 +635,32 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               let emailDeps:{email:typeof commerceEmailOutbox;emailEnabled:true;emailSender:ReturnType<typeof createWorkerEmailSender>;journal:ReturnType<typeof createR2EffectJournal>;origin:string}|undefined;
               if(commerce.emailEnabled)try{
                 const config=readWorkerConfig(env);
-                emailDeps={email:commerceEmailOutbox,emailEnabled:true,emailSender:createWorkerEmailSender(env.EMAIL!),journal:createR2EffectJournal(config.freedomEnv,env.COMMERCE_JOURNAL!),origin:config.origin};
+                emailDeps={email:commerceEmailOutbox,emailEnabled:true,emailSender:limitedCommerceEmailSender(env.EMAIL!),journal:createR2EffectJournal(config.freedomEnv,env.COMMERCE_JOURNAL!),origin:config.origin};
               }catch{console.error('commerce_email_not_ready');}
               const keyring=env.COMMERCE_CREDENTIAL_KEYS?CommerceCredentialKeyring.parse(env.COMMERCE_CREDENTIAL_KEYS):null;
               const freedomEnv=resolveFreedomEnv(env.FREEDOM_ENV);
               const orderNotifications=createOrderNotifications(readCommerceOrderNotificationsEnabled(env),commerce);
-              await (deps.commerceDueWork??runDueCommerceWork)(pool,{...(keyring?{transport:deps.commerceQueryTransport??createEcpayQueryTransport(),keyring}:{}),freedomEnv,...(email?{email}:{}),...emailDeps,...(orderNotifications?{orderNotifications}:{})});
+              await (deps.commerceDueWork??runDueCommerceWork)(pool,{...(keyring?{transport:deps.commerceQueryTransport??createEcpayQueryTransport(),keyring}:{}),freedomEnv,...(email?{email}:{}),...emailDeps,...(orderNotifications?{orderNotifications}:{})},{limit:3,maxExternalCalls:3});
             }catch{console.error('commerce_due_work_failed');}
             try{
               await (deps.commerceEmailSweep??sweepCommerceOutboundEmails)(pool,{limit:500});
             }catch{console.error('commerce_email_sweep_failed');}
             if(typeof env.COMMERCE_JOURNAL?.put==='function'&&typeof env.COMMERCE_JOURNAL?.get==='function')try{
-              await (deps.commerceFlushJournal??flushControlEvents)(pool,createR2EffectJournal(resolveFreedomEnv(env.FREEDOM_ENV),env.COMMERCE_JOURNAL),{limit:200});
+              await (deps.commerceFlushJournal??flushControlEvents)(pool,createR2EffectJournal(resolveFreedomEnv(env.FREEDOM_ENV),env.COMMERCE_JOURNAL),{limit:2});
             }catch{console.error('commerce_control_journal_failed');}
           }
-          try{await syncGitHub(pool, {fetcher: deps.githubFetcher, token, budget: GITHUB_SYNC_REQUEST_BUDGET});}
+          try{await (deps.sharesRefresh??refreshDueRepositories)(pool,{fetcher:repositoryFetch,token},SCHEDULED_REPOSITORY_LIMIT);}catch{console.error('shares_refresh_failed');}
+          try{await syncGitHub(pool, {fetcher:githubFetch, token, budget:Math.min(GITHUB_SYNC_REQUEST_BUDGET,SCHEDULED_GITHUB_REQUEST_BUDGET-githubRequests)});}
           catch(error){const name=error instanceof Error&&/^[A-Za-z][A-Za-z0-9_]*$/.test(error.name)?error.name:'unknown';console.error('github_sync_failed',name);}
           if(env.FREEDOM_REGISTRATION_COMMUNITY_ID){
             try{await (deps.guildDiscovery??refreshGuildDiscoveryReports)(pool,{communityId:env.FREEDOM_REGISTRATION_COMMUNITY_ID,reviewer:guildReviewerFromBindings(env)});}
             catch{console.error('guild_discovery_failed');}
           }
-          if(env.FREEDOM_GUILD_LAUNCHPAD_ENABLED==='true'){
-            try{await sweepDueOperations(pool);}
-            catch{console.error('module_provision_sweep_failed');}
-          }
-          try{await (deps.authPrune??pruneExpiredAuthRecords)(pool);}
-          catch{console.error('auth_prune_failed');}
         } catch (error) {
           const name = error instanceof Error && /^[A-Za-z][A-Za-z0-9_]*$/.test(error.name) ? error.name : 'unknown';
           console.error('github_sync_failed', name);
         } finally {
+          if(pool&&leased)await releaseScheduledLease(pool,owner).catch(()=>console.error('scheduled_lease_release_failed'));
           if (pool) await pool.end().catch(() => console.error('pool_end_failed'));
         }
       })();

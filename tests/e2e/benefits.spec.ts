@@ -30,7 +30,7 @@ test('optional benefit reports load only when opened, persist privately and rema
   await card.getByLabel('具體得到了什麼？').fill('只有我可見的測試心得');
   await card.getByRole('button',{name:'保存我的回報',exact:true}).click();await expectSaved(card);
   await page.reload();await card.getByText('這次合作帶給我什麼（選填）',{exact:true}).click();await expect(card.getByLabel('具體得到了什麼？')).toHaveValue('只有我可見的測試心得');
-  await ownerPage.goto('/#workbench');const ownerCard=ownerPage.locator('article.card').filter({has:ownerPage.getByRole('heading',{name:title,exact:true})});
+  await ownerPage.goto('/#workbench');await ownerPage.locator('.panels .place-view-picker select').selectOption('community');const ownerCard=ownerPage.locator('article.card').filter({has:ownerPage.getByRole('heading',{name:title,exact:true})});
   await ownerCard.getByText('這次合作帶給我什麼（選填）',{exact:true}).click();
   await expect(ownerCard.getByLabel('這次有得到預期的幫助嗎？')).toHaveValue('unconfirmed');
   await expect(ownerCard).not.toContainText('只有我可見的測試心得');
@@ -38,7 +38,7 @@ test('optional benefit reports load only when opened, persist privately and rema
   claim=await post(page,maker,`/work-claims/${claim.claim_id}:submit`,{summary:'完成可重用說明',artifact_ref:'artifact:benefit-browser-result'},claim.aggregate_version);
   claim=await post(ownerPage,owner,`/work-claims/${claim.claim_id}:begin-review`,{},claim.aggregate_version);
   await post(ownerPage,owner,`/work-claims/${claim.claim_id}:decide`,{decision:'accept',feedback:'符合完成條件',submission_sha256:claim.latest_submission.sha256},claim.aggregate_version);
-  await page.reload();await expect(card.getByText('artifact:benefit-browser-result',{exact:true})).toBeVisible();
+  await page.reload();await page.locator('.panels .place-view-picker select').selectOption('outcomes');await expect(card.getByText('artifact:benefit-browser-result',{exact:true})).toBeVisible();
   await card.getByText('這次合作帶給我什麼（選填）',{exact:true}).click();await expect(card.getByLabel('這次有得到預期的幫助嗎？')).toHaveValue('partly_gained');
   await card.getByLabel('這次有得到預期的幫助嗎？').selectOption('not_gained');
   await card.getByLabel('想補充的經驗（選填）').fill('');await card.getByRole('button',{name:'更新我的回報',exact:true}).click();await expectSaved(card);

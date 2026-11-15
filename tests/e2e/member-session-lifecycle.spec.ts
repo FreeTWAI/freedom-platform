@@ -13,7 +13,7 @@ async function login(page: Page) {
   await email.fill('maker@local.test');
   await password.fill('freedom-local-demo');
   await page.getByRole('button', { name: '登入', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '會員首頁', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '動態', exact: true })).toBeVisible();
 }
 
 async function sessionCookie(page: Page) {
@@ -34,11 +34,11 @@ test('returning member reloads and reopens a page without submitting credentials
   expect(initial.expires).toBeGreaterThan(Date.now() / 1000 + 29 * 24 * 60 * 60);
   expect(initial.expires).toBeLessThanOrEqual(Date.now() / 1000 + 30 * 24 * 60 * 60);
   await page.reload();
-  await expect(page.getByRole('heading', { name: '會員首頁', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '動態', exact: true })).toBeVisible();
   await page.close();
   const returning = await context.newPage();
   await returning.goto(baseURL!);
-  await expect(returning.getByRole('heading', { name: '會員首頁', exact: true })).toBeVisible();
+  await expect(returning.getByRole('heading', { name: '動態', exact: true })).toBeVisible();
   expect(await sessionCookie(returning)).toMatchObject({ value: initial.value, expires: initial.expires });
   expect(logins).toBe(1);
 });
@@ -76,7 +76,7 @@ test('logout rejects a captured cookie and a previously open page cannot restore
   const cookie = await sessionCookie(page);
   const otherPage = await context.newPage();
   await otherPage.goto(baseURL!);
-  await expect(otherPage.getByRole('heading', { name: '會員首頁', exact: true })).toBeVisible();
+  await expect(otherPage.getByRole('heading', { name: '動態', exact: true })).toBeVisible();
   await signOut(page);
   expect((await context.cookies(baseURL!)).some(value => value.name === cookie.name)).toBe(false);
   const replay = await page.request.get('/api/v1/session', { headers: { Cookie: `${cookie.name}=${cookie.value}` } });

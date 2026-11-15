@@ -220,3 +220,11 @@ for(const success of [true,false])test(`mark-all keeps all preview rows unavaila
   if(success)await h.finish(h.get(),payload([notice(idA,true),notice(idB,true)]));
   assert.equal(props(h.row()!).disabled,false);assert.equal(props(h.row(idB)!).disabled,false);assert.equal(h.navigations.length,0);assert.equal(h.count(),1);
 });
+
+test('failed notification load never renders a ? badge on the bell',async t=>{
+  const h=fixture(t);
+  await h.finish(h.get(),new Error('forbidden'),true);
+  assert.equal(props(h.bell())['aria-label'],'通知，未讀數未確認');
+  assert.equal(h.bell().textContent,'');
+  assert.equal(h.bell().childNodes.some((n:HostNode)=>n.getAttribute('class')==='notification-bell-count'),false);
+});

@@ -103,14 +103,15 @@ test('another community event cannot be joined using an authenticated account or
 });
 
 test('creation policy is explicit, legacy omission defaults guest, and pending owner edits preserve omission',async()=>{
-  const legacy=await createEvent(pool,command(0,'POST /events',details()));assert.equal(legacy.registration_policy,'guest_allowed');
-  const created=await createEvent(pool,command(0,'POST /events',{...details(),registration_policy:'community_member'}));assert.equal(created.registration_policy,'community_member');
+  const legacy=await createEvent(pool,command(0,'POST /events',{...details(),title:'獨立預設訪客活動'}));assert.equal(legacy.registration_policy,'guest_allowed');
+  const created=await createEvent(pool,command(0,'POST /events',{...details(),title:'獨立政策活動',registration_policy:'community_member'}));assert.equal(created.registration_policy,'community_member');
+  await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[created.event_id]); // Retained legacy review/edit lane.
   const updated=await updateEvent(pool,command(0,`PUT /events/${created.event_id}`,details(),Number(created.aggregate_version)),created.event_id);
   assert.equal(updated.registration_policy,'community_member');
   await assert.rejects(updateEvent(pool,command(1,`PUT /events/${created.event_id}`,{...details(),registration_policy:'guest_allowed'},Number(updated.aggregate_version)),created.event_id),denied('organizer_required'));
   const changed=await updateEvent(pool,command(0,`PUT /events/${created.event_id}`,{...details(),registration_policy:'guest_allowed'},Number(updated.aggregate_version)),created.event_id);assert.equal(changed.registration_policy,'guest_allowed');
   await pool.query("UPDATE community_events SET state='published' WHERE event_id=$1",[created.event_id]);
-  await assert.rejects(updateEvent(pool,command(0,`PUT /events/${created.event_id}`,{...details(),registration_policy:'community_member'},Number(changed.aggregate_version)),created.event_id),denied('event_closed'));
+  await assert.rejects(updateEvent(pool,command(0,`PUT /events/${created.event_id}`,{...details(),registration_policy:'community_member'},Number(changed.aggregate_version)),created.event_id),denied('event_registration_policy_immutable'));
 });
 
 test('policy rejects unknown values at schema and database boundaries',async()=>{
@@ -158,4 +159,41 @@ test('valid referral and management tokens do not bypass member policy or commit
   await assert.rejects(mutateGuestEventParticipation(pool,eventId,token,{action:'register',expected_version:1,referral_code:code},randomUUID()),denied('event_member_required'));
   assert.equal((await pool.query('SELECT verified_at FROM community_event_guest_capabilities WHERE event_id=$1',[eventId])).rows[0].verified_at,null);
   assert.equal(sent,0);assert.equal(await countEventSeats(pool,eventId),0);
+});
+
+test('public event metadata reports guest_registration_available and guest registration errors never reveal prior registration',async()=>{
+  const enabledApp=createApp(pool,origin,'local',{eventEmailSender:send});
+  const disabledApp=createApp(pool,origin,'local',{});
+  const enabledRes=await enabledApp.request(`${origin}/api/v1/public/events/${eventId}`);
+  const disabledRes=await disabledApp.request(`${origin}/api/v1/public/events/${eventId}`);
+  assert.equal(enabledRes.status,200);assert.equal(disabledRes.status,200);
+  assert.equal((await enabledRes.json()).guest_registration_available,true);
+  assert.equal((await disabledRes.json()).guest_registration_available,false);
+
+  await pool.query('UPDATE community_events SET capacity=10 WHERE event_id=$1',[eventId]);
+  const existingEmail='already-going@local.test',freshEmail='brand-new@local.test';
+  let failSend=false,closeDuringSend=false;
+  const flakyApp=createApp(pool,origin,'local',{eventEmailSender:async()=>{
+    if(closeDuringSend)await pool.query("UPDATE community_events SET starts_at=clock_timestamp()-interval '1 second' WHERE event_id=$1",[eventId]);
+    if(failSend)throw Error('provider rejected');
+  }});
+  const first=await flakyApp.request(`${origin}/api/v1/public/events/${eventId}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'先行訪客',email:existingEmail})});
+  assert.equal(first.status,200);
+
+  failSend=true;
+  const failExisting=await flakyApp.request(`${origin}/api/v1/public/events/${eventId}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'重試訪客',email:existingEmail})});
+  const failFresh=await flakyApp.request(`${origin}/api/v1/public/events/${eventId}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'新訪客',email:freshEmail})});
+  assert.equal(failExisting.status,503);assert.equal(failFresh.status,503);
+  const bodyExisting=await failExisting.json(),bodyFresh=await failFresh.json();
+  assert.equal(bodyExisting.code,bodyFresh.code);
+  assert.equal(bodyExisting.detail,bodyFresh.detail);
+
+  failSend=false;closeDuringSend=true;
+  const closedExisting=await flakyApp.request(`${origin}/api/v1/public/events/${eventId}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'重試訪客',email:existingEmail})});
+  await pool.query("UPDATE community_events SET starts_at=$2 WHERE event_id=$1",[eventId,starts]);
+  const closedFresh=await flakyApp.request(`${origin}/api/v1/public/events/${eventId}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'新訪客',email:'brand-new-2@local.test'})});
+  assert.equal(closedExisting.status,409);assert.equal(closedFresh.status,409);
+  const closedBodyExisting=await closedExisting.json(),closedBodyFresh=await closedFresh.json();
+  assert.equal(closedBodyExisting.code,closedBodyFresh.code);
+  assert.equal(closedBodyExisting.detail,closedBodyFresh.detail);
 });

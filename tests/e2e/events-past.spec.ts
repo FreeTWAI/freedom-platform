@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {navigate,eventAppPath} from './navigation.js';
 
 const widths=[{width:390,height:844},{width:820,height:1100},{width:1280,height:800}] as const;
 const fits=(page:Page)=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth);
@@ -69,7 +69,7 @@ test('members can open an ended event from the past list and the calendar',async
     for(let step=0;step<monthsBack;step++)await page.getByRole('button',{name:'下個月'}).click();
     for(let step=0;step<months;step++)await page.getByRole('button',{name:'上個月'}).click();
     await page.getByRole('grid',{name:monthLabel}).getByRole('button',{name:`${title}，已結束`}).click();
-    await expect(page).toHaveURL(new RegExp(`#events/${id}$`));
+    await expect(page).toHaveURL(new RegExp(`#explore/events/${id}$`));
     const detail=page.getByRole('region',{name:'活動專頁'});
     for(const size of widths){
       await page.setViewportSize(size);
@@ -83,7 +83,7 @@ test('members can open an ended event from the past list and the calendar',async
       expect(await fits(page)).toBe(true);
     }
     const publicPage=await anon.newPage();
-    await publicPage.goto(`/events/${id}`);
+    await publicPage.goto(eventAppPath(`/events/${id}`));
     for(const size of widths){
       await publicPage.setViewportSize(size);
       await expect(publicPage.getByRole('heading',{name:title})).toBeVisible();

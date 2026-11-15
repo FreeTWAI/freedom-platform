@@ -1,6 +1,6 @@
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import {test,expect,type Page} from './fixtures.js';
-import {openPageTools} from './navigation.js';
+import {openPageTools,openLoginMore} from './navigation.js';
 
 const widths=[320,390,820,1280] as const;
 const themes=[['light','自由工坊－明亮'],['dark','自由工坊－夜航']] as const;
@@ -10,7 +10,7 @@ async function signIn(page:Page){
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 
 async function selectTheme(page:Page,id:(typeof themes)[number][0],label:(typeof themes)[number][1]){
@@ -25,13 +25,14 @@ async function selectTheme(page:Page,id:(typeof themes)[number][0],label:(typeof
 test('page tools expose labels on demand and preserve touch targets, icons and theme colours',async({page})=>{
   await page.setViewportSize({width:320,height:720});
   await page.goto('/');
+  await openLoginMore(page);
   await openPageTools(page);
   for(const [kind,name] of toolNames){
-    const tool=page.locator(`.login-card-heading .page-tool-button--${kind}`);
+    const tool=page.locator(`.login-more-tools .page-tool-button--${kind}`);
     await expect(tool.locator('.page-tool-label')).toHaveText(name);
     await expect(tool).toHaveAccessibleName(name);
   }
-  const signedOut=page.locator('.login-card-heading .page-tool-button--idea');
+  const signedOut=page.locator('.login-more-tools .page-tool-button--idea');
   const signedOutBox=await signedOut.boundingBox();
   expect(signedOutBox!.width).toBeGreaterThanOrEqual(40);
   expect(signedOutBox!.height).toBeGreaterThanOrEqual(40);
@@ -39,7 +40,7 @@ test('page tools expose labels on demand and preserve touch targets, icons and t
 
   await signIn(page);
   await page.evaluate(()=>{location.hash='members';});
-  await expect(page.getByRole('heading',{name:'工坊夥伴',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'探索',level:1})).toBeVisible();
   // The account group is the bell plus the profile menu; 登出 is inside that menu.
   await expect(page.locator('.topbar').getByRole('button',{name:'登出',exact:true})).toHaveCount(0);
 

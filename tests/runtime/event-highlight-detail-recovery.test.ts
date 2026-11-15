@@ -1,3 +1,4 @@
+import * as PortalRoute from '../../apps/portal-web/src/portal-route.js';
 import assert from 'node:assert/strict';
 import {test,after} from 'node:test';
 import {readFileSync} from 'node:fs';
@@ -53,7 +54,7 @@ Object.assign(doc.defaultView,{confirm:()=>true,location:{hash:'#highlights',ori
 Object.assign(globalThis,{window:doc.defaultView,document:doc,IS_REACT_ACT_ENVIRONMENT:true});
 after(()=>Object.assign(globalThis,{window:originalGlobals.window,document:originalGlobals.document,IS_REACT_ACT_ENVIRONMENT:originalGlobals.act,fetch:originalGlobals.fetch}));
 const outcomesModule={exports:{}};
-const common=(name:string)=>{if(name==='react')return ReactRuntime;if(name==='react/jsx-runtime')return JSXRuntime;if(name==='../api')return ApiRuntime;throw new Error(`Unexpected import: ${name}`);};
+const common=(name:string)=>{if(name==='../portal-route')return PortalRoute;if(name==='react')return ReactRuntime;if(name==='react/jsx-runtime')return JSXRuntime;if(name==='../api')return ApiRuntime;throw new Error(`Unexpected import: ${name}`);};
 runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/modules/EventOutcomes.tsx',import.meta.url),'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module:outcomesModule,exports:outcomesModule.exports,require:common});
 const module={exports:{} as {EventHighlights:React.ComponentType<{client:any}>}};
 const source=readFileSync(new URL('../../apps/portal-web/src/modules/EventHighlights.tsx',import.meta.url),'utf8');

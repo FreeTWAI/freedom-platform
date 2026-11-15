@@ -61,7 +61,20 @@ async function signIn(email = DEMO_USERS[0].email): Promise<Session> {
 }
 async function html(path: string) {
   const response = await app.request(origin + path);
-  return { status: response.status, html: await response.text(), cache: response.headers.get('cache-control'), type: response.headers.get('content-type') };
+  return { status: response.status, html: await response.text(), cache: response.headers.get('cache-control'), type: response.headers.get('content-type'), headers: response.headers };
+}
+function assertServicePageSecurity(page: { html: string; headers: Headers }) {
+  assert.equal(page.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(page.headers.get('referrer-policy'), 'no-referrer');
+  const csp = page.headers.get('content-security-policy') ?? '';
+  assert.match(csp, /script-src 'self'/);
+  assert.match(csp, /style-src 'self'/);
+  assert.match(csp, /base-uri 'none'/);
+  assert.match(csp, /frame-ancestors 'none'/);
+  assert.doesNotMatch(page.html, /<script(?![^>]*\bsrc=)/i);
+  assert.doesNotMatch(page.html, /<style\b/i);
+  assert.doesNotMatch(page.html, /\sstyle=/i);
+  assert.doesNotMatch(page.html, /\son[a-z]{2,}\s*=/i);
 }
 async function go(code: string) {
   return app.request(`${origin}/go/${code}`);
@@ -81,7 +94,7 @@ async function counts() {
   return (await pool.query(`SELECT (SELECT count(*)::int FROM contributions) AS contributions,
     (SELECT count(*)::int FROM outbox) AS outbox, (SELECT count(*)::int FROM transition_journal) AS journal`)).rows[0] as { contributions: number; outbox: number; journal: number };
 }
-function board(data: { boards: { kind: string; items: { user_id: string; display_name: string; points: number }[] }[] }, kind = 'member_service') {
+function board(data: { boards: { kind: string; items: { user_id: string; display_name: string; points: number }[] }[] }, kind = 'service') {
   return data.boards.find(item => item.kind === kind)!;
 }
 function assertLogo(html: string) {
@@ -518,7 +531,7 @@ test('public pages escape member text, page, and filter without echoing a bad qu
   assert.equal(nasty.status, 201, JSON.stringify(nasty.data));
   const page = await html(`/services/${nasty.data.service_id}`);
   assert.equal(page.status, 200);
-  assert.equal(page.html.includes('<script'), false);
+  assert.equal(page.html.replace('<script src="/service-page.js" defer></script>', '').includes('<script'), false);
   assert.match(page.html, /假髮&lt;script&gt;&quot;&#39;/);
   assert.match(page.html, /簡介&lt;b&gt;&quot;&#39;/);
   assert.match(page.html, /<p>第一段&lt;script&gt;<\/p><p>第二段&quot;引號&#39;<\/p>/);
@@ -626,7 +639,7 @@ test('a member_service link scores the sharer, including the owner, and a non-uu
   const week = await request('/promotion/leaderboards?period=week', maker);
   const serviceBoard = board(week.data);
   assert.equal(serviceBoard.items.find((item: { user_id: string }) => item.user_id === reviewer.user.user_id)?.points, 1);
-  assert.equal(serviceBoard.items.find((item: { user_id: string }) => item.user_id === maker.user.user_id)?.points, 1);
+  assert.equal(serviceBoard.items.find((item: { user_id: string }) => item.user_id === maker.user.user_id)?.points, 2);
   const listed = await request('/member-services', maker);
   const card = listed.data.items.find((item: { service_id: string }) => item.service_id === id);
   assert.equal(card.total_points, 2);
@@ -737,4 +750,33 @@ test('a private asset-backed cover is denied when object IO outlives the owner s
   } finally {
     store.get = nativeGet;
   }
+});
+
+test('public service detail page includes secondary share entry and visitor sign-in link back to the service', async () => {
+  const maker = await signIn();
+  const created = await request('/member-services', maker, draft({ title: '可分享服務頁' }));
+  const id = created.data.service_id as string;
+  const page = await html(`/services/${id}`);
+  assert.equal(page.status, 200);
+  assert.equal(page.cache, 'public, max-age=60');
+  assertServicePageSecurity(page);
+  assert.match(page.html, /<script src="\/service-page\.js" defer><\/script>/);
+  assert.match(page.html, new RegExp(`data-service-id="${id}"`));
+  assert.match(page.html, new RegExp(`data-service-login href="/\\?return_to=%2Fservices%2F${id}"`));
+  assert.match(page.html, /<button[^>]*id="service-share"[^>]*class="[^"]*\bbtn-secondary\b[^"]*"[^>]*hidden/);
+  assert.equal((page.html.match(/\bbtn-primary\b/g) ?? []).length, 0);
+  assert.match(page.html, /id="service-share-result"/);
+  assert.match(page.html, /id="service-share-status"[^>]*role="status"/);
+
+  const list = await html('/services');
+  assert.equal(list.status, 200);
+  assert.equal(list.cache, 'public, max-age=60');
+  assertServicePageSecurity(list);
+  assert.equal(list.html.includes('<script'), false);
+
+  const missing = await html(`/services/${randomUUID()}`);
+  assert.equal(missing.status, 404);
+  assert.equal(missing.cache, 'public, max-age=60');
+  assertServicePageSecurity(missing);
+  assert.equal(missing.html.includes('<script'), false);
 });

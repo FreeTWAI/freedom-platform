@@ -1,3 +1,4 @@
+import {legacyHash} from '../portal-route';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function singlePostId(search: string, key: string): string | null {
@@ -16,13 +17,13 @@ export function publicPostReturn(search: string): string | null {
 
 export function memberPostReturn(search: string, hash: string): string | null {
   const params = new URLSearchParams(search);
-  if (hash !== '#account' || params.has('post_return') || params.has('return_to') || params.has('skill_acquisition')) return null;
+  if (legacyHash(hash) !== '#account' || params.has('post_return') || params.has('return_to') || params.has('skill_acquisition')) return null;
   const id = singlePostId(search, 'social-post');
   return id ? `/?social-post=${id}#social` : null;
 }
 
 export function anonymousSharedPost(search: string, hash: string): string | null {
-  if (hash !== '#social') return null;
+  if (legacyHash(hash) !== '#home') return null;
   const params = new URLSearchParams(search);
   if (params.has('post_return') || params.has('return_to') || params.has('skill_acquisition')) return null;
   const id = singlePostId(search, 'social-post');

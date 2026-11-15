@@ -1,3 +1,4 @@
+import {navigate} from './navigation.js';
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {DEFAULT_LAUNCHER_PLACEMENT,LAUNCHER_PLACEMENT_KEY,parseLauncherPlacement,launcherBounds,launcherPoint,snapLauncher,launcherDragPoint,launcherDragStarted} from '../../modules/member-communications/portal/floating-message-placement.js';
 import {randomUUID} from 'node:crypto';
@@ -137,7 +138,7 @@ test('launcher and panel close preserve the persistent inbox across pages and th
   await page.setViewportSize({width:1440,height:900});await bubble.click();
   await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員',{exact:true}).fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
   const draft=panel.getByRole('textbox',{name:'寫給 示範需求者 的訊息'});await draft.fill('跨頁與收合後保留的草稿');await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();
-  await page.getByRole('button',{name:'技能書架',exact:true}).click();await bubble.click();await expect(draft).toHaveValue('跨頁與收合後保留的草稿');
+  await navigate(page,'技能書架');await bubble.click();await expect(draft).toHaveValue('跨頁與收合後保留的草稿');
   await page.setViewportSize({width:390,height:844});await expect(bubble).toBeHidden();await expect(draft).toBeVisible();await page.screenshot({path:'test-results/unified-messages-draft-phone.png'});
   await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();await expect(bubble).toBeFocused();await expect(page.locator('.community-header')).toBeVisible();
 });
@@ -185,7 +186,7 @@ test('closed history stays idle and legacy inbox/popout links open the same pane
   await page.evaluate(()=>{window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('online'));document.dispatchEvent(new Event('visibilitychange'));});
   await page.waitForTimeout(1300);expect({history,reads}).toEqual(before);
   await page.goto('/#messages');await expect(panel).toBeVisible();await expect(bubble).toBeHidden();await expect(page.locator('.member-messages')).toHaveCount(1);
-  await page.goto('/?game-console=popout&scope=legacy-fixture');await expect(panel).toBeVisible();await expect(page).toHaveURL(/\/#messages$/);await expect(page.locator('.game-console')).toHaveCount(0);
+  await page.goto('/?game-console=popout&scope=legacy-fixture');await expect(panel).toBeVisible();await expect(page).toHaveURL(/\/#me\/messages$/);await expect(page.locator('.game-console')).toHaveCount(0);
 });
 
 for(const kind of ['world','direct'] as const)test(`a delayed ${kind} read acknowledgement after collapse starts no hidden history refresh`,async({page})=>{

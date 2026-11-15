@@ -9,6 +9,7 @@ import {resolve} from 'node:path';
 import {ApiError} from '../../apps/portal-web/src/api.js';
 import * as prizeRules from '../../modules/community/event-prize-details.js';
 import * as prizeIcons from '../../modules/community/event-prize-icons.js';
+import * as shareUrl from '../../packages/shared/share-url.js';
 const {transformSync}=createRequire(resolve(process.cwd(),'package.json'))('esbuild');
 // Actual TSX and shared mutation with deterministic hooks/transport ports.
 // This proves handler behavior, not React DOM, browser, real mail or hosted CI.
@@ -46,11 +47,13 @@ function harness(options:{deferPassiveCleanup?:boolean;deferPrepare?:boolean;pre
   const jsx=(type:any,props:any,key?:string)=>({type,props,key});const module={exports:{} as any},mutation={exports:{} as any};
   runInNewContext(shared,{module:mutation,exports:mutation.exports,crypto:webcrypto,Error,require:(name:string)=>name==='react'?react:name==='../api'?{ApiError}:{}});
   const require=(name:string)=>{
-    if(name==='react')return react;if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};if(name==='../api')return {ApiError};if(name==='./shared')return mutation.exports;
+    if(name==='../portal-route')return {currentLegacyHash:()=>'#events'};if(name==='./AgentHandoff')return {AgentHandoff:()=>null};if(name==='react')return react;if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};if(name==='../api')return {ApiError};if(name==='./shared')return mutation.exports;
     if(name==='../format')return {formatIsoLocal:(v:string)=>v,hoursFromNowLocalInput:(n:number)=>n===24?'2030-01-01T12:00':'2030-01-01T13:00',localInputToIso:(v:string)=>new Date(v).toISOString()};
     if(name==='./member-inbox')return {announceInboxChange:()=>notices.push('inbox')};if(name==='./social-image')return {prepareSocialImage:async(file:any)=>file};
     if(name==='./event-banner-client')return {prepareEventMedia:async(c:any,value:any,file:any,kind:string)=>{const command:any={eventId:value.event_id,version:value.aggregate_version,file,kind,key:webcrypto.randomUUID(),generation:c.sessionGeneration,csrfToken:c.csrfToken};preparations.push(command);if(options.prepareFailure)throw options.prepareFailure;if(options.deferPrepare)return new Promise(resolve=>{command.resolve=()=>resolve(command);});return command;},sendEventMedia:(c:any,command:any)=>new Promise((resolve,reject)=>media.push({client:c,command,resolve,reject})),readEventMedia:(c:any,command:any)=>c.get(`/events/${command.eventId}`),currentMediaEvent:(a:any,b:any)=>a.aggregate_version>b.aggregate_version?a:b};
     if(name==='./EventPrizeFields')return prizeFields.exports;if(name==='./EventPrizePhoto')return {EventPrizePhotoEditor:()=>null};if(name==='./event-prize-photo-client')return prizePhotoRules;if(name==='./EventPrizeDetails')return {EventPrizeDetails:()=>null};if(name.includes('modules/community/event-prize-details'))return prizeRules;
+    if(name==='../share/ShareButton')return {ShareButton:()=>null,promotionLink:()=>async()=>({path:''})};
+    if(name==='../../../../packages/shared/share-url')return shareUrl;
     if(name.endsWith('.css'))return {};if(['./EventCalendar','./EventParticipation','./EventAttendees','./EventHelpers','./EventAttendance'].includes(name))return new Proxy({},{get:()=>()=>null});throw Error(name);
   };
   runInNewContext(compiled,{module,exports:module.exports,require,crypto:webcrypto,Error,Date,Intl,URL,URLSearchParams,Event:class{},window:{location:{pathname:'/',hash:'#events',search:'',origin:'http://synthetic.test'},confirm:()=>false,addEventListener:(name:string,fn:any)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name),dispatchEvent:()=>notices.push('world')},localStorage:{getItem:()=>null,setItem:()=>{}},navigator:{}});
@@ -69,25 +72,25 @@ function harness(options:{deferPassiveCleanup?:boolean;deferPrepare?:boolean;pre
 async function ready(h:ReturnType<typeof harness>,items:any[]=[]){for(const read of h.reads.splice(0))read.resolve({items:read.path==='/events'?items:[]});await settle();h.view();}
 async function create(h:ReturnType<typeof harness>){await ready(h);h.click('辦活動');h.fill({title:'Original title',description:'Original description',location:'Original location'});}
 const tuple=(call:any)=>JSON.stringify({path:call.path,body:call.body,options:call.options});
-const ack=(call:any,overrides:any={})=>stored({...call.body,title:call.body.title.trim(),description:call.body.description.trim(),location:call.body.location.trim(),help_need:call.body.help_need??null,aggregate_version:call.options.ifMatch===undefined?1:call.options.ifMatch+1,...overrides});
+const ack=(call:any,overrides:any={})=>stored({...call.body,title:call.body.title.trim(),description:call.body.description.trim(),location:call.body.location.trim(),help_need:call.body.help_need??null,state:call.options.ifMatch===undefined?'published':'pending',aggregate_version:call.options.ifMatch===undefined?1:call.options.ifMatch+1,...overrides});
 const unknown=()=>new ApiError({message:'lost ACK',network:true});
 const denied=(status:number)=>new ApiError({message:'synthetic request refusal',status,definitiveResponse:true});
 
-for(const [label,replace] of Object.entries({null:()=>null,empty:()=>({}),array:()=>[],wrongId:(a:any)=>({...a,event_id:'not-an-event'}),wrongOwner:(a:any)=>({...a,organizer_ref:'other-member'}),wrongTitle:(a:any)=>({...a,title:'other title'}),wrongVersion:(a:any)=>({...a,aggregate_version:2}),stringVersion:(a:any)=>({...a,aggregate_version:'1'}),wrongState:(a:any)=>({...a,state:'published'}),wrongDate:(a:any)=>({...a,ends_at:'invalid'}),arrayStart:(a:any)=>({...a,starts_at:[a.starts_at]}),arrayEnd:(a:any)=>({...a,ends_at:[a.ends_at]}),wrongPolicy:(a:any)=>({...a,registration_policy:'guest_allowed'}),wrongHelp:(a:any)=>({...a,help_need:'unrequested'})}))test(`metadata ${label} success cannot settle the draft or start media`,async()=>{
+for(const [label,replace] of Object.entries({null:()=>null,empty:()=>({}),array:()=>[],wrongId:(a:any)=>({...a,event_id:'not-an-event'}),wrongOwner:(a:any)=>({...a,organizer_ref:'other-member'}),wrongTitle:(a:any)=>({...a,title:'other title'}),wrongVersion:(a:any)=>({...a,aggregate_version:2}),stringVersion:(a:any)=>({...a,aggregate_version:'1'}),wrongState:(a:any)=>({...a,state:'pending'}),wrongDate:(a:any)=>({...a,ends_at:'invalid'}),arrayStart:(a:any)=>({...a,starts_at:[a.starts_at]}),arrayEnd:(a:any)=>({...a,ends_at:[a.ends_at]}),wrongPolicy:(a:any)=>({...a,registration_policy:'community_member'}),wrongHelp:(a:any)=>({...a,help_need:'unrequested'})}))test(`metadata ${label} success cannot settle the draft or start media`,async()=>{
   const h=harness();await create(h);h.choose('video');h.submit();h.writes[0].resolve(replace(ack(h.writes[0])));await settle();
-  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);assert.equal(h.beforeUnload(),true);assert.equal(h.preparations.length,0);assert.doesNotMatch(text(h.view()),/活動已送出審核/);h.cleanup();
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);assert.equal(h.beforeUnload(),true);assert.equal(h.preparations.length,0);assert.doesNotMatch(text(h.view()),/活動已發布/);h.cleanup();
 });
 for(const status of [400,401,403,404,409,412,422,429])test(`unknown metadata remains frozen after later ${status} until original receipt`,async()=>{
   const h=harness();await create(h);h.submit();const first=h.writes[0];first.reject(unknown());await settle();h.submit();assert.equal(tuple(h.writes[1]),tuple(first));h.writes[1].reject(denied(status));await settle();
-  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);h.click('辦活動');assert.equal(h.fields().props.value.title,'Original title');
-  h.submit();assert.equal(tuple(h.writes[2]),tuple(first));h.writes[2].resolve(ack(first));await settle();assert.match(text(h.view()),/活動已送出審核/);assert.equal(h.form(),undefined);h.cleanup();
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);assert.equal(h.button('辦活動'),undefined);assert.equal(h.fields().props.value.title,'Original title');
+  h.submit();assert.equal(tuple(h.writes[2]),tuple(first));h.writes[2].resolve(ack(first));await settle();assert.match(text(h.view()),/活動已發布/);assert.equal(h.form(),undefined);h.cleanup();
 });
 for(const status of [400,409,412,422,429])test(`initial definitive ${status} permits correction with a new tuple`,async()=>{
-  const h=harness();await create(h);h.submit();h.writes[0].reject(denied(status));await settle();assert.equal(h.fields().props.disabled,false);h.fill({title:'Corrected'});h.submit();assert.equal(h.writes[1].body.title,'Corrected');assert.notEqual(h.writes[1].options.idempotencyKey,h.writes[0].options.idempotencyKey);h.writes[1].resolve(ack(h.writes[1]));await settle();assert.match(text(h.view()),/活動已送出審核/);h.cleanup();
+  const h=harness();await create(h);h.submit();h.writes[0].reject(denied(status));await settle();assert.equal(h.fields().props.disabled,false);h.fill({title:'Corrected'});h.submit();assert.equal(h.writes[1].body.title,'Corrected');assert.notEqual(h.writes[1].options.idempotencyKey,h.writes[0].options.idempotencyKey);h.writes[1].resolve(ack(h.writes[1]));await settle();assert.match(text(h.view()),/活動已發布/);h.cleanup();
 });
 test('same-render duplicate submit stays locked through pending media, then closes exactly once',async()=>{
   const h=harness();await create(h);h.choose('video');const handler=h.form().props.onSubmit;handler({preventDefault(){}});handler({preventDefault(){}});assert.equal(h.writes.length,1);h.writes[0].resolve(ack(h.writes[0]));await settle();assert.equal(h.media.length,1);
-  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);h.submit();assert.equal(h.writes.length,1);h.media[0].resolve(stored({aggregate_version:2,video_url:'/synthetic-video',video_mime:'video/mp4'}));await settle();assert.match(text(h.view()),/活動已送出審核/);assert.equal(h.notices.filter(x=>x==='inbox').length,1);h.cleanup();
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);h.submit();assert.equal(h.writes.length,1);h.media[0].resolve(stored({aggregate_version:2,video_url:'/synthetic-video',video_mime:'video/mp4'}));await settle();assert.match(text(h.view()),/活動已發布/);assert.equal(h.notices.filter(x=>x==='inbox').length,1);h.cleanup();
 });
 for(const change of ['generation','client','user','unmount'] as const)test(`late metadata ACK and stale handler cannot cross ${change}`,async()=>{
   const h=harness();await create(h);h.choose('video');const stale=h.form().props.onSubmit;stale({preventDefault(){}});const first=h.writes[0];
@@ -100,8 +103,31 @@ test('session change while first media is pending cannot start the second file',
   h.client.sessionGeneration++;h.client.csrfToken='new-session';h.view();h.media[0].resolve(stored({aggregate_version:2,banner_url:'/synthetic-banner',banner_orientation:'landscape'}));await settle();assert.equal(h.media.length,1);assert.equal(h.preparations.length,1);assert.equal(h.notices.length,0);h.cleanup();
 });
 test('update retry accepts the original historical snapshot after its start time and preserves expected version',async t=>{
-  const h=harness();await ready(h,[stored({aggregate_version:9})]);h.click('編輯草稿');h.fill({title:'  Trimmed title  ',description:'  Trimmed description  ',location:'  Trimmed location  ',help_need:'  Help needed  '});h.submit();const first=h.writes[0];assert.equal(first.options.ifMatch,9);first.reject(unknown());await settle();t.mock.method(Date,'now',()=>Date.UTC(2031,0,1));h.submit();assert.equal(tuple(h.writes[1]),tuple(first));
+  const h=harness();await ready(h,[stored({aggregate_version:9})]);h.props.locationHash='#events/'+id+'/manage';h.view();h.click('編輯活動');h.fill({title:'  Trimmed title  ',description:'  Trimmed description  ',location:'  Trimmed location  ',help_need:'  Help needed  '});h.submit();const first=h.writes[0];assert.equal(first.options.ifMatch,9);first.reject(unknown());await settle();t.mock.method(Date,'now',()=>Date.UTC(2031,0,1));h.submit();assert.equal(tuple(h.writes[1]),tuple(first));
   h.writes[1].resolve(ack(first,{starts_at:'2030-01-01T20:00:00+08:00',ends_at:'2030-01-01T21:00:00+08:00',help_need:'Help needed'}));await settle();assert.match(text(h.view()),/活動已更新，仍待審核/);h.cleanup();
+});
+// The server stores a cover URL normalized (eventSourceUrl: lowercase host, no fragment or tracking
+// parameters), so the receipt for a typed, noncanonical cover URL carries a different string.
+async function editCover(h:ReturnType<typeof harness>,typed:string){
+  await ready(h,[stored({aggregate_version:9})]);h.props.locationHash='#events/'+id+'/manage';h.view();h.click('編輯活動');
+  const field=find(h.form(),node=>node.type==='label'&&text(node).startsWith('封面網址'));assert.ok(field,'cover field');
+  find(field.props.children,node=>node.type==='input')!.props.onChange({target:{value:typed}});h.submit();
+  const first=h.writes[0];assert.equal(first.body.source_cover_url,typed);assert.equal(first.options.ifMatch,9);return first;
+}
+for(const [typed,canonical] of [['https://example.org/cover.png?utm_source=copy','https://example.org/cover.png'],['https://Example.ORG/cover.png','https://example.org/cover.png'],
+  ['https://example.org/cover.png#poster','https://example.org/cover.png'],['https://example.org/cover.png?name=a%20b','https://example.org/cover.png?name=a+b']])
+  test(`a cover URL typed as ${typed} is confirmed by the stored ${canonical}`,async()=>{
+    const h=harness();const first=await editCover(h,typed);first.resolve(ack(first,{source_cover_url:canonical}));await settle();
+    assert.match(text(h.view()),/活動已更新，仍待審核/);assert.equal(h.fields(),undefined);assert.equal(h.leave(),true);assert.equal(h.beforeUnload(),false);h.cleanup();
+  });
+test('after a lost ACK, the same-key retry of a noncanonical cover URL accepts the stored form',async()=>{
+  const h=harness();const first=await editCover(h,'https://Example.ORG/cover.png?utm_source=copy#poster');first.reject(unknown());await settle();
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);h.submit();assert.equal(tuple(h.writes[1]),tuple(first));
+  h.writes[1].resolve(ack(first,{source_cover_url:'https://example.org/cover.png'}));await settle();assert.match(text(h.view()),/活動已更新，仍待審核/);assert.equal(h.leave(),true);h.cleanup();
+});
+test('a receipt carrying another cover URL still leaves the save unconfirmed',async()=>{
+  const h=harness();const first=await editCover(h,'https://example.org/cover.png?utm_source=copy');first.resolve(ack(first,{source_cover_url:'https://example.org/other.png'}));await settle();
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);assert.equal(h.beforeUnload(),true);assert.doesNotMatch(text(h.view()),/活動已更新/);h.cleanup();
 });
 
 for(const change of ['client','user'] as const)test(`committed ${change} replacement revokes the old save before passive cleanup`,async()=>{
@@ -117,7 +143,7 @@ test('explicit media reconciliation holds the save lock and replays only the ori
   const h=harness();await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();h.media[0].reject(unknown());await settle();
   assert.equal(h.reads.some(call=>call.path===`/events/${id}`),false,'unknown does not start read/replay');h.click('重試確認保存');const read=h.reads.find(call=>call.path===`/events/${id}`);assert.ok(read);assert.equal(h.fields().props.disabled,true);h.submit();assert.equal(h.writes.length,1);assert.equal(h.media.length,1);assert.equal(h.leave(),false);
   read.resolve(stored({aggregate_version:2,video_url:'/synthetic-video',video_mime:'video/mp4'}));await settle();assert.equal(h.media.length,2);assert.equal(h.media[1].command,h.media[0].command);
-  h.media[1].resolve(stored({aggregate_version:2,video_url:'/synthetic-video',video_mime:'video/mp4'}));await settle();assert.match(text(h.view()),/活動已送出審核/);assert.equal(h.form(),undefined);h.cleanup();
+  h.media[1].resolve(stored({aggregate_version:2,video_url:'/synthetic-video',video_mime:'video/mp4'}));await settle();assert.match(text(h.view()),/活動已發布/);assert.equal(h.form(),undefined);h.cleanup();
 });
 test('late reconciliation read cannot replay media into a replacement owner',async()=>{
   const h=harness({deferPassiveCleanup:true});await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();h.media[0].reject(unknown());await settle();h.click('重試確認保存');const read=h.reads.find(call=>call.path===`/events/${id}`);assert.ok(read);

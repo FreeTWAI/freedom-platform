@@ -28,7 +28,7 @@ async function signOutHere(page: Page) {
 }
 async function privateShowcase(page: Page, title: string) {
   await page.evaluate(() => {window.location.hash = 'my-content';});
-  await page.getByRole('button', {name: '新增私人作品草稿', exact: true}).click();
+  await page.getByRole('link', {name: '新增作品草稿', exact: true}).click();
   const editor = page.getByRole('region', {name: '私人作品編輯', exact: true});
   await editor.getByLabel('作品標題', {exact: true}).fill(title);
   await editor.getByLabel('一句話介紹', {exact: true}).fill('公會區塊驗收的合成私人內容');
@@ -104,11 +104,14 @@ for (const sample of [
     await page.reload();
     await openGuildSection(page, '管理啟動台');
     await page.getByRole('button', {name: '啟用可組裝版面', exact: true}).click();
+    page.once('dialog', dialog => {expect(dialog.message()).toBe('有尚未儲存的修改，確定要離開嗎？'); void dialog.accept();});
     await openGuildSection(page, '我的工作');
     await page.getByRole('button', {name: '啟用手動工作', exact: true}).click();
     await page.locator('#my-work-title').fill('尚未保存的組裝測試草稿');
     await openGuildSection(page, '管理啟動台');
-    const workToggle = page.locator('.guild-launchpad-editor .guild-launchpad-block').filter({has: page.locator('p', {hasText: /^我的工作$/})}).getByRole('checkbox');
+    const workBlock = page.locator('.guild-launchpad-editor .guild-launchpad-block').filter({has: page.locator('p', {hasText: /^我的工作$/})});
+    await workBlock.getByRole('button', {name: '編輯', exact: true}).click();
+    const workToggle = workBlock.getByRole('checkbox');
     page.once('dialog', dialog => {expect(dialog.message()).toBe('有尚未儲存的內容，確定要離開嗎？'); void dialog.dismiss();});
     await workToggle.click();
     await expect(workToggle).toBeChecked();
@@ -126,6 +129,7 @@ for (const sample of [
   await expect(page.getByRole('button', {name: `上移${sample.title}`, exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: `移除這個區塊：${sample.title}`, exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: '上移公會工具', exact: true})).toHaveCount(0);
+  await page.locator('.guild-launchpad-preview-menu > summary').click();
   await page.getByRole('button', {name: '預覽公開', exact: true}).click();
   const preview = page.getByRole('dialog', {name: '合成預覽'});
   await expect(preview).toContainText(sample.title);
@@ -198,7 +202,7 @@ for (const sample of [
     await expect(page.locator('.hosted-store-product')).toContainText('區塊回訪茶杯');
     const catalogs = await (await page.request.get('/api/v1/me/supply-catalogs?pagination=cursor')).json();
     expect(catalogs.items).toHaveLength(1);
-    expect(catalogHash).toBe(`#stores/${catalogs.items[0].tenant_id}/${catalogs.items[0].instance_id}/supply`);
+    expect(catalogHash).toBe(`#guilds/guild_product_quality_supply/tools/catalog/${catalogs.items[0].tenant_id}/${catalogs.items[0].instance_id}/supply`);
     await page.goto(`/#guilds/${sample.guild}`);
 
     // Restore the author's full membership for layout history administration.
@@ -233,8 +237,8 @@ for (const sample of [
     await openGuildSection(page, sample.title);
     await expect(page.getByText(titleA, {exact: true})).toBeVisible();
     await page.getByRole('button', {name: '查看我的內容', exact: true}).click();
-    await page.getByRole('article', {name: `作品：${titleA}`, exact: true}).getByRole('link', {name: '編輯', exact: true}).click();
-    await expect(page).toHaveURL(new RegExp(`#my-content/showcases/${workId}$`));
+    await page.getByRole('article', {name: `作品：${titleA}`, exact: true}).getByRole('link', {name: '開啟原始內容', exact: true}).click();
+    await expect(page).toHaveURL(new RegExp(`#me/content/showcases/${workId}$`));
     await expect(page.getByLabel('作品標題', {exact: true})).toHaveValue(titleA);
     await page.getByRole('button', {name: '回到內容清單', exact: true}).click();
 
@@ -262,8 +266,9 @@ for (const sample of [
     try {
       await page.evaluate(guild => {window.location.hash = `guilds/${guild}`;}, sample.guild);
       await expect.poll(() => captured).toBe(true);
+      // An explicit sign-out lands on the login screen (p2x-1), not on the public guild page.
       await signOutHere(page);
-      await page.getByRole('button', {name: '會員登入', exact: true}).click();
+      await expect(page.getByRole('heading', {name: '登入', exact: true})).toBeVisible();
       await page.getByLabel('電子郵件', {exact: true}).fill(otherEmail);
       await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
       await page.getByRole('button', {name: '登入', exact: true}).click();

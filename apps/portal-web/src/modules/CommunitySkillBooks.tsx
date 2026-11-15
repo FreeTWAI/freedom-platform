@@ -3,11 +3,11 @@ import {useEffect,useId,useRef,useState} from 'react';
 import type {PortalClient} from '../api';
 import {SkillBookPurposeFilters,isGuildBook,loadCommunityCatalog,matchesSkillSearch,type CatalogBook} from './Community';
 import {SkillBookCard,httpsLink} from './SkillBookIntro';
-import {SkillBookCover} from './SkillBookCover';
+import {SkillBookCover,distinctOriginalRepoCount} from './SkillBookCover';
 import {CommunityBadge} from './SkillBookBadges';
 import {SkillShare,isSkillIllustrationUrl,submissionSharePath} from './SkillShare';
 import {GitHubSourceLinks} from './GitHubSocial';
-import {relationshipLabels} from './SkillUpload';
+import {relationshipLabels} from './SkillSubmission';
 import {useSkillDiscovery} from './skill-discovery-client';
 import {client as sessionClient} from '../portal-session';
 import {EventOutcomeBacklinks} from './EventOutcomeBacklinks';
@@ -23,7 +23,8 @@ export function CommunitySkillBooks({client,revision=0,guildIds=[]}:{client:Port
   const [books,setBooks]=useState<CatalogBook[]|null>(null),[bookError,setBookError]=useState(false);
   const [items,setItems]=useState<Submission[]|null>(null),[itemError,setItemError]=useState(false);
   const searchInput=useRef<HTMLInputElement>(null);
-  const [retry,setRetry]=useState(0),[search,setSearch]=useState(''),[category,setCategory]=useState(''),[use,setUse]=useState(''),discovery=useSkillDiscovery();
+  const [retry,setRetry]=useState(0),[search,setSearch]=useState(''),[category,setCategory]=useState(''),[use,setUse]=useState(''),[limit,setLimit]=useState(20),discovery=useSkillDiscovery();
+  useEffect(()=>{setLimit(20);},[search,category,use]);
   useEffect(()=>{
     let active=true;setBookError(false);
     void loadCommunityCatalog(client).then(data=>{if(active)setBooks(data.skill_books);}).catch(()=>{if(active)setBookError(true);});
@@ -46,10 +47,11 @@ export function CommunitySkillBooks({client,revision=0,guildIds=[]}:{client:Port
     {(bookError||itemError)&&<div role="alert"><p>{bookError&&itemError?'社群技能書暫時無法載入。':'部分社群技能書暫時無法載入。'}</p><button type="button" className="btn btn-ghost" onClick={()=>setRetry(value=>value+1)}>重新載入社群技能書</button></div>}
     {loading?<p role="status">正在載入社群技能書…</p>:entries.length>0?<>
       <div className="skill-library-filters"><label className="field">搜尋社群技能書<input ref={searchInput} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：漫畫、角色、交易…"/></label><SkillBookPurposeFilters category={category} onCategory={setCategory} use={use} onUse={setUse} categories={categories}/>{(search||category||use)&&<button type="button" className="btn btn-ghost" onClick={()=>{setSearch('');setCategory('');setUse('');searchInput.current?.focus();}}>清除篩選</button>}</div>
-      <p className="skill-library-count" role="status">顯示 {shown.length} / {entries.length} 本社群技能書</p>
-      <div className="card-grid community-book-grid">{shown.map(entry=>entry.kind==='submission'
+      <p className="skill-library-count" role="status">顯示 {distinctOriginalRepoCount(shown.map(entry=>entry.kind==='submission'?{id:entry.item.submission_id,repository_url:entry.item.source.repository_url}:entry.book))} / {distinctOriginalRepoCount(entries.map(entry=>entry.kind==='submission'?{id:entry.item.submission_id,repository_url:entry.item.source.repository_url}:entry.book))} 個社群原作資源</p>
+      <div className="card-grid community-book-grid">{shown.slice(0,limit).map(entry=>entry.kind==='submission'
         ?<SubmissionBookCard key={`submission:${entry.item.submission_id}`} item={entry.item}/>
         :<SkillBookCard key={entry.book.id} book={entry.book} className="community-book" headingLevel={3} community/>)}</div>
+      {shown.length>limit&&<div className="actions"><button type="button" className="btn btn-secondary" onClick={()=>setLimit(count=>count+20)}>更多</button></div>}
       {!shown.length&&<p className="muted">沒有符合的社群技能書。試試另一個關鍵字或用途。</p>}
     </>:!bookError&&!itemError&&<p className="muted">目前還沒有社群技能書。</p>}
   </div>;
@@ -99,7 +101,7 @@ function SubmissionIntro({item}:{item:Submission}){
 
         <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack"><p>分享者與來源的關係為自行聲明，尚未核實作者身分；收錄不代表公會指定。</p><p>{license==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${license}。素材與引用內容請另外查看專案說明。`}</p>{evidence&&<a href={evidence} target="_blank" rel="noopener noreferrer">閱讀授權 ↗</a>}{item.source.archived&&<p className="field-hint">來源 Repo 已封存。</p>}{/^[0-9a-f]{40}$/.test(item.source.commit_sha)&&<p className="field-hint">收錄版本：<code>{item.source.commit_sha.slice(0,12)}</code></p>}</div></details>
         {repository&&<details className="skill-intro-details skill-intro-advanced"><summary>作者與共同開發（進階）</summary><div className="stack">
-        {repository&&<section className="skill-intro-collaboration"><h3>一起開發</h3><p>查看專案任務，認領一項修改並提交 PR。</p><div className="actions"><a className="btn btn-primary" href={`${repository}/issues`} target="_blank" rel="noopener noreferrer">查看專案任務 ↗</a><a className="btn btn-ghost" href={`${page}/SKILL.md`} target="_blank" rel="noopener noreferrer">交給 Agent ↗</a><a className="btn btn-ghost" href={`${repository}/pulls`} target="_blank" rel="noopener noreferrer">查看原作 PR ↗</a><a className="btn btn-ghost" href={`${repository}/fork`} target="_blank" rel="noopener noreferrer">Fork 原作 ↗</a></div><p className="field-hint">修改以 PR 回饋原作，由原作維護者審查；Fork 不會自動回饋原作。</p></section>}
+        {repository&&<section className="skill-intro-collaboration"><h3>一起開發</h3><p>查看專案任務，認領一項修改並提交 PR。</p><div className="actions"><a className="btn btn-ghost" href={`${repository}/issues`} target="_blank" rel="noopener noreferrer">查看專案任務 ↗</a><a className="btn btn-ghost" href={`${page}/SKILL.md`} target="_blank" rel="noopener noreferrer">交給 Agent ↗</a><a className="btn btn-ghost" href={`${repository}/pulls`} target="_blank" rel="noopener noreferrer">查看原作 PR ↗</a><a className="btn btn-ghost" href={`${repository}/fork`} target="_blank" rel="noopener noreferrer">Fork 原作 ↗</a></div><p className="field-hint">修改以 PR 回饋原作，由原作維護者審查；Fork 不會自動回饋原作。</p></section>}
         </div></details>}
       </div>
     </dialog>

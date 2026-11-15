@@ -12,6 +12,7 @@ import { migrate } from '../../scripts/database.js';
 import { seedLocal } from '../../packages/testing/seed.js';
 import metadata from '../../contracts/preview/v1/metadata.json' with { type: 'json' };
 import { createRequestDrain } from './helpers/request-drain.js';
+import { runAfterResponseWork } from '../../modules/agent-commerce/operations/due-work.js';
 
 // This suite must never silently pass when the independently checked-out consumers are absent.
 const repositoriesRoot = process.env.FREEDOM_REPOSITORIES_ROOT;
@@ -27,6 +28,8 @@ const pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=
 const nativeFetch = globalThis.fetch.bind(globalThis);
 const key = () => ({ idempotencyKey: randomUUID() });
 const requests = createRequestDrain();
+// Waits for open requests and for work the API runs after its response.
+const settle = () => requests.drain();
 let app: ReturnType<typeof createApp>, server: ReturnType<typeof serve> | undefined;
 let origin: string, baseUrl: string, schemaCreated = false;
 let storefront: any, growth: any, registry: any, page: any;
@@ -51,8 +54,16 @@ before(async () => {
   assert(address && typeof address !== 'string');
   origin = `http://127.0.0.1:${address.port}`;
   baseUrl = `${origin}/api/v1`;
-  app = createApp(pool, origin);
+  app = makeApp();
 });
+
+// Work after a response (a registered project joins its repository share) is tracked like a
+// request, so settle() and cleanup wait for it instead of racing it.
+function makeApp() {
+  return createApp(pool, origin, 'local', {
+    afterResponse: work => { void requests.track(runAfterResponseWork(work).catch(() => console.error('after_response_failed'))); },
+  });
+}
 
 beforeEach(async () => {
   await requests.drain();
@@ -97,9 +108,15 @@ function mockGitHub(t: TestContext) {
     assert.notEqual(options.redirect, 'error');
     assert.equal(new Headers(options.headers).get('Authorization'), null);
     requests.push(url.href);
+    // A fork names its original the way GitHub does; a repository share joins that original.
     if (url.href === 'https://api.github.com/repos/example/integration-project') return Response.json({
       id: 550011, full_name: 'example/integration-project', private: false, visibility: 'public',
-      default_branch: 'main', fork: true, archived: state.archived,
+      default_branch: 'main', fork: true, archived: state.archived, owner: { id: 9101, login: 'example' },
+      stargazers_count: 0, parent: { full_name: 'example/upstream' }, source: { full_name: 'example/upstream' },
+    });
+    if (url.href === 'https://api.github.com/repos/example/upstream') return Response.json({
+      id: 550010, full_name: 'example/upstream', private: false, visibility: 'public',
+      default_branch: 'main', fork: false, archived: false, owner: { id: 9101, login: 'example' }, stargazers_count: 0,
     });
     if (url.href === 'https://api.github.com/repos/example/integration-project/commits/main') return Response.json({ sha: state.sha });
     if (url.href === `https://api.github.com/repos/example/integration-project/license?ref=${state.sha}`) return Response.json({ path: 'LICENSE', license: { spdx_id: 'MIT' } });
@@ -155,7 +172,7 @@ test('storefront commands traverse HTTP and persist one exact accepted supplier/
     body: { ...supplyTerms, net_price_minor: 39000 },
   });
   // A fresh application instance reads the same persisted transaction through HTTP.
-  app = createApp(pool, origin);
+  app = makeApp();
   const view = await storefront.loadStorefront(seller, { storeId: store.store_id });
   assert.equal(view.listings.length, 1);
   const saved = view.listings[0];
@@ -234,8 +251,16 @@ test('registry import joins growth and public page metadata without inheriting o
   const body = registry.projectManifestToImport(manifest, { relationship: 'curator', consentToShare: true, useNotes: '請先讀 README；整合測試資料。' });
   const intent = key();
   const project = await registry.registerProject(member, body, intent);
+  await settle();
+  // Registration reads the repository, its commit and its license. After the response the project
+  // joins the share of its original: one read of the fork, one of the original.
+  assert.equal(requests.length, 5);
+  assert.deepEqual(requests.slice(3), ['https://api.github.com/repos/example/integration-project', 'https://api.github.com/repos/example/upstream']);
+  const joined = await pool.query('SELECT s.canonical_key FROM oss_projects p JOIN shares s USING(share_id) WHERE p.project_id=$1', [project.project_id]);
+  assert.deepEqual(joined.rows.map(row => row.canonical_key), ['github:550010'], 'The registered fork joins its original\'s share.');
   assert.equal((await registry.registerProject(member, body, intent)).project_id, project.project_id);
-  assert.equal(requests.length, 3, 'Idempotent replay must not fetch GitHub again.');
+  await settle();
+  assert.equal(requests.length, 5, 'Idempotent replay must not fetch GitHub again.');
   assert.equal(project.repository_id, '550011');
   assert.equal(project.current_version.commit_sha, 'a'.repeat(40));
   assert.equal(project.current_version.license_spdx, 'MIT');
@@ -257,7 +282,7 @@ test('registry import joins growth and public page metadata without inheriting o
   const saved = (await growth.loadCampaignWorkspace(growthMember)).campaigns[0];
   assert.equal(saved.source_snapshot.commit_sha, 'a'.repeat(40));
   assert.equal(saved.source_sha256, campaign.source_sha256);
-  assert.equal(requests.length, 6);
+  assert.equal(requests.length, 8);
   assert.equal((await pool.query('SELECT count(*) FROM oss_project_versions')).rows[0].count, '2');
 
   const view = page.projectPublicView(manifest);
@@ -276,7 +301,7 @@ test('agent-kit uses its pinned client for canonical member/work state without e
  const {PlatformClient}=await importRepo('freedom-agent-kit','packages/client/index.mjs');
  const client=await login(PlatformClient);
  const workspace=await kit.loadMemberWorkspace(client);
- assert.equal(workspace.member.email,'maker@local.test');assert(Array.isArray(workspace.work));assert.equal(workspace.guilds.length,18);
+ assert.equal(workspace.member.email,'maker@local.test');assert(Array.isArray(workspace.work));assert.equal(workspace.guilds.length,20);
  assert.equal(workspace.agent_execution_grant,false);assert.equal(Object.hasOwn(workspace,'csrf_token'),false);
  assert(!JSON.stringify(workspace).includes('freedom_local_session='));
  await client.call('logout',{body:{}});

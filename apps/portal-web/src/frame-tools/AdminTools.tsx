@@ -1,0 +1,14 @@
+import {objectPage} from '../modules/admin-places';
+import {useEffect,useState} from 'react';
+type Client={request<T>(path:string,body?:unknown,options?:{key?:string;version?:number|string|null}):Promise<T>};
+type Item={id:string;guild_key:string;title:string;origin:string;state:string;revision:number};
+export function AdminTools({client,selectedId,reported=false}:{client:Client;selectedId?:string|null;reported?:boolean}){
+ const [items,setItems]=useState<Item[]>([]),[error,setError]=useState(''),[selected,setSelected]=useState<string|null>(null),[reason,setReason]=useState(''),[busy,setBusy]=useState(false);
+ const [offset,setOffset]=useState(0),[next,setNext]=useState<number|null>(null);
+ const load=async()=>{try{const path=reported?'/guild-tools?reported=true&limit=100':'/guild-tools?limit=100';const value=selectedId?await objectPage<Item>(client,path,selectedId,'id'):await client.request<{items:Item[];next_offset?:number|null}>(`${path}&offset=${offset}`);setItems(value.items);setNext(value.next_offset??null);setError('');}catch(e){setError(String(e));}};
+ const disable=async(item:Item)=>{setBusy(true);try{await client.request('/guild-tools/'+item.id+'/disable',{reason},{version:item.revision});setSelected(null);setReason('');await load();}catch(e){setError(String(e));}finally{setBusy(false);}};
+ useEffect(()=>{void load();},[reported,client,selectedId,offset]);
+ const content=<>{error&&<p role="alert">{error}</p>}{!items.length&&<p className="muted">{reported?'目前沒有工具檢舉。':'尚無外部工具'}</p>}{items.filter(item=>!selectedId||item.id===selectedId).map(item=><article key={item.id} className="card stack"><p>{item.title} · {item.guild_key} · {item.origin}</p><p>{item.state==='enabled'?'使用中':item.state==='disabled'?'已停用':'待確認'}</p>{selected===item.id?<><label className="field">停用原因<input value={reason} maxLength={500} onChange={e=>setReason(e.target.value)}/></label><div className="actions"><button className="btn btn-secondary btn-small" disabled={busy||!reason.trim()} onClick={()=>void disable(item)}>確認</button><button className="btn btn-ghost btn-small" onClick={()=>setSelected(null)}>取消</button></div></>:(reported||item.state!=='disabled')&&<button className="btn btn-secondary btn-small" onClick={()=>setSelected(item.id)}>停用工具</button>}</article>)}{!selectedId&&<div className="actions">{offset>0&&<button className="btn btn-ghost btn-small" onClick={()=>setOffset(Math.max(0,offset-100))}>上一頁</button>}{next!==null&&<button className="btn btn-ghost btn-small" onClick={()=>setOffset(next)}>下一頁</button>}</div>}</>;
+ if(reported)return <section className="stack"><h2>工具檢舉</h2>{content}</section>;
+ return <details onToggle={e=>{if(e.currentTarget.open)void load();}}><summary>外部工具</summary>{content}</details>;
+}

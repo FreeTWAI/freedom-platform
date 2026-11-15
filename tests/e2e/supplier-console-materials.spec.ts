@@ -309,7 +309,7 @@ test('SC-E2E-60 copy material from creation to partner use, revoke and withdraw 
     await newForm.getByRole('button', {name: '建立素材', exact: true}).click();
 
     await expect(activePage(pageA).getByRole('heading', {level: 2, name: `素材詳情：${title}`, exact: true})).toBeVisible();
-    await expect(pageA).toHaveURL(new RegExp(`#${sup.store.hash}/supply/materials/[0-9a-f-]{36}$`));
+    await expect(pageA).toHaveURL(new RegExp(`#guilds/guild_product_quality_supply/tools/catalog/${sup.store.hash.slice("stores/".length)}/supply/materials/[0-9a-f-]{36}$`));
     const materialId = new URL(pageA.url()).hash.split('/').pop()!;
 
     // 內容 shows bodyV1
@@ -1034,7 +1034,7 @@ test('SC-E2E-64 leaving with an unsaved material draft asks first', async ({brow
     });
     await consoleRoot(pageA).getByRole('link', {name: '切換事業', exact: true}).click();
     await dismissNew.promise;
-    await expect(pageA).toHaveURL(new RegExp(`#${sup.store.hash}/supply/materials/new$`));
+    await expect(pageA).toHaveURL(new RegExp(`#guilds/guild_product_quality_supply/tools/catalog/${sup.store.hash.slice("stores/".length)}/supply/materials/new$`));
     await expect(newForm.getByLabel('標題')).toHaveValue(draftTitle);
 
     const acceptNew = barrier();
@@ -1046,7 +1046,7 @@ test('SC-E2E-64 leaving with an unsaved material draft asks first', async ({brow
     });
     await consoleRoot(pageA).getByRole('link', {name: '切換事業', exact: true}).click();
     await acceptNew.promise;
-    await expect(pageA).toHaveURL(/#stores\/supply$/);
+    await expect(pageA).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
 
     // 2. Same for an unsaved 儲存為新版本 text on the detail page
     const savedTitle = `正式素材 ${suffix}`;
@@ -1070,7 +1070,7 @@ test('SC-E2E-64 leaving with an unsaved material draft asks first', async ({brow
     });
     await consoleRoot(pageA).getByRole('link', {name: '切換事業', exact: true}).click();
     await dismissDetail.promise;
-    await expect(pageA).toHaveURL(new RegExp(`#${sup.store.hash}/supply/materials/${materialId}$`));
+    await expect(pageA).toHaveURL(new RegExp(`#guilds/guild_product_quality_supply/tools/catalog/${sup.store.hash.slice("stores/".length)}/supply/materials/${materialId}$`));
     await expect(copyForm.getByLabel('文案內容')).toHaveValue(unsavedBody);
 
     const acceptDetail = barrier();
@@ -1082,7 +1082,7 @@ test('SC-E2E-64 leaving with an unsaved material draft asks first', async ({brow
     });
     await consoleRoot(pageA).getByRole('link', {name: '切換事業', exact: true}).click();
     await acceptDetail.promise;
-    await expect(pageA).toHaveURL(/#stores\/supply$/);
+    await expect(pageA).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
   } finally {
     await withdrawSupplierOffers(e2eAuthPool, supplierIds);
     await Promise.all(contexts.map(c => c.close()));
@@ -1372,7 +1372,7 @@ test('SC-E2E-71 the report page shows the period, links to the lists and downloa
 
     await activePage(pageA).getByRole('link', {name: '公開中：查看清單', exact: true}).click();
     await expect(activePage(pageA).getByRole('heading', {level: 2, name: '商品與庫存', exact: true})).toBeVisible();
-    await expect(pageA).toHaveURL(new RegExp(`#${sup.store.hash}/supply/products\\?state=offered$`));
+    await expect(pageA).toHaveURL(new RegExp(`#guilds/guild_product_quality_supply/tools/catalog/${sup.store.hash.slice("stores/".length)}/supply/products\\?state=offered$`));
 
     // Back to 營運報表 and follow partner row link to B's detail
     await openSupplyPage(pageA, `${sup.store.hash}/supply/reports`, '營運報表');
@@ -1384,7 +1384,7 @@ test('SC-E2E-71 the report page shows the period, links to the lists and downloa
     const partnerHref = (await partnerLink.getAttribute('href'))!;
     await partnerLink.click();
     await expect(activePage(pageA).getByRole('heading', {level: 2, name: '合作店家詳情', exact: true})).toBeVisible();
-    await expect(pageA).toHaveURL(new RegExp(`${partnerHref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+    await expect(pageA).toHaveURL(new RegExp(`${partnerHref.replace('#stores/', '#guilds/guild_product_quality_supply/tools/catalog/').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
 
     // Back to 營運報表 and follow reservation row link with the same period
     await openSupplyPage(pageA, `${sup.store.hash}/supply/reports`, '營運報表');
@@ -1403,7 +1403,7 @@ test('SC-E2E-71 the report page shows the period, links to the lists and downloa
     await activePage(pageA).getByRole('link', {name: '預留中：查看預留', exact: true}).click();
     await expect(activePage(pageA).getByRole('heading', {level: 2, name: '預留與訂單', exact: true})).toBeVisible();
     await expect(pageA).toHaveURL(
-      new RegExp(`#${sup.store.hash}/supply/reservations\\?state=reserved&from=${expectedFrom}&to=${expectedTo}$`),
+      new RegExp(`#guilds/guild_product_quality_supply/tools/catalog/${sup.store.hash.slice("stores/".length)}/supply/reservations\\?state=reserved&from=${expectedFrom}&to=${expectedTo}$`),
     );
 
     // Back to 營運報表 for invalid period checks. The heading is visible before

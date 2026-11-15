@@ -1,0 +1,35 @@
+.guild-tool-more > summary {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  list-style: none;
+  cursor: pointer;
+}
+.guild-tool-more > summary::-webkit-details-marker {
+  display: none;
+}
+.guild-tool-more-body {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+}
+.guild-launchpad .btn,
+.guild-launchpad a.btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.guild-launchpad .guild-tool-button {
+  align-self: flex-start;
+  max-width: min(100%, 16rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guild-tool-button-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -33,7 +33,7 @@ async function register(page: Page, nickname: string, shotPrefix?: string) {
   await expect(page.getByRole('button', { name: '登入', exact: true })).toBeVisible();
   await oneTitle(page, 'login');
   if (shotPrefix) await page.screenshot({ path: `${shots}/${shotPrefix}-login.png`, fullPage: true });
-  await page.getByRole('button', { name: '建立帳號', exact: true }).click();
+  await page.getByRole('button', { name: '免費加入', exact: true }).click();
   await oneTitle(page, 'register');
   if (shotPrefix) await page.screenshot({ path: `${shots}/${shotPrefix}-register.png`, fullPage: true });
   await page.getByLabel('社群顯示名稱', { exact: true }).fill(nickname);
@@ -90,7 +90,7 @@ for (const [label, viewport] of viewports) {
     await page.setViewportSize(viewport);
     await register(page, `審查${label}`, label);
     await onboard(page, label);
-    for (const [nav, title] of [['會員首頁', '會員首頁'], ['我的定位', '我的定位'], ['職業公會', '職業公會'], ['工坊夥伴', '工坊夥伴'], ['小隊集合', '小隊集合']] as const) {
+    for (const [nav, title] of [['會員首頁', '動態'], ['我的定位', '定位測驗'], ['職業公會', '公會'], ['工坊夥伴', '探索'], ['小隊集合', '我的']] as const) {
       await navigate(page, nav);
       await expect(page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible();
       await page.waitForLoadState('networkidle');
@@ -99,7 +99,7 @@ for (const [label, viewport] of viewports) {
       await page.screenshot({ path: `${shots}/${label}-${title}.png`, fullPage: true });
     }
     await navigate(page, '我的名片');
-    await expect(page.getByRole('heading', { level: 1, name: '我的名片', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '我的', exact: true })).toBeVisible();
     await page.waitForLoadState('networkidle');
     await oneTitle(page, `${label} 我的名片`);
     await page.screenshot({ path: `${shots}/${label}-我的名片.png`, fullPage: true });
@@ -127,9 +127,12 @@ for (const [label, viewport] of viewports) {
 test('account contacts align each field with its choices and state the privacy rules once', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await register(page, '名片審查'); await onboard(page);
-  await navigate(page, '我的名片');await openAccountSettings(page,'誰能看到我','更多個人資料（選填）','查看目前的會員名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'更多個人資料（選填）','查看目前的會員名片');
   await expect(page.getByRole('combobox', { name: '我是（選填）', exact: true }).locator('option')).toHaveText(['不顯示', '男', '女', '外星人', 'AI']);
   await expect(page.getByLabel('社群顯示名稱', { exact: true })).toBeVisible();
+  await expect(page.locator('.account-panel .member-card')).toContainText('尚未新增社群連結。');
+  await expect(page.getByRole('button', { name: '前往技能書架', exact: true })).toHaveCount(0);
+  await openAccountSettings(page,'誰能看到我');
   await expect(page.getByText(/「平台公開」是所有已登入的工坊會員/)).toHaveCount(1);
   await expect(page.getByText(/社群帳號由本人填寫，尚未驗證身分/)).toHaveCount(1);
   for (const name of ['聯絡 E-mail', 'Discord 帳號', 'GitHub 帳號', 'LINE ID']) {
@@ -147,8 +150,6 @@ test('account contacts align each field with its choices and state the privacy r
   await line.getByRole('checkbox', { name: '平台公開', exact: true }).check();
   await expect(line.getByRole('checkbox', { name: '平台好友', exact: true })).toBeDisabled();
   await expect(line.getByText('平台公開已包含好友、小隊與公會夥伴。')).toBeVisible();
-  await expect(page.locator('.account-panel .member-card')).toContainText('尚未新增社群連結。');
-  await expect(page.getByRole('button', { name: '前往技能書架', exact: true })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await pageFits(page, 'phone account');
   await page.screenshot({ path: `${shots}/account-privacy-phone.png`, fullPage: true });
@@ -199,7 +200,7 @@ test('a failed guild directory load offers a styled retry that recovers', async 
 test('a failed member card load keeps quick links, claims nothing and recovers in place on phone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await register(page, '名片重試'); await onboard(page);
-  await expect(page.getByRole('heading', { level: 1, name: '會員首頁', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: '動態', exact: true })).toBeVisible();
   // Fail UUID card reads only; the independent recommendation endpoint stays live.
   const card = (url: URL) => /^\/api\/v1\/members\/[0-9a-f-]{36}$/.test(url.pathname);
   let mode: 'fail' | 'hold' | 'pass' = 'fail', release!: () => void, requests = 0;
@@ -214,7 +215,7 @@ test('a failed member card load keeps quick links, claims nothing and recovers i
   await page.route('**/api/v1/assessment-definition', route => route.fulfill({ status: 503, body: '' }));
   await page.reload();
   const summary = page.getByRole('region', { name: '我的會員摘要', exact: true, includeHidden: true });
-  const guide = page.locator('.home-guide-disclosure');
+  const guide = page.locator('.home-personal');
   await expect(guide).toHaveJSProperty('open', false);
   const alert = page.getByRole('alert');
   await expect(alert).toBeVisible();
@@ -227,9 +228,9 @@ test('a failed member card load keeps quick links, claims nothing and recovers i
   await expect(page.locator('.member-featured')).toHaveCount(0);
   await openHomeGuide(page);
   const shortcuts = page.getByRole('navigation', { name: '常用入口', exact: true });
-  // The feed is already on the home page; only chat and people need shortcuts.
-  await expect(shortcuts.getByRole('button')).toHaveCount(2);
-  for (const name of ['開始聊天', '找夥伴']) await expect(shortcuts.getByRole('button', {name, exact: true})).toBeVisible();
+  // Home keeps its feed and recovery controls; navigation belongs to the place menu.
+  await expect(shortcuts).toHaveCount(0);
+  await expect(page.getByRole('link',{name:'編輯個人頁',exact:true})).toBeVisible();
   await expect(page.getByRole('region', {name: '首頁社群動態', exact: true})).toBeVisible();
   await expect(page.getByRole('button', {name: '建立貼文', exact: true})).toBeVisible();
   await pageFits(page, 'phone home error');

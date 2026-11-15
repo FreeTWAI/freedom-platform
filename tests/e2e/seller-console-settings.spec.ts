@@ -1,3 +1,4 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route.js';
 import {randomBytes} from 'node:crypto';
 import {test,expect,openSeller,verifyPassword,expireNextSettingsProof} from './seller-console-fixture.js';
 import {fixtureStore} from './hosted-order-fixture.js';
@@ -166,7 +167,7 @@ for(const committed of [true,false])test(`unknown payment PUT keeps its complete
  await seller.getByRole('button',{name:'重新確認狀態',exact:true}).click();
  await expect(seller.getByRole('button',{name:'重新確認狀態',exact:true})).toHaveCount(0);
  await expect(form.getByRole('button',{name:'捨棄輸入，重新讀取設定',exact:true})).toBeDisabled();
- await seller.getByRole('link',{name:'商店首頁',exact:true}).click();await expect(page).toHaveURL(new RegExp(hash+'$'));
+ await seller.getByRole('link',{name:'商店首頁',exact:true}).click();await expect(page).toHaveURL(new RegExp(canonicalHash(hash)+'$'));
  await expect(seller.getByText('尚未確認原操作的結果，請按「重試」確認後再離開。',{exact:true})).toBeVisible();
  await seller.getByRole('button',{name:'重試',exact:true}).click();
  await expect(seller.getByText('已保存：線下收款設定。',{exact:true})).toBeVisible();

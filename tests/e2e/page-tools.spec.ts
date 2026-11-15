@@ -1,7 +1,5 @@
-import {openChat,closeChat} from './navigation.js';
-import {openPageTools} from './navigation.js';
+import {openChat,closeChat,openPageTools,openLoginMore,navigate} from './navigation.js';
 import {test,expect} from './fixtures.js';
-import {navigate} from './navigation.js';
 
 test('every workspace page exposes contextual tools, filtered issues and agent guidance',async({page})=>{
   await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async(text:string)=>{(window as typeof window&{copiedClaim?:string}).copiedClaim=text}}}));
@@ -9,7 +7,7 @@ test('every workspace page exposes contextual tools, filtered issues and agent g
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible({timeout:20000});
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible({timeout:20000});
   await page.route('**/api/v1/me/github',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({configured:true,connected:true,github_user:{id:'123',login:'maker'}})}));
   await openPageTools(page); await page.getByRole('button',{name:'提出想法'}).click();
   const idea=page.getByRole('dialog',{name:'會員首頁：提出想法'});
@@ -63,13 +61,13 @@ test('every workspace page exposes contextual tools, filtered issues and agent g
   await page.screenshot({path:'test-results/page-tools-desktop.png'});
 });
 
-test('phone keeps world chat in an in-page drawer and admin keeps a dock',async({page})=>{
+test('phone keeps world chat in an in-page drawer and admin docks headless',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await openPageTools(page); await expect(page.getByRole('button',{name:'提出想法'})).toBeVisible(); await page.locator('.page-tools-menu > summary').click();
   await openChat(page);
   await expect(page.getByRole('button',{name:'在獨立視窗開啟訊息控制台'})).toBeHidden();
@@ -83,7 +81,7 @@ test('phone keeps world chat in an in-page drawer and admin keeps a dock',async(
   await page.screenshot({path:'test-results/page-tools-idea-mobile.png'});
   await page.getByRole('dialog',{name:'會員首頁：提出想法'}).getByRole('button',{name:'關閉'}).click();
   await page.goto('/admin');
-  await expect(page.getByRole('button',{name:'展開訊息控制台'})).toBeVisible();
+  await expect(page.locator('.game-console')).toHaveCount(0);
   await expect(page.locator('.page-tools-menu')).toHaveCount(1);
   await openPageTools(page);
   await expect(page.getByRole('button',{name:'提出想法'})).toBeVisible();
@@ -93,9 +91,9 @@ test('phone keeps world chat in an in-page drawer and admin keeps a dock',async(
   await adminIdea.getByRole('button',{name:'關閉',exact:true}).click();
   await expect(page.locator('.page-tools-menu > summary')).toBeFocused();
   await expect(page.locator('.page-tools-menu')).toHaveJSProperty('open',false);
-  await page.setViewportSize({width:1280,height:900});await page.getByRole('button',{name:'展開訊息控制台',exact:true}).click();
-  const opened=page.waitForEvent('popup');await page.getByRole('button',{name:'在獨立視窗開啟訊息控制台',exact:true}).click();
-  const popup=await opened;await expect(popup).toHaveURL(/\/admin\?game-console=popout/);await expect(popup.locator('.game-console.is-popout')).toBeVisible();await popup.close();
+  await page.setViewportSize({width:1280,height:900});
+  await page.goto('/admin?game-console=popout');
+  await expect(page.locator('.game-console.is-popout')).toBeVisible();
 });
 
 test('unlinked member gets GitHub guidance and screenshot handoff',async({page})=>{
@@ -108,7 +106,7 @@ test('unlinked member gets GitHub guidance and screenshot handoff',async({page})
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible({timeout:20000});
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible({timeout:20000});
   await openPageTools(page); await page.getByRole('button',{name:'提出想法'}).click();
   const idea=page.getByRole('dialog',{name:'會員首頁：提出想法'});
   await expect(idea.getByRole('status')).toHaveText('目前顯示上次同步的資料，請稍後重新同步。');
@@ -145,7 +143,7 @@ test('page tools load on demand, ignore cancelled or older opens, and recover a 
   const chooseHelp=async()=>{await openPageTools(page);await page.getByRole('button',{name:'頁面說明',exact:true}).click()};
   const settle=async()=>{const response=page.waitForResponse(chunk);release();await (await response).finished();await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve())))};
   try{
-    await page.goto('/');await openPageTools(page);expect(requests).toBe(0);
+    await page.goto('/');await openLoginMore(page);await openPageTools(page);expect(requests).toBe(0);
     await chooseHelp();await expect(page.getByRole('status').filter({hasText:'正在開啟頁面說明'})).toBeVisible();
     await expect.poll(()=>requests).toBe(1);
     await page.keyboard.press('Escape');await expect(page.locator('.page-tools-menu > summary')).toBeFocused();
@@ -157,7 +155,7 @@ test('page tools load on demand, ignore cancelled or older opens, and recover a 
     await chooseHelp();await expect(page.getByRole('dialog',{name:'註冊與登入：頁面說明'})).toBeVisible();
     expect(requests).toBe(1);
 
-    await page.reload();await chooseHelp();await expect.poll(()=>requests).toBe(2);
+    await page.reload();await openLoginMore(page);await chooseHelp();await expect.poll(()=>requests).toBe(2);
     await page.evaluate(()=>{window.location.hash='tester-map'});
     await expect(page.getByRole('heading',{name:'測試員地圖',level:1})).toBeVisible();
     await settle();await expect(page.locator('.page-tools-dialog')).toHaveCount(0);
@@ -172,12 +170,12 @@ test('page tools load on demand, ignore cancelled or older opens, and recover a 
     await expect(otherTool).toBeFocused();await settle();await expect(currentDialog).toBeVisible();
     await currentDialog.getByRole('button',{name:'關閉',exact:true}).click();await expect(currentHelp).toBeFocused();
 
-    mode='fail';await page.goto('/');await chooseHelp();
+    mode='fail';await page.goto('/');await openLoginMore(page);await chooseHelp();
     await expect(page.getByRole('alert')).toContainText('頁面工具暫時無法載入');
     await page.getByRole('button',{name:'關閉頁面工具',exact:true}).click();await expect(page.locator('.page-tools-menu > summary')).toBeFocused();
     await chooseHelp();await expect(page.getByRole('alert')).toContainText('頁面工具暫時無法載入');
-    mode='pass';await page.getByRole('button',{name:'重新載入頁面',exact:true}).click();
-    await expect(page.locator('.page-tools')).toBeVisible();await expect(page.locator('.page-tools-dialog')).toHaveCount(0);
+    mode='pass';await Promise.all([page.waitForEvent('load'),page.getByRole('button',{name:'重新載入頁面',exact:true}).click()]);
+    await openLoginMore(page);await expect(page.locator('.page-tools')).toBeVisible();await expect(page.locator('.page-tools-dialog')).toHaveCount(0);
     await chooseHelp();await expect(page.getByRole('dialog',{name:'註冊與登入：頁面說明'})).toBeVisible();
     expect(errors).toEqual([]);
   }finally{mode='pass';release();await page.unrouteAll({behavior:'wait'})}

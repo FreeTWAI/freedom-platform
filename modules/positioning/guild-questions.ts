@@ -22,6 +22,8 @@ const participation=question('participation','你比較想怎麼參與？',[
 ]);
 // Every option is a valid way to begin. These are not skill tests or credentials.
 const builtIn:Record<string,GuildQuestion[]>={
+  guild_games:[familiarity('你對小遊戲有多熟？',[['games_new','第一次體驗'],['games_play','玩過一些'],['games_familiar_create','做過遊戲']]),intent([['games_try','體驗一個遊戲'],['games_share','分享遊玩成果'],['games_create','製作小遊戲']]),weekly],
+  guild_ar:[familiarity('你對 AR 互動有多熟？',[['ar_new','第一次體驗'],['ar_try','體驗過 AR'],['ar_familiar_create','做過互動圖案']]),intent([['ar_scan','體驗圖案掃描'],['ar_create','製作互動圖案'],['ar_share','分享體驗回饋']]),weekly],
   guild_talent_direction:[familiarity('你對探索方向有多熟？',[['talent_familiar_new','還沒想過方向'],['talent_familiar_looking','正在摸索'],['talent_familiar_card','寫過方向卡'],['talent_familiar_often','常陪別人想']]),intent([['talent_intent_card','寫一張方向卡'],['talent_intent_walk','看看別人怎麼走'],['talent_intent_coach','陪別人找方向'],['talent_intent_watch','先觀察再決定']]),weekly,participation],
   guild_product_quality_supply:[familiarity('你對商品與供貨有多熟？',[['product_familiar_new','還沒碰過商品'],['product_familiar_seen','看過別人整理'],['product_familiar_draft','做過商品草稿'],['product_familiar_often','常處理供貨']]),intent([['product_intent_draft','建一件商品草稿'],['product_intent_supply','整理可供條件'],['product_intent_quality','核對品質資訊'],['product_intent_watch','先看看怎麼做']]),weekly,participation],
   guild_commerce_sales:[familiarity('你對選貨與銷售有多熟？',[['sales_familiar_new','還沒賣過'],['sales_familiar_seen','看過商店經營'],['sales_familiar_plan','整理過銷售計畫'],['sales_familiar_often','常服務買家']]),intent([['sales_intent_pick','選一件商品'],['sales_intent_plan','寫一份銷售計畫'],['sales_intent_buyer','練習服務買家'],['sales_intent_watch','先觀察再動手']]),weekly,participation],

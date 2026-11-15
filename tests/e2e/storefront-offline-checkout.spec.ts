@@ -1,3 +1,4 @@
+import {adminNavigate} from './admin-navigation.js';
 import {randomUUID} from 'node:crypto';
 import {emptySellerPolicies,POLICY_KINDS,POLICY_LABELS} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import {totpCode} from '../../modules/identity-membership/totp.js';
@@ -815,7 +816,7 @@ test('checkout registration returns before guild choice; unavailable stores keep
     const page = await context.newPage(), email = `buyer-registration-${randomUUID()}@example.test`;
     await start(page, store);
     await page.getByRole('link', {name: '登入會員', exact: true}).click();
-    await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+    await page.getByRole('button', {name: '免費加入', exact: true}).click();
     await expect(page.getByText('建立帳號後，會先確認並返回原本的商店頁面；選公會與完整定位可以稍後再做。', {exact: true})).toBeVisible();
     await page.getByLabel('電子郵件', {exact: true}).fill(email);
     await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
@@ -842,7 +843,7 @@ test('checkout registration returns before guild choice; unavailable stores keep
     await expect(page.getByText('登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。', {exact: true})).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/');
     await context.clearCookies(); await page.goto(destination);
-    await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+    await page.getByRole('button', {name: '免費加入', exact: true}).click();
     await page.getByLabel('電子郵件', {exact: true}).fill(`buyer-unpublished-${randomUUID()}@example.test`);
     await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
     await page.getByRole('button', {name: '建立帳號，先逛工坊', exact: true}).click();
@@ -986,7 +987,7 @@ test('order bell tells an eligible seller reader about placement and opening it 
       SELECT $1,$2,$3,ARRAY['store:read','store:orders:read'],'active',principal_id FROM principals WHERE user_ref=$4`,[store.tenant,principal,store.instance,store.seller.id]);
     await apiLogin(readerContext,store.origin,reader.email);
     const readerPage=await readerContext.newPage();await readerPage.goto('/#home');
-    await expect(readerPage.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+    await expect(readerPage.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
     const buyer=await openBuyer(e2eAuthPool,buyerContext,store),buyerPage=await buyerContext.newPage();
     await start(buyerPage,store);await freeze(buyerPage,store);const order=await place(buyerPage,'銀行匯款');
     await readerPage.locator('.notification-bell-trigger').click();
@@ -1004,7 +1005,7 @@ test('order bell tells an eligible seller reader about placement and opening it 
     await assertCartResponsiveLayout(readerPage,[390,768,1440],width=>info.outputPath(`notify-bell-${width}.png`));
     const detail=readerPage.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===`/api/v1${store.root}/checkout-orders/${order.order_ref}`);
     await item.focus();await readerPage.keyboard.press('Enter');expect((await detail).status()).toBe(200);
-    await expect(readerPage).toHaveURL(`${store.origin}/#stores/${store.tenant}/${store.instance}/orders/${order.order_ref}`);
+    await expect(readerPage).toHaveURL(`${store.origin}/#guilds/guild_commerce_sales/tools/store/${store.tenant}/${store.instance}/orders/${order.order_ref}`);
     await expect(readerPage.locator('.seller-console')).toContainText(order.display_number);
     await e2eAuthPool.query("UPDATE tenant_module_permissions SET capabilities=ARRAY['store:read'],version=version+1,updated_at=clock_timestamp() WHERE tenant_id=$1 AND principal_id=$2",[store.tenant,principal]);
     expect((await readerContext.request.get(`/api/v1${store.root}/checkout-orders/${order.order_ref}`)).status()).toBe(403);
@@ -1235,7 +1236,7 @@ test('all store flags compose from owner setup through bank payment and meetup d
       await bp.goto('/shops/' + slug + '/products/' + products[0].sku);
       await expect(bp.getByRole('button', {name: '加入購物車', exact: true})).toHaveCount(0);
       await admin.goto('/admin');
-      await admin.getByRole('button', {name: '商店准入', exact: true}).click();
+      await adminNavigate(admin,'store-admissions');
       const admissions = admin.getByRole('region', {name: '商店准入', exact: true});
       const card = admissions.locator(`[data-store-instance="${instance}"]`);
       async function showStore() {

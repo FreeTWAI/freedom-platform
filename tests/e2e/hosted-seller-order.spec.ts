@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {canonicalHash} from '../../apps/portal-web/src/portal-route.js';
 import type {Route, Browser, TestInfo} from '@playwright/test';
 import type {Pool} from 'pg';
 import {test, expect, type Page} from './seller-console-fixture.js';
@@ -53,7 +54,7 @@ async function blocked(page: Page, hash: string) {
 
 test('HO-SUI01 owner entry, committed stale cancel ACK, original tuple guards and one stock release', async ({page, browser, baseURL, e2eAuthPool}, testInfo) => {
   test.setTimeout(120000);
-  const s = await reserved(e2eAuthPool, browser, baseURL!); const hash = `#stores/${s.tenant}/${s.instance}/orders`;
+  const s = await reserved(e2eAuthPool, browser, baseURL!); const hash = canonicalHash(`#stores/${s.tenant}/${s.instance}/orders`);
   await buyerLogin(page, s.seller.email, `#stores/${s.tenant}/${s.instance}`);
   await surface(page).getByRole('link', {name: '預留訂單', exact: true}).click();
   await expect(surface(page).getByRole('button', {name: '查看這筆預留'})).toBeEnabled();
@@ -136,7 +137,7 @@ registrationTest('HO-SUI04 fresh UI and API registrations keep the configured co
   expect(foreign[1].community_id).toBe(foreign[0].community_id);
   const uiEmail = `ho-register-ui-${randomUUID()}@example.test`, apiEmail = `ho-register-api-${randomUUID()}@example.test`, nickname = '跨社群註冊測試';
   await page.route(url => !['127.0.0.1', 'localhost'].includes(url.hostname), route => route.abort());
-  await page.goto('/'); await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+  await page.goto('/'); await page.getByRole('button', {name: '免費加入', exact: true}).click();
   await page.getByLabel('社群顯示名稱', {exact: true}).fill(nickname);
   await page.getByLabel('電子郵件', {exact: true}).fill(uiEmail);
   await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);

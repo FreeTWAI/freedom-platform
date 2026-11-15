@@ -1,3 +1,6 @@
+import {claimEventOrganizer} from '../../../../modules/community/event-claims.js';
+import {eventInterest} from '../../../../modules/community/event-interest.js';
+import {shareEvent} from '../../../../modules/community/event-sharing.js';
 import {readEventHelper,listEventHelpers,mutateEventHelper,decideEventHelper} from '../../../../modules/community/event-helpers.js';
 import {listEventAttendance,mutateEventAttendance} from '../../../../modules/community/event-attendance.js';
 import type {PlatformRuntime} from '../runtime.js';
@@ -11,10 +14,11 @@ import { authRateLimit } from '../../../../modules/identity-membership/members.j
 import type { EventEmailSender } from '../../../../modules/community/events.js';
 import { moduleCommand, type PlatformEnv } from '../module-context.js';
 import { readWithMemberSession } from '../../../../packages/db/member-session.js';
-import { eventVideoHttp, cancelEvent, createEvent, eventReferralReport,eventAttendees, getEventShareCode, listEventBulletins, listEvents, readEvent, readEventBanner, readEventVideo, reviewEventAsGuildMaster, saveEventBanner, saveEventVideo, setRsvp, updateEvent } from '../../../../modules/community/events.js';
+import { eventVideoHttp, announceEvent, cancelEvent, createEvent, eventReferralReport,eventAttendees, getEventShareCode, listEventBulletins, listEvents, readEvent, readEventBanner, readEventVideo, reviewEventAsGuildMaster, saveEventBanner, saveEventVideo, setRsvp, updateEvent } from '../../../../modules/community/events.js';
 import {readMemberEventCalendar} from '../../../../modules/community/event-calendar.js';
 import {readEventReminder,saveEventReminder} from '../../../../modules/community/event-reminders.js';
-import {mutateEventWaitlist,processEventWaitlist,readEventParticipation,setEventWaitlistPolicy,updateEventSchedule} from '../../../../modules/community/event-waitlist.js';
+import {mutateEventWaitlist,processEventWaitlist,processEventNotices,readEventParticipation,setEventWaitlistPolicy,updateEventSchedule} from '../../../../modules/community/event-waitlist.js';
+import {getAfterResponseSignal} from '../../../../modules/agent-commerce/operations/due-work.js';
 
 // Bounded event text/prize payload, including escaped supplementary Unicode.
 export const EVENT_DETAILS_REQUEST_BYTES=160*1024;
@@ -67,19 +71,29 @@ export async function eventAssetVideoResponse(c:Context,pool:Pool,id:string,stor
  return c.body(media.body,media.plan.status);
 }
 
-export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSender,origin='',runtime?:Pick<PlatformRuntime,'eventBannerAssets'|'eventBannerAssetStore'|'eventVideoAssets'|'eventVideoAssetStore'|'eventParticipationEnabled'>) {
+export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSender,origin='',runtime?:Pick<PlatformRuntime,'eventBannerAssets'|'eventBannerAssetStore'|'eventVideoAssets'|'eventVideoAssetStore'|'eventParticipationEnabled'|'afterResponse'>) {
   const app=new Hono<PlatformEnv>();
   const id=(raw:string)=>z.uuid().parse(raw);
-  const dispatch=async(eventId:string)=>{if(runtime?.eventParticipationEnabled===true)await processEventWaitlist(pool,async(to,subject,body)=>{requireCondition(emailSender,503,'event_email_unavailable','活動郵件服務暫時無法使用。');await emailSender(to,subject,body);},origin,undefined,eventId);};
+  const dispatch=(eventId:string)=>{
+    if(!emailSender||!runtime?.afterResponse)return;
+    runtime.afterResponse(async()=>{
+      const signal=getAfterResponseSignal();
+      if(runtime.eventParticipationEnabled===true)await processEventWaitlist(pool,emailSender,origin,undefined,eventId,signal);
+      else await processEventNotices(pool,emailSender,origin,eventId,0,0,signal);
+    });
+  };
   if(runtime?.eventParticipationEnabled===true){
     app.get('/events/:id/participation',async c=>c.json(await readEventParticipation(pool,c.get('actor'),id(c.req.param('id')))));
     app.get('/events/:id/calendar',async c=>c.json(await readMemberEventCalendar(pool,c.get('actor'),id(c.req.param('id')))));
     app.get('/events/:id/reminder',async c=>c.json(await readEventReminder(pool,c.get('actor'),id(c.req.param('id')))));
     app.patch('/events/:id/reminder',async c=>c.json(await saveEventReminder(pool,await moduleCommand(c),id(c.req.param('id')))));
-    app.post('/events/:id/waitlist',async c=>{const eventId=id(c.req.param('id'));const result=await mutateEventWaitlist(pool,await moduleCommand(c),eventId);await dispatch(eventId);return c.json(result);});
-    app.patch('/events/:id/waitlist-policy',async c=>{const eventId=id(c.req.param('id'));const result=await setEventWaitlistPolicy(pool,await moduleCommand(c),eventId);await dispatch(eventId);return c.json(result);});
-    app.patch('/events/:id/schedule',async c=>{const eventId=id(c.req.param('id'));const result=await updateEventSchedule(pool,await moduleCommand(c),eventId);await dispatch(eventId);return c.json(result);});
+    app.post('/events/:id/waitlist',async c=>{const eventId=id(c.req.param('id'));const result=await mutateEventWaitlist(pool,await moduleCommand(c),eventId);dispatch(eventId);return c.json(result);});
+    app.patch('/events/:id/waitlist-policy',async c=>{const eventId=id(c.req.param('id'));const result=await setEventWaitlistPolicy(pool,await moduleCommand(c),eventId);dispatch(eventId);return c.json(result);});
+    app.patch('/events/:id/schedule',async c=>{const eventId=id(c.req.param('id'));const result=await updateEventSchedule(pool,await moduleCommand(c),eventId);dispatch(eventId);return c.json(result);});
   }
+  app.post('/events/:id/claim',async c=>c.json(await claimEventOrganizer(pool,await moduleCommand(c),id(c.req.param('id')))));
+  app.post('/events/:id/interest',async c=>c.json(await eventInterest(pool,id(c.req.param('id')),await moduleCommand(c))));
+  app.post('/events/:id/share',async c=>c.json(await shareEvent(pool,await moduleCommand(c),id(c.req.param('id')))));
   app.get('/events',async c=>c.json({items:await readWithMemberSession(pool,c.get('actor'),q=>listEvents(q,c.get('actor')))}));
   app.get('/events/bulletins',async c=>c.json({items:await readWithMemberSession(pool,c.get('actor'),q=>listEventBulletins(q,c.get('actor')))}));
   app.get('/events/:id',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>readEvent(q,c.get('actor'),id(c.req.param('id')),runtime?.eventParticipationEnabled===true))));
@@ -121,8 +135,9 @@ export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSend
     c.header('ETag',`"${result.aggregate_version}"`);return c.json(result);
   });
   app.post('/events/:id/video/remove',async c=>c.json(await saveEventVideo(pool,await moduleCommand(c),id(c.req.param('id')),null)));
-  app.post('/events/:id/update',async c=>c.json(await updateEvent(pool,await moduleCommand(c),id(c.req.param('id')))));
-  app.post('/events/:id/cancel',async c=>{const eventId=id(c.req.param('id'));const result=await cancelEvent(pool,await moduleCommand(c),eventId,runtime?.eventParticipationEnabled===true);await dispatch(eventId);return c.json(result);});
+  app.post('/events/:id/update',async c=>{const eventId=id(c.req.param('id'));const result=await updateEvent(pool,await moduleCommand(c),eventId);dispatch(eventId);return c.json(result);});
+  app.post('/events/:id/announcements',async c=>{const eventId=id(c.req.param('id'));const result=await announceEvent(pool,await moduleCommand(c),eventId);dispatch(eventId);return c.json(result);});
+  app.post('/events/:id/cancel',async c=>{const eventId=id(c.req.param('id'));const result=await cancelEvent(pool,await moduleCommand(c),eventId,runtime?.eventParticipationEnabled===true);dispatch(eventId);return c.json(result);});
   app.post('/events/:id/review',async c=>c.json(await reviewEventAsGuildMaster(pool,await moduleCommand(c),id(c.req.param('id')))));
   app.post('/events/:id/rsvp',async c=>{
     const input=await moduleCommand(c),eventId=id(c.req.param('id'));
@@ -133,11 +148,11 @@ export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSend
       await authRateLimit(pool,'event-rsvp-email',c.get('actor').user_id,6,3600);
     }
     const result=await setRsvp(pool,input,eventId,runtime?.eventParticipationEnabled===true);
-    await dispatch(eventId);
+    dispatch(eventId);
     if((input.body as {going?:boolean})?.going&&result.visibility==='referral'&&emailSender){
       try{await emailSender(c.get('actor').email,'自由工坊：活動參與資料',
         `你已報名「${result.title}」。\n\n活動頁：${origin}/events/${eventId}\n\n地點：${result.location}${result.online_url?`\n線上參與連結：${result.online_url}`:''}`);}
-      catch{requireCondition(false,503,'event_email_delivery_failed','報名已確認，但 Email 提供者尚未確認接受郵件；這不代表未報名。請在活動專頁查看目前狀態。');}
+      catch{requireCondition(false,503,'event_email_delivery_failed','已報名，但確認信沒有寄出；再按一次報名會重寄。');}
     }
     return c.json(result);
   });

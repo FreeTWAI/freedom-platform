@@ -1,6 +1,6 @@
 # 共用瀏覽器測試 harness
 
-`e2e-harness` 是這個倉庫裡的一個模組，不是另一個 repo。它只擁有 Playwright 共用啟動與規格會 import 的 helper。功能規格 `tests/e2e/*.spec.ts` 仍屬於各功能模組；這次沒有把它們劃進來，也不使用 `tests/e2e/**`。
+`e2e-harness` 是這個倉庫裡的一個模組，不是另一個 repo。它擁有 Playwright 共用啟動、pinned runner 腳本、規格會 import 的共用 helper 與少數納入 harness 管理的規格；其餘功能規格 `tests/e2e/*.spec.ts` 仍屬於各功能模組（或尚未歸屬），不使用 `tests/e2e/**`。
 
 ## 現行 CI 審查方式（2026-10-14）
 
@@ -20,14 +20,20 @@ source／plan 測試仍不等於當前候選的 hosted checks、部署或真實�
 | --- | --- |
 | `playwright.config.ts` | 單一 worker、每輪一個 `fp_e2e_` schema、本機 webServer |
 | `scripts/e2e-server.ts` | 只聽 `127.0.0.1` 的本機測試伺服器，建立並卸下該輪 schema |
-| `scripts/run-e2e.mjs` | `npm run test:e2e` 的編排：普通輪、private-AI 輪、avatar-asset 輪、message-image 輪、store-photo 輪 |
+| `scripts/run-e2e.mjs` | `npm run test:e2e` 的編排：預設普通輪，加 private-AI、avatar-asset、message-image、store-photo、notification-preferences 共六輪 |
 | `scripts/run-e2e.test.mjs` | 編排邏輯的 Node 測試，不開瀏覽器 |
-| `tests/e2e/fixtures.ts` | 規格使用的 `test`／`expect`，並在案例之間重設該 schema 的登入限流 |
-| `tests/e2e/navigation.ts` | 會員看得到的導覽與登出 |
-| `tests/e2e/quick-join.ts` | 快速加入公會 |
+| `tests/e2e/fixtures.ts` | 規格使用的 `test`／`expect`，並在案例之間重設該 schema 的登入限流（`public_exports`） |
+| `tests/e2e/navigation.ts` | 會員看得到的導覽與登出 helper（`public_exports`） |
+| `tests/e2e/isolated-schema.ts` | 獨立 `fp_e2e_` schema 管理 helper（`public_exports`） |
+| `tests/e2e/quick-join.ts` | 快速加入公會 helper（`public_exports`） |
+| `tests/e2e/member-feature-fixture.ts`、`tests/e2e/sharing-authoring-fixture.ts` | 會員功能旗標與分享／創作 fixture 輔助 |
+| `packages/testing/e2e-admin.ts`、`e2e-auth-isolation.ts`、`e2e-origin.ts`、`github-collaboration.ts` | 共用測試常數、origin／auth 隔離與 GitHub 協作 fixture |
+| `scripts/ci/pinned-playwright.config.mjs`、`pinned-guild-preview.config.mjs`、`run-pinned-e2e.mjs` | CI pinned Playwright 設定與執行器 |
+| `scripts/verify-cloud-candidate*.ts` / `.md`（共 5 檔） | Cloud candidate 驗證腳本與說明 |
+| `tests/e2e/guild-member-tiers.spec.ts`、`cloud-candidate-acceptance.spec.ts`、`cloud-candidate-supplier.spec.ts`、`event-banner.spec.ts` | 納入 `e2e-harness` 管理的共用與 candidate 驗收規格 |
 | `docs/development/e2e-harness.md` | 這份說明 |
 
-`public_exports` 是三個 helper：`tests/e2e/fixtures.ts`、`navigation.ts`、`quick-join.ts`。功能規格用 `./fixtures.js` 這類路徑 import 它們。規格檔本身不是 export，也不是這個模組的擁有路徑。
+`tests/e2e/freedom.module.json` 目前共列出 27 個 `owned_paths`；其中 `public_exports` 是四個 helper：`tests/e2e/fixtures.ts`、`tests/e2e/navigation.ts`、`tests/e2e/isolated-schema.ts`、`tests/e2e/quick-join.ts`。功能規格用 `./fixtures.js` 這類路徑 import 它們；除上述明確納入 `owned_paths` 的 4 個規格外，其餘功能規格不屬於這個模組的擁有路徑。
 
 ## `npm run test:e2e` 的六輪
 
@@ -62,16 +68,9 @@ default、五個 fixture 輪次與收尾。這是有限的整體上限，不承�
 仍記 `test_timeout` 並停止後續輪次，不以不完整報告算通過。
 預算是 trusted source 常數，candidate config、CLI 參數與環境不能自行調大。
 
-現行 full default 使用三片：先以相同設定執行一次不分片的 `--list`，
-再同時跑原生 Playwright `--shard 1/3`、`2/3`、`3/3`，埠分別為
-14311、14312、14313，每片有自己的隨機 `fp_e2e_*` schema、webServer 與單一 worker。
-三片與 discovery 共用 75 分鐘期限；任一片失敗即取消其餘兩片，fixture 輪次
-仍依序執行、不分片。三份有序且綁定 current/total 的報告都必須有實際 exit status
-與 SHA-256，互斥的案例聯集必須等於 discovery，完整檔案與跨輪 skip-to-pass 規則不變。
-診斷先保留 listing 與三份 raw report，再處理 trace；workflow 的遞迴 artifact 目錄
-已涵蓋第三片，原 128 MiB／512-entry 限制不變。
+現行 full default 使用四片（`packages/contribution-tools/pinned-e2e.mjs` 的 `E2E_DEFAULT_SHARDS` 為 `--shard 1/4`、`2/4`、`3/4`、`4/4`，埠分別為 `14311`、`14312`、`14313`、`14314`）：在 `.github/workflows/verify.yml` 中，先由 `ui-default` matrix（`shard: [1, 2, 3, 4]`）以四個獨立 runner 與各自的 PostgreSQL 18 service（仍設 `max_connections=200`、`max_locks_per_transaction=256`）平行執行預設四片並上傳 `default-shard-<n>.json`（每片含 setup/cleanup 上限 80 分鐘，對應不變的 75 分鐘執行上限），每片有自己的隨機 `fp_e2e_*` schema、webServer 與單一 worker；再由 `ui-e2e` job 下載四份 fragment、以 `--list` 執行一次不分片 discovery 並驗證四份有序且綁定 `current/total` 的報告均有實際 exit status 與 SHA-256、互斥案例聯集等於 discovery，接著依序執行五個獨立 fixture 輪次（`ui-e2e` timeout 在使用 default shards 時為 25 分鐘，未切分片時為 95 分鐘）。完整檔案與跨輪 skip-to-pass 規則不變。診斷先保留 listing 與四份 raw report，再處理 trace；workflow 的遞迴 failure artifact 目錄已涵蓋 listing 與四片，原 128 MiB／512-entry 限制不變。
 
-容量依據來自任務提供的 main hosted 紀錄：
+以下保留歷史容量推導紀錄（當時尚未改為四片獨立 runner `ui-default` matrix）：
 
 - [Verify 40135849585，attempt 1](https://github.com/FreeTWAI/freedom-platform/actions/runs/40135849585/attempts/1)
   （`53d528fc`，2026-10-24）：default 於 22:27:31Z 開始；第一片 772 項於
@@ -80,17 +79,16 @@ default、五個 fixture 輪次與收尾。這是有限的整體上限，不承�
 - [前一天 Verify 40124240773，attempt 1](https://github.com/FreeTWAI/freedom-platform/actions/runs/40124240773/attempts/1)
   （`f987bb74`）仍通過，job 約 65 分鐘。兩個 tree 不同，不宣稱等價效能比較。
 
-三片平均約 `1508 / 3 = 503` 項。原兩片合計每項約 2.4 秒是整體吞吐量的換算，
+2026-10-24 改為三片時平均約 `1508 / 3 = 503` 項。原兩片合計每項約 2.4 秒是整體吞吐量的換算，
 不是單片每項耗時：第一片實測為 `3561 / 772 ≈ 4.6` 秒／項。
-以約 4.8 秒／項保守估計，`1508 / 3 × 4.8 / 60 ≈ 40.2` 分鐘；若直接乘 2.4
+當時以約 4.8 秒／項保守估計，`1508 / 3 × 4.8 / 60 ≈ 40.2` 分鐘；若直接乘 2.4
 會得到約 20 分鐘，少算原兩片並行的因素。當時預期每片約 40 分鐘，保留至原 60 分鐘
 的約 20 分鐘餘裕給 ubuntu-24.04 公開 repo runner 的 4 vCPU／16 GB 資源競爭、
-檔案分片不均與啟停。這是容量估算，三個 Chromium、Node 與共用 PostgreSQL 的
-實際 CPU／記憶體與耗時需由本 PR CI 量測；本機不跑完整瀏覽器套件。
+檔案分片不均與啟停。本機不跑完整瀏覽器套件；現行 CI 的四片實際耗時由 `ui-default` matrix 量測。
 
-### 三片共用 PostgreSQL 的連線與鎖容量
+### 歷史三片時期共用 PostgreSQL 的連線與鎖容量（現行已改為每片獨立 DB）
 
-以下以 pool 設定上限核算，並非已觀察到的同時連線峰值：
+以下為先前三片共用單一 PostgreSQL service 時以 pool 設定上限核算（現行 `verify.yml` `ui-default` 四片各自持有獨立 runner 與 PostgreSQL 18 service，不再多片共用同一 PostgreSQL，但每片仍維持相同的 `max_connections=200`／`max_locks_per_transaction=256` 設定），並非已觀察到的同時連線峰值：
 
 | 每個 default shard 的來源 | 連線上限 |
 | --- | ---: |
@@ -106,11 +104,11 @@ default、五個 fixture 輪次與收尾。這是有限的整體上限，不承�
 cart listener 各 8（`storefront-orders.spec.ts`），channel 為 1 + 4，chat 為 4，todo 為 2；
 member-feature／hosted-order listeners 共用 auth pool，沒有再開 pool。
 private-AI／store-photo 的 server product pool（10）、gallery listener pool（10）
-與 private-AI gate pool（1）只在後續獨立 fixture 輪次，不與三片 default 疊加。
+與 private-AI gate pool（1）只在後續獨立 fixture 輪次，不與 default shard 疊加。
 
-三片保守為 `3 × 46 = 138`，超過 PostgreSQL 通常預設的 100。workflow 只對此 job 的
+當時三片共用同一實例保守為 `3 × 46 = 138`，超過 PostgreSQL 通常預設的 100，因此 workflow 對此 job 的
 隔離服務設定 `max_connections=200`，並在原容量檢查步驟讀回 200；即使預留預設三個
-superuser slots，仍有 `197 - 138 = 59` 條供 healthcheck 等短連線使用。
+superuser slots，當時仍有 `197 - 138 = 59` 條供 healthcheck 等短連線使用（現行 `ui-default` 每片各自擁有 `200` 連線上限，單片更充裕）。
 `max_locks_per_transaction=256` 不變；它是共用鎖表的容量參數，不是每筆交易的硬上限。
 以 `max_prepared_transactions=0` 的預設計算，基本 object-lock 容量從
 `256 × 100 = 25,600` 增至 `256 × 200 = 51,200`，增幅 2 倍高於分片從 2 到 3 的 1.5 倍。
@@ -175,7 +173,7 @@ descriptor 的 invariants 是下面這些 slug。沒有寫進去的，就是這�
 | slug | 程式實際做的事 |
 | --- | --- |
 | `isolated-fp-e2e-schema` | 只接受 `fp_e2e_` 加 32 hex；建立、搜尋路徑與卸下都對這個 schema |
-| `fixture-flags-never-combined` | 預設後三輪各設一個旗標；伺服器在 message-image 旗標與另一個旗標同時是 `1` 時拋錯 |
+| `fixture-flags-never-combined` | 預設後續五個獨立 fixture 輪次各設一個旗標；伺服器在 message-image 旗標與另一個旗標同時是 `1` 時拋錯 |
 | `port-from-freedom-e2e-port` | 埠只從 `FREEDOM_E2E_PORT` 讀，未設定為 4311，拒絕 4310／4312 |
 | `browser-server-local-only` | `NODE_ENV=production` 或非 `local` 的 `FREEDOM_ENV` 直接拋錯 |
 | `github-fetch-stubbed-when-flagged` | `FREEDOM_E2E_GITHUB_FIXTURES=1` 時，伺服器行程的 `globalThis.fetch` 改成 GitHub fixture。webServer 會設這個旗標。沒設時，這行替換不會發生 |
@@ -186,7 +184,7 @@ descriptor 的 invariants 是下面這些 slug。沒有寫進去的，就是這�
 
 ## 依賴
 
-只列這七個檔案真正 import、而且該檔已有模組擁有的對象：
+`tests/e2e/freedom.module.json` 目前宣告的 `dependencies` 為 `assets`、`command-core`、`execution-runs`、`local-demo-data`、`public-guide-assets` 與 `platform-admin-portal`；核心 harness 檔案主要 import 下列擁有檔，其餘由納管的共用 fixture／驗收腳本視需要引用：
 
 | 模組 | 被 import 的擁有檔 |
 | --- | --- |
@@ -195,17 +193,15 @@ descriptor 的 invariants 是下面這些 slug。沒有寫進去的，就是這�
 | `local-demo-data` | `packages/testing/seed.ts` |
 | `execution-runs` | `packages/testing/private-ai-product-fixture.ts`（只有 private-AI 那一輪） |
 | `assets` | `packages/testing/e2e-avatar-asset-fixture.ts`（只有 avatar-asset 那一輪） |
+| `platform-admin-portal` | 由納管之 candidate／admin 相關檔案引用（declared in `tests/e2e/freedom.module.json`） |
 
 private-AI 輪會 `readFile` `deploy/cloudflare/sql/20-runtime-grants.psql`。該檔歸 `runtime-registration`，但這是讀檔，不是 import，所以不列成 dependency。
 
-下列 import 的檔案目前沒有任何 descriptor 擁有，因此 dependencies 不包含它們，也不在這次補上歸屬：
+下列先前無主、已被 harness import 的檔案現已各有模組歸屬（前四個納入 `e2e-harness` 本身，不再列為外部 dependency）：
 
-- `packages/testing/e2e-auth-isolation.ts`
-- `packages/testing/e2e-origin.ts`
-- `packages/testing/github-collaboration.ts`
-- `packages/testing/e2e-admin.ts`
-- `apps/platform-api/src/app.ts`
-- `modules/community/github-sync.ts`
+- `packages/testing/e2e-auth-isolation.ts`、`packages/testing/e2e-origin.ts`、`packages/testing/github-collaboration.ts`、`packages/testing/e2e-admin.ts`：已由 `e2e-harness`（`tests/e2e/freedom.module.json`）擁有
+- `apps/platform-api/src/app.ts`：已由 `apps/freedom.module.json`（及 `modules/opportunity-project-work/freedom.module.json`）擁有
+- `modules/community/github-sync.ts`：已由 `modules/community/freedom.module.json` 擁有
 
 `@playwright/test`、`pg`、`@hono/node-server` 是 npm 套件，不是本倉模組。
 
@@ -213,7 +209,7 @@ private-AI 輪會 `readFile` `deploy/cloudflare/sql/20-runtime-grants.psql`。�
 
 `e2e.harness` 是本機固定套件。它用與其他非 runtime adapter 相同的有界 Node reporter，在 60 秒、沒有資料庫的預算內只跑 `node --test scripts/run-e2e.test.mjs`。基準檔被刪、零測試、skip、TODO、取消或失敗都不能算通過。`governance.unit` 與 `runtime.full` 不會跑這個檔，所以 descriptor 的 `tests` 只有 `e2e.harness`。
 
-這份套件證明的是編排計畫：四輪順序、旗標不疊加、失敗即停、`test:e2e` 指向這個 runner。它不開 Chromium，也不建立 PostgreSQL schema。
+這份套件證明的是編排計畫：六輪順序（預設輪加五個獨立 fixture 輪次）、旗標不疊加、失敗即停、`test:e2e` 指向這個 runner。它不開 Chromium，也不建立 PostgreSQL schema。
 
 瀏覽器規格由 CI 的 `ui-e2e` job 跑：`npm ci`、安裝 Chromium、`npm run contracts:build`、`npm run build`，然後 `npm run test:e2e`。`node scripts/freedom.mjs verify` 不會取代那個 job。沒有 `TEST_DATABASE_URL` 時，runtime 套件是 `not_run`；那不表示瀏覽器已通過。
 
@@ -223,7 +219,7 @@ private-AI 輪會 `readFile` `deploy/cloudflare/sql/20-runtime-grants.psql`。�
 
 把它放進 `ROUTES` 會讓 `inspectLeaf` 用那套 Hono 文法看一個沒有該 factory 的腳本，結果是失敗，或是為 CLI 加例外。例外會放寬這份審計，所以沒有改 `ROUTES`，也沒有把 harness 登記成 surface。既有的本機測試 CLI（例如 `verification.runtime-full`）寫在 governance descriptor 的 surfaces 裡，同樣不在 `ROUTES`；審計把這種未覆蓋的宣告標成 `surface_unmapped`（狀態是 unavailable，不是通過）。harness 沒有這份語法審計能核對的 HTTP 註冊，空的 `surfaces` 比多一筆永遠對不上的宣告誠實。
 
-context 工具的 `surface_unmapped` blocker 是另一件事：非 `docs/**/*.md`、也不是根說明（`AGENTS.md`、`README.md`、`CONTRIBUTING.md`）的路徑，若沒有任何 descriptor 擁有，就會選全部模組。擁有上面八個檔之後，這七個 harness 路徑不再是未知路徑。
+context 工具的 `surface_unmapped` blocker 是另一件事：非 `docs/**/*.md`、也不是根說明（`AGENTS.md`、`README.md`、`CONTRIBUTING.md`）的路徑，若沒有任何 descriptor 擁有，就會選全部模組。由 `e2e-harness` 擁有 `tests/e2e/freedom.module.json` 所列的 27 個 `owned_paths`（加上 descriptor 本身）之後，這些 harness、pinned-CI、cloud-candidate 驗證與共用 `packages/testing/*` 路徑不再是未知路徑。
 
 ## 尚未歸屬的路徑
 
@@ -247,11 +243,11 @@ context 工具的 `surface_unmapped` blocker 是另一件事：非 `docs/**/*.md
 | `contracts` | 11 |
 | `.github` | 3 |
 
-這張表數的是該 base 的樹。當時還沒有 `tests/e2e/freedom.module.json`。目前追蹤樹已由 `e2e-harness` 擁有七個路徑，所以同一規則現在少這七個：`playwright.config.ts`、`scripts/e2e-server.ts`、`scripts/run-e2e.mjs`、`scripts/run-e2e.test.mjs`、`tests/e2e/fixtures.ts`、`tests/e2e/navigation.ts`、`tests/e2e/quick-join.ts`。
+這張表數的是 2026-10-06 該 base 的樹；當時還沒有 `tests/e2e/freedom.module.json`（初期只納管 7 個路徑，現今 `tests/e2e/freedom.module.json` 已擁有 27 個 `owned_paths` 與 4 個 `public_exports`）。
 
-下面兩份是 harness 鄰近、而且目前仍未歸屬的路徑。它們依同一規則對目前的 `git ls-files` 重算，同樣不會自動維護。功能規格沒有劃進 `e2e-harness`。
+下兩份名單為當時（2026-10-06）重算的歷史快照，不會自動維護（目前其中部分檔案例如 `guild-member-tiers.spec.ts`、`cloud-candidate-acceptance.spec.ts`、`cloud-candidate-supplier.spec.ts`、`event-banner.spec.ts` 及 `scripts/ci/*`、`scripts/verify-cloud-candidate*` 已納入 `e2e-harness` 或其他模組）。
 
-未歸屬的 `tests/e2e/*.spec.ts` 功能規格，共 77 個：
+歷史快照中當時未歸屬的 `tests/e2e/*.spec.ts` 功能規格（2026-10-06 共 77 個）：
 
 ```text
 tests/e2e/admin-credentials.spec.ts

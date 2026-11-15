@@ -118,15 +118,18 @@ test('a reset request waiting behind an email switch cannot bind a proof to the 
   const session=await signIn(old),next='switch-reset-race@example.test';
   assert.equal((await post('/me/account/email-change/request',{email:next,password:DEMO_PASSWORD},session)).status,200);
   const token=latestToken();
-  let switchLocked=()=>{};
-  let release=()=>{};
-  const blockedOnSwitch=new Promise<void>(resolve=>{switchLocked=resolve;});
-  const releaseSwitch=new Promise<void>(resolve=>{release=resolve;});
-  deliveryBarrier=async()=>{if(delivered.at(-1)?.to!==old)return;switchLocked();await releaseSwitch;};
+  const blocker=await pool.connect();
+  await blocker.query('BEGIN');
+  await blocker.query('SELECT token_hash FROM login_email_change_tokens WHERE user_id=$1 FOR UPDATE',[userId]);
   const beforeLinks=resetLinks.length,beforeProofs=(await pool.query<{n:number}>('SELECT count(*)::int AS n FROM password_reset_tokens WHERE user_id=$1',[userId])).rows[0].n;
   const change=post('/auth/email-change/confirm',{token});
   try{
-    await blockedOnSwitch;
+    for(let i=0;i<200;i++){
+      const blocked=await admin.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT * FROM login_email_change_tokens WHERE token_hash=$1%'");
+      if(blocked.rowCount)break;
+      assert.ok(i<199,'email switch must hold user lock while waiting on token lock');
+      await delay(10);
+    }
     const reset=post('/auth/reset/request',{email:old});
     try{
       let waiting=false;
@@ -137,7 +140,7 @@ test('a reset request waiting behind an email switch cannot bind a proof to the 
         await delay(10);
       }
       assert.equal(waiting,true);
-      release();
+      await blocker.query('COMMIT');
       assert.equal((await change).status,200);
       const requested=await reset;
       assert.equal(requested.status,200);
@@ -147,6 +150,39 @@ test('a reset request waiting behind an email switch cannot bind a proof to the 
       assert.equal(await emailOf(old),undefined);
       assert.equal((await post('/auth/login',{email:old,password:DEMO_PASSWORD})).status,401);
       assert.equal((await post('/auth/login',{email:next,password:DEMO_PASSWORD})).status,200);
-    }finally{release();await reset;}
-  }finally{deliveryBarrier=undefined;release();await change;}
+    }finally{await blocker.query('ROLLBACK').catch(()=>{});await reset;}
+  }finally{await blocker.query('ROLLBACK').catch(()=>{});blocker.release();await change;}
+});
+
+test('confirmEmailChange does not lock the user row while sending the old-address notice',async()=>{
+  const old='nolock-old@example.test',next='nolock-confirm@example.test';
+  const reg=await post('/auth/register',{email:old,password:DEMO_PASSWORD});
+  assert.equal(reg.status,201);
+  const userId=(reg.body as any).user.user_id as string;
+  await pool.query('UPDATE users SET onboarding_completed_at=now() WHERE user_id=$1',[userId]);
+  const session=await signIn(old);
+  assert.equal((await post('/me/account/email-change/request',{email:next,password:DEMO_PASSWORD},session)).status,200);
+  const token=latestToken();
+  let lockError:string|null=null,checked=false;
+  deliveryBarrier=async()=>{
+    checked=true;
+    const client=await pool.connect();
+    try{
+      await client.query('BEGIN');
+      await client.query('SELECT 1 FROM users WHERE user_id=$1 FOR UPDATE NOWAIT',[userId]);
+      await client.query('COMMIT');
+    }catch(error:any){
+      await client.query('ROLLBACK').catch(()=>{});
+      lockError=error?.code??error?.message??String(error);
+    }finally{
+      client.release();
+    }
+  };
+  try{
+    const result=await post('/auth/email-change/confirm',{token});
+    assert.equal(checked,true,JSON.stringify(result.body));
+    assert.equal(lockError,null);
+    assert.equal(result.status,200,JSON.stringify(result.body));
+    assert.equal(await emailOf(next),next);
+  }finally{deliveryBarrier=undefined;}
 });

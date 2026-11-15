@@ -1,7 +1,10 @@
+import {seedBookOriginals} from './skill-book-original-fixture.js';
 import {openPageTools} from './navigation.js';
 import { navigate } from './navigation.js';
 import {test,expect} from './fixtures.js';
 import {submittedSkillHtml} from '../../apps/platform-api/src/routes/published-skills.js';
+
+test.beforeEach(async({e2eAuthPool})=>seedBookOriginals(e2eAuthPool));
 
 const publicAuthorFixture={items:[{name:'測試作者',role:'作者',card_path:'/member-cards/'+'a'.repeat(43),card:{nickname:'測試作者',headline:'把影音工具做得更好用。',design:'editorial',primary_guild:{guild_key:'guild_creator',name:'影音創作公會'},capabilities:['影片剪輯','工具開發'],avatar_url:null,links:[{label:'作者網站',url:'https://example.com/author'}],profile_links:[]}}]};
 
@@ -9,8 +12,8 @@ for(const width of [1440,390,320])test(`skill hero exposes Star Fork share and a
  await page.setViewportSize({width,height:844});let reads=0;
  await page.route('**/api/v1/skills/video-autopilot/author-card',route=>{reads++;return route.fulfill({json:publicAuthorFixture});});
  await page.goto('/development/skills/video-autopilot?intro=63');
- const hero=page.locator('.sp-engagement'),author=hero.locator('[data-skill-author]'),share=hero.locator('[data-share-launch]');
- for(const control of [author,hero.getByRole('link',{name:'到 GitHub Star ↗'}),hero.getByRole('link',{name:'Fork 專案 ↗'}),share]){
+ const hero=page.locator('.public-skill-entry'),author=hero.locator('[data-skill-author]'),share=hero.locator('[data-share-launch]');
+ for(const control of [author,hero.getByRole('link',{name:'開始用'}),hero.getByRole('link',{name:'前往 GitHub 加星 ↗'}),share]){
   await expect(control).toBeVisible();const box=await control.boundingBox();expect(box!.height).toBeGreaterThanOrEqual(44);expect(box!.y).toBeGreaterThanOrEqual(0);expect(box!.y+box!.height).toBeLessThanOrEqual(844);
  }
  expect(reads).toBe(0);expect(await page.evaluate(()=>scrollY)).toBe(0);
@@ -77,14 +80,15 @@ test('a late author response cannot replace a reopened card',async({page})=>{
 test('development tools follow the current page on desktop and phone without a duplicate footer',async({page})=>{
  await page.goto('/');
  await expect(page.locator('.development-context')).toHaveCount(0);
- await openPageTools(page); await page.locator('.login-card-heading').getByRole('button',{name:'參與編修'}).click();
+ await page.locator('.login-more > summary').click();
+ await openPageTools(page); await page.locator('.login-more-tools').getByRole('button',{name:'參與編修'}).click();
  let guide=page.getByRole('dialog',{name:/參與編修/});
  await expect(guide.getByRole('link',{name:'給 Agent 的文字版 ↗'})).toHaveAttribute('href','/development/registration.md');
  await guide.getByRole('button',{name:'關閉'}).click();
  await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
  await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
  await page.getByRole('button',{name:'登入',exact:true}).click();
- await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
  await openPageTools(page); await page.locator('.topbar').getByRole('button',{name:'參與編修'}).click();
  guide=page.getByRole('dialog',{name:/參與編修/});
  await expect(guide.getByRole('link',{name:'給 Agent 的文字版 ↗'})).toHaveAttribute('href','/development/home.md');
@@ -108,24 +112,21 @@ test('a visitor without JavaScript can follow real repo links and read a complet
   await expect(page.getByRole('link',{name:'https://github.com/FreeTWAI/freedom-supplier-client',exact:false}).first()).toBeVisible();
   await page.goto('/development/skills/security-scanner');
   await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-start');
+  await expect(page.getByRole('heading',{name:'開始用',exact:true})).toBeVisible();
+  await expect(page.locator('.public-skill-entry').getByRole('link',{name:'到 GitHub 加星 ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner');
+  await page.locator('#skill-usage-notes > summary').click();
   await expect(page.getByRole('link',{name:'前往作者網站 ↗',exact:true})).toHaveAttribute('href','https://teddashh.github.io/ai-security-scanner/');
-  await expect(page.getByRole('link',{name:'閱讀收錄版本說明 ↗',exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'開始使用',exact:true})).toBeVisible();
-  await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner');
-  await expect(page.locator('.public-skill-destination').first()).toHaveText('目的地：github.com/teddashh/ai-security-scanner');
-  await expect(page.getByRole('heading',{name:'一起開發',exact:true})).toBeHidden();
-  await page.getByText('作者、版本與參與開發',{exact:true}).click();
+  await expect(page.locator('.public-skill-source').getByText('指南核對來源',{exact:true})).toBeVisible();
+  await expect(page.locator('.public-skill-source').getByRole('link',{name:'https://github.com/teddashh/ai-security-scanner ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner');
+  await expect(page.locator('.public-skill-destination').first()).toHaveText('目的地：teddashh.github.io/ai-security-scanner/');
   await expect(page.getByRole('heading',{name:'一起開發',exact:true})).toBeVisible();
   await expect(page.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner/fork');
   await expect(page.locator('.collaboration-repository')).toHaveText('預設 PR → teddashh/ai-security-scanner:main');
   await expect(page.getByRole('link',{name:'查看原作 PR ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner/pulls');
-  await expect(page.getByText('工坊整合與任務來源',{exact:true})).toBeVisible();
-  await page.getByText('工坊整合與任務來源',{exact:true}).click();
-  await expect(page.getByRole('link',{name:'查看工坊整合版本',exact:true})).toHaveAttribute('href','https://github.com/FreeTWAI/ai-security-scanner');
+  await expect(page.getByRole('link',{name:'https://github.com/FreeTWAI/ai-security-scanner',exact:true}).first()).toBeVisible();
   await expect(page.getByRole('link',{name:'下載 Agent SKILL.md',exact:true}).first()).toBeVisible();
-  await page.getByText('完整指南與來源',{exact:true}).click();
   await expect(page.getByRole('heading',{name:'第一個練習'})).toBeVisible();
-  await expect(page.getByRole('link',{name:'https://github.com/FreeTWAI/ai-security-scanner/fork',exact:true}).first()).toBeVisible();
+  await expect(page.getByRole('link',{name:'https://github.com/teddashh/ai-security-scanner/fork',exact:true}).first()).toBeVisible();
   for(const width of [320,390]){
    await page.setViewportSize({width,height:844});
    const dimensions=await page.locator('body').evaluate(element=>({scroll:element.scrollWidth,viewport:window.innerWidth}));
@@ -143,7 +144,7 @@ test('public skill share previews and copies the chosen introduction with its pe
  });
  await page.setViewportSize({width:390,height:844});
  await page.goto('/development/skills/video-autopilot');
- await page.getByText('作者、版本與參與開發',{exact:true}).click();
+ await page.locator('#skill-usage-notes > summary').click();
  await expect(page.getByRole('heading',{name:'一起開發',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'建立可重現的剪輯測試素材',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'分享技能書',exact:true}).click();

@@ -2,6 +2,7 @@ import {useCallback,useEffect,useId,useRef,useState} from 'react';
 import {AdminStoreReadinessPageSchema,StoreAdmissionRevokeInputSchema,STORE_READINESS_LABELS,STORE_PAYMENT_LABELS,storeReadinessStateLabel,type AdminStoreReadinessPage} from '../../../../contracts/guild-launchpad/v1/hosted-commerce-setup';
 import {DELIVERY_METHOD_LABELS} from '../../../../contracts/guild-launchpad/v1/hosted-shipping';
 import {formatIsoLocal} from '../format';
+import {objectPage} from './admin-places';
 import {AdminClient,AdminRequestError} from './admin-client';
 import '../../../../modules/agent-commerce/seller-console/ui/Readiness.css';
 import './AdminStoreAdmissions.css';
@@ -11,15 +12,15 @@ type Store=AdminStoreReadinessPage['items'][number];
 const endpoint='/commerce/store-readiness';
 const statusLabel=(status:string)=>({active:'啟用中',suspended:'已暫停',archived:'已封存',failed:'未完成',recovery_required:'等待復原',requested:'準備中',provisioning:'準備中'}[status]??status);
 
-export function AdminStoreAdmissions({client,busy,onMutate}:{client:AdminClient;busy:boolean;onMutate:Mutate}){
+export function AdminStoreAdmissions({client,busy,onMutate,selectedId}:{selectedId?:string|null;client:AdminClient;busy:boolean;onMutate:Mutate}){
  const [data,setData]=useState<AdminStoreReadinessPage|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[downloading,setDownloading]=useState(false);
  const ticket=useRef(0),alive=useRef(true);
  const load=useCallback(async(offset=0,append=false)=>{
   const serial=++ticket.current;setLoading(true);setError('');
-  try{const next=AdminStoreReadinessPageSchema.parse(await client.request(`${endpoint}?limit=25&offset=${offset}`));if(alive.current&&serial===ticket.current)setData(old=>append&&old?{...next,items:[...old.items,...next.items]}:next);}
+  try{let next=AdminStoreReadinessPageSchema.parse(await client.request(`${endpoint}?limit=25&offset=${offset}`));if(selectedId&&!next.items.some(item=>item.instance_id===selectedId)){const page=await objectPage<Store>(client,`${endpoint}?limit=50`,selectedId,'instance_id');next={...next,...page};}if(alive.current&&serial===ticket.current)setData(old=>append&&old?{...next,items:[...old.items,...next.items]}:next);}
   catch(cause){if(alive.current&&serial===ticket.current)setError(cause instanceof AdminRequestError&&cause.status===404?'這個環境沒有商店准入功能。':cause instanceof Error?cause.message:'無法取得商店准入資料。');}
   finally{if(alive.current&&serial===ticket.current)setLoading(false);}
- },[client]);
+ },[client,selectedId]);
  useEffect(()=>{alive.current=true;void load();return()=>{alive.current=false;ticket.current++;};},[load]);
  async function download(){
   if(downloading||busy)return;setDownloading(true);setNotice('');
@@ -48,11 +49,11 @@ export function AdminStoreAdmissions({client,busy,onMutate}:{client:AdminClient;
   finally{if(alive.current)setDownloading(false);}
  }
  return <section className="stack commerce-readiness admin-store-admissions" aria-label="商店准入"><div className="card-head"><h2>商店准入</h2><div className="actions"><button className="btn btn-ghost" type="button" disabled={busy||loading||downloading} onClick={()=>void load()}>更新</button></div></div>
-  <p>准入是開放接單的最後一項條件；其他條件仍由店主在商店後台完成。准入不代替店主的設定或同意，也不會自動到期。</p>
   {error&&<p className="banner banner-error" role="alert">{error}</p>}{loading&&<p role="status">正在讀取商店准入…</p>}{notice&&<p role="status">{notice}</p>}
-  {data&&<><div className="card stack"><h3>{data.environment==='sandbox'?'測試環境（sandbox）':'正式環境（live）'}</h3><p>接單開關：{data.platform.checkout_enabled?'開啟':'關閉'} · 隔離狀態：{data.platform.quarantine?'隔離中':'未隔離'}</p><p>平台提供的設定檔：{data.platform.provider_profiles.join('、')||'未提供'}</p><p>共 {data.summary.stores} 間商店 · 有效准入 {data.summary.active_admissions} 間 · 目前可接單 {data.summary.accepting_orders} 間</p><p className="field-hint">資料時間：{formatIsoLocal(data.checked_at)}</p><p className="field-hint">執行版本：{data.release_sha??'未提供'}</p>
-   <div className="actions"><button type="button" className="btn btn-ghost" disabled={busy||loading||downloading||!!error} onClick={()=>void download()}>{downloading?'正在產生收據…':'下載範圍收據（JSON）'}</button></div><p className="field-hint">收據含租戶與商店名稱、准入與撤銷理由、識別碼、版本與設定狀態；不含聯絡資料、會員信箱、銀行帳號／戶名或憑證狀態。這是內部管理紀錄，請勿公開分享。</p></div>
-   {data.items.map(store=><StoreCard key={store.instance_id} store={store} busy={busy||loading||downloading||!!error} onMutate={onMutate} reload={()=>load()}/>)}
+  {data&&<><div className="card stack"><h3>{data.environment==='sandbox'?'測試環境':'正式環境'}</h3><p>接單開關：{data.platform.checkout_enabled?'開啟':'關閉'} · 隔離狀態：{data.platform.quarantine?'隔離中':'未隔離'}</p><p>共 {data.summary.stores} 間商店 · 有效准入 {data.summary.active_admissions} 間 · 目前可接單 {data.summary.accepting_orders} 間</p><p className="field-hint">資料時間：{formatIsoLocal(data.checked_at)}</p>
+   <div className="actions"><button type="button" className="btn btn-ghost" disabled={busy||loading||downloading||!!error} onClick={()=>void download()}>{downloading?'正在產生收據…':'下載範圍收據'}</button></div>
+   <details><summary>准入與收據說明</summary><div className="stack"><p>准入是開放接單的最後一項條件；其他條件仍由店主在商店後台完成。准入不代替店主的設定或同意，也不會自動到期。</p><p className="field-hint">收據含租戶與商店名稱、准入與撤銷理由、識別碼、版本與設定狀態；不含聯絡資料、會員信箱、銀行帳號／戶名或憑證狀態。這是內部管理紀錄，請勿公開分享。</p><p className="field-hint">平台提供的設定檔：{data.platform.provider_profiles.join('、')||'未提供'}</p><p className="field-hint">執行版本：{data.release_sha??'未提供'}</p></div></details></div>
+   {data.items.filter(store=>!selectedId||store.instance_id===selectedId).map(store=><StoreCard key={store.instance_id} store={store} busy={busy||loading||downloading||!!error} onMutate={onMutate} reload={()=>load()}/>)}
    {!data.items.length&&!error&&!loading&&<p>這個社群目前沒有商店。</p>}
    {data.next_offset!==null&&<div className="actions"><button type="button" className="btn btn-ghost" disabled={busy||loading||downloading} onClick={()=>void load(data.next_offset!,true)}>載入更多商店</button></div>}
   </>}

@@ -29,7 +29,7 @@ async function login(page: Page) {
   await page.getByLabel('電子郵件', {exact: true}).fill('maker@local.test');
   await page.getByLabel('密碼', {exact: true}).fill('freedom-local-demo');
   await page.getByRole('button', {name: '登入', exact: true}).click();
-  await expect(page.getByRole('heading', {name: '會員首頁', exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: '動態', exact: true})).toBeVisible();
 }
 
 const paginationHeadings = (page: Page) => page.getByRole('heading', {level: 3, name: /^分頁工作 \d{2}$/});
@@ -40,10 +40,11 @@ test('workbench and task board load bounded work pages without losing microsecon
   await login(page);
   await navigate(page, '任務協作');
   await expect(paginationHeadings(page)).toHaveCount(24);
+  await page.locator('.panels .place-view-picker select').selectOption('community');
   const workbenchMore = page.getByRole('button', {name: '載入較早的社群工作', exact: true});
   await expect(workbenchMore).toBeVisible();
   await workbenchMore.click();
-  await expect(paginationHeadings(page)).toHaveCount(30);
+  await expect(paginationHeadings(page)).toHaveCount(6);
   await expect(workbenchMore).toHaveCount(0);
 
   await page.setViewportSize({width: 390, height: 844});
@@ -150,6 +151,7 @@ for(const panel of paginationPages)test(`${panel.pageName} pagination keeps five
   await page.route('**/api/v1/co-creation/projects',route=>route.fulfill({json:{items:[]}}));
   await page.route('**/api/v1/work-items/page*',route=>route.fulfill({json:{items:[],next_cursor:'synthetic-workbench-cursor'}}));
   await login(page);await navigate(page,panel.pageName);
+  if(panel.pageName==='任務協作')await page.locator('.panels .place-view-picker select').selectOption('community');
   const action=page.locator(panel.selector);
   await expect(action).toHaveAccessibleName(panel.loadName);await expect(action).toBeVisible();
   for(const profile of Object.values(EXPERIENCE_PROFILES)){

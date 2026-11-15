@@ -10,12 +10,190 @@ import {fileURLToPath} from 'node:url';
 import type {RunResult} from '../../apps/portal-web/src/games/result-card.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 import {navigate} from './navigation.js';
-import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
+import {cashDeck,stampTarget,RULES} from '../../apps/portal-web/src/games/domain.js';
 import {chairWave,holidayTargets,actParty,advanceParty,newParty,startParty,tofuAxis,tofuPosition,type TofuRun} from '../../apps/portal-web/src/games/party/domain.js';
 import {PARTY_GAMES,PARTY_RULES as PT,type PartyGameId} from '../../apps/portal-web/src/games/party/catalog.js';
 import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 import {marketGrade,MARKET_SAVE_KEY,type MarketRun,type MarketId} from '../../apps/portal-web/src/games/cooking/market-domain.js';
+// Building the first 3D kitchen frame in software WebGL is the slowest step on CI. Pearl milk tea, the
+// heaviest scene, took 1.8 s locally (3.4 s at 6x CPU throttling), yet once missed the 5 s default on a
+// slow runner (Verify 43686831270). Visibility still passes the moment the scene shows.
+const sceneReady={timeout:20_000};
 const {PerspectiveCamera,Vector3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
+
+// Isolated playable proposal, not a deployed portal route or a generated image.
+// Bundle the real preview and existing scoring domain, then exercise native input.
+for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD atelier real build ${width}x${height}: native stamp preview, pause, input and screenshot`,async({browser},info)=>{
+ // Bundling the real preview with esbuild, then drawing it in software WebGL, is slowest at 1440x1000:
+ // 23.4 s in Verify 43701950520 and 38.1 s on a slower runner (43707780287), against the 45 s default.
+ test.setTimeout(90_000);
+ const context=await browser.newContext({viewport:{width,height},hasTouch:width<1000,isMobile:width<1000,deviceScaleFactor:1});const page=await context.newPage();
+ try {
+ const logo='data:image/png;base64,'+readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url)).toString('base64');
+ const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {Group} from 'three';const update=Group.prototype.updateMatrixWorld;Group.prototype.updateMatrixWorld=function(force){document.body.dataset.stampY=String(this.position.y);return update.call(this,force);};import {mountStampAtelier} from './apps/portal-web/src/games/stamp-atelier';const game=mountStampAtelier(document.body,${JSON.stringify(logo)});window.addEventListener('pagehide',()=>game.dispose(),{once:true});`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022',minify:true}).outputFiles[0].text;
+ const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>下班蓋章室 · 可操作預覽</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`;
+ await page.setViewportSize({width,height});
+ const touch=width<1000?await context.newCDPSession(page):null;
+ const finger=async(type:'touchStart'|'touchMove'|'touchEnd',px=x,py=y)=>{await touch!.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x:px,y:py,id:1}]});};
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.setContent(html);
+ const root=page.locator('.stamp-atelier'),canvas=root.getByRole('application');
+ await expect(root).toHaveAttribute('data-native','true');await expect(canvas).toBeVisible();
+ await expect(root).toHaveAttribute('data-practice','true');
+ await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();
+ await page.keyboard.press('Tab');await expect(page.getByRole('button',{name:'繼續蓋章'})).toBeFocused();
+ await page.keyboard.press('Enter');await expect(page.getByRole('dialog')).toBeHidden();await expect(canvas).toBeFocused();
+ const {OrthographicCamera}=createRequire(import.meta.url)('three');
+ const aspect=width/height,extent=Math.max(6.5,4.1/aspect),camera=new OrthographicCamera(-extent*aspect/2,extent*aspect/2,extent/2,-extent/2,.1,40);
+ camera.position.set(0,8,5);camera.lookAt(0,0,0);camera.updateProjectionMatrix();camera.updateMatrixWorld();
+ const target=stampTarget(42,0),point=new Vector3(target.x*1.2,.178,target.y*1.5).project(camera),x=(point.x+1)*width/2,y=(1-point.y)*height/2;
+ // A cancelled real drag cannot consume the practice sheet.
+ if(touch)await finger('touchStart');else {await page.mouse.move(x,y);await page.mouse.down();}await page.keyboard.press('Escape');if(touch)await finger('touchEnd');else await page.mouse.up();await expect(root).toHaveAttribute('data-practice','true');
+ await page.getByRole('button',{name:'繼續蓋章'}).click();
+ if(touch){await finger('touchStart',x+4,y+4);await finger('touchMove');await finger('touchEnd');}else {await page.mouse.move(x+4,y+4);await page.mouse.down();await page.mouse.move(x,y,{steps:4});await page.mouse.up();}
+ await expect(root).toHaveAttribute('data-practice','false');await expect(root).toHaveAttribute('data-completed','0');
+ await expect(page.getByRole('status')).toContainText('練習完成');
+ // No directional controls or instructions remain. Arrow keys do not change aim.
+ await expect(root.locator('[data-aim]')).toHaveCount(0);
+ await expect(canvas).not.toHaveAttribute('aria-label',/方向鍵/);
+ const beforeArrows=await root.evaluate(el=>({x:(el as HTMLElement).dataset.aimX,y:(el as HTMLElement).dataset.aimY}));await canvas.press('ArrowRight');await canvas.press('ArrowDown');await expect(root).toHaveAttribute('data-aim-x',beforeArrows.x!);await expect(root).toHaveAttribute('data-aim-y',beforeArrows.y!);
+ // Native touch input on both mobile viewports, native mouse on desktop.
+ await page.waitForTimeout(300);
+ if(width<1000)await page.touchscreen.tap(x,y);else await page.mouse.click(x,y);
+ await expect(root).toHaveAttribute('data-completed','1');
+ // Keyboard-only path is explicit assistance rather than a replacement D-pad.
+ await page.getByRole('button',{name:'輔助瞄準',exact:true}).focus();await page.keyboard.press('Enter');
+ await expect(page.getByRole('button',{name:'輔助瞄準：開'})).toHaveAttribute('aria-pressed','true');
+ await page.waitForTimeout(300);await root.locator('.atelier-stamp').focus();await page.keyboard.press('Enter');
+ await expect(root).toHaveAttribute('data-completed','2');
+ await page.getByRole('button',{name:'輔助瞄準：開'}).click();
+ await page.waitForTimeout(350);
+ if(width<600){const feedbackLines=await page.getByRole('status').evaluate(el=>el.getBoundingClientRect().height/parseFloat(getComputedStyle(el).lineHeight));expect(feedbackLines).toBeLessThanOrEqual(1.1);}
+ const dimensions=await canvas.evaluate(el=>{const c=el as HTMLCanvasElement;return {width:c.width,height:c.height,cssWidth:c.clientWidth,cssHeight:c.clientHeight};});
+ expect(dimensions.width).toBeGreaterThan(300);expect(dimensions.height).toBeGreaterThan(300);
+ const metrics=await root.evaluate(el=>({drawCalls:Number((el as HTMLElement).dataset.drawCalls),triangles:Number((el as HTMLElement).dataset.triangles),renderSubmitMs:Number((el as HTMLElement).dataset.renderMs)}));
+ expect(metrics.drawCalls).toBeGreaterThan(0);expect(metrics.drawCalls).toBeLessThan(160);expect(metrics.triangles).toBeGreaterThan(1000);
+ // Preserve original PNG bytes in the standard Playwright attachment body.
+ // The unchanged hosted shard artifact transports this report on success or failure.
+ const png=await page.screenshot();const image=await sharp(png).stats();expect(image.channels.slice(0,3).some(c=>c.stdev>20)).toBe(true);
+ await info.attach(`stamp-atelier-native-${width}x${height}.png`,{body:png,contentType:'image/png'});
+ await info.attach(`stamp-atelier-native-${width}x${height}.json`,{body:Buffer.from(JSON.stringify({viewport:{width,height},dimensions,metrics,note:'Real Three.js preview after successful native practice input. renderSubmitMs is CPU submission time, not GPU time or FPS.'})),contentType:'application/json'});
+ if(width===1440)await info.attach('stamp-atelier-playable-preview.html',{body:Buffer.from(html),contentType:'text/html'});
+ // Observe the real stamp Group during native renderer traversal. This probe
+ // records a transform only and never substitutes geometry or rendering.
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.getByRole('button',{name:'輔助瞄準',exact:true}).click();
+ for(const completed of [3,4]){
+  await root.locator('.atelier-stamp').click();await expect(root).toHaveAttribute('data-completed',String(completed));
+  await expect(page.locator('body')).toHaveAttribute('data-stamp-y','0.48');
+  await page.waitForTimeout(300);await expect(page.locator('body')).toHaveAttribute('data-stamp-y','0.48');
+ }
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ await root.locator('.atelier-stamp').click();await expect(root).toHaveAttribute('data-completed','5');
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await expect.poll(async()=>Number(await page.locator('body').getAttribute('data-stamp-y'))).toBeCloseTo(.48,10);
+ await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(root).toHaveAttribute('data-practice','true');await expect(root).toHaveAttribute('data-completed','0');
+ expect(errors).toEqual([]);
+ // Keep the original transport ceiling and digest, but never duplicate the PNG
+ // in stdout: its lossless attachment already lives in the same JSON report.
+ // Duplicating large base64 bodies can exceed the unchanged 64 MiB evidence cap.
+ expect(png.byteLength).toBeLessThanOrEqual(2*1024*1024);
+ const {createHash}=createRequire(import.meta.url)('node:crypto');
+ const captureId=`${width}x${height}`;
+ console.log('STAMP_ATELIER_CAPTURE '+JSON.stringify({format:'stamp-atelier-preview/v2',transport:'playwright-attachment',attachment:`stamp-atelier-native-${width}x${height}.png`,candidate:process.env.GITHUB_SHA??'local-uncommitted',id:captureId,bytes:png.byteLength,sha256:createHash('sha256').update(png).digest('hex'),viewport:{width,height},dimensions,metrics}));
+ } finally {await context.close();}
+});
+
+// New isolated PHOTO/CASH proposals. These exercise original source and real
+// pointer events, not a renderer mock or generated artwork. PHOTO uses a
+// controlled clock so scoring/timeout assertions do not depend on runner speed.
+for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD ${mode} atelier ${width}x${height}: direct input, interruption and original capture`,async({browser},info)=>{
+ // The cash atelier at 1440x1000 is the slowest case: 21.0 s in Verify 43701950520 and 31.2 s on a
+ // slower runner (43707780287), against the 45 s default.
+ test.setTimeout(90_000);
+ const context=await browser.newContext({viewport:{width,height},hasTouch:width<1000,isMobile:width<1000,deviceScaleFactor:1});const page=await context.newPage();
+ try{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  const logo='data:image/png;base64,'+readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url)).toString('base64');
+  const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {mountPhotoCashAtelier} from './apps/portal-web/src/games/photo-cash-atelier';const game=mountPhotoCashAtelier(document.body,${JSON.stringify(logo)},${JSON.stringify(mode)});window.addEventListener('pagehide',()=>game.dispose(),{once:true});window.addEventListener('atelier-dispose',()=>game.dispose(),{once:true});`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022',minify:true}).outputFiles[0].text;
+  const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${mode} · 可操作預覽</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`;
+  if(mode==='photo'){await page.clock.install({time:new Date('2026-11-11T00:00:00Z')});await page.clock.pauseAt(new Date('2026-11-11T00:00:01Z'));}
+  await page.setContent(html);const root=page.locator('.night-atelier'),canvas=root.getByRole('application');await expect(root).toHaveAttribute('data-native','true');await expect(canvas).toBeVisible();
+  await expect(root).toHaveAttribute('data-scene-coverage','full-viewport');
+  const canvasBounds=await canvas.boundingBox();expect(canvasBounds).not.toBeNull();expect(canvasBounds!.x).toBe(0);expect(canvasBounds!.y).toBe(0);expect(canvasBounds!.width).toBe(width);expect(canvasBounds!.height).toBe(height);
+  // Actual originals captured before the time-limited client leaves. No hidden
+  // overlays, screenshot CSS, viewport resizing, image editing or image mocks.
+  let capture=await page.screenshot({type:'jpeg',quality:92});
+  await info.attach(`${mode}-atelier-intro-${width}x${height}.jpg`,{body:capture,contentType:'image/jpeg'});
+  const metrics=await root.evaluate(el=>({calls:Number((el as HTMLElement).dataset.drawCalls),triangles:Number((el as HTMLElement).dataset.triangles)}));expect(metrics.calls).toBeGreaterThan(0);expect(metrics.calls).toBeLessThan(160);expect(metrics.triangles).toBeGreaterThan(1000);
+  await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();const elapsed=await root.getAttribute('data-elapsed');await page.waitForTimeout(120);expect(await root.getAttribute('data-elapsed')).toBe(elapsed);await page.keyboard.press('Tab');await expect(page.getByRole('button',{name:'繼續遊戲',exact:true})).toBeFocused();await page.keyboard.press('Enter');await expect(page.getByRole('dialog')).toBeHidden();await expect(canvas).toBeFocused();
+  const pan=await root.getAttribute('data-pan-x');await canvas.press('ArrowRight');expect(await root.getAttribute('data-pan-x')).toBe(pan);await expect(root.getByRole('button',{name:/往左|往右|往上|往下/})).toHaveCount(0);
+  const touch=width<1000?await context.newCDPSession(page):null;
+  const finger=async(type:'touchStart'|'touchMove'|'touchEnd',x=width/2,y=height/2)=>touch!.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x,y,id:1}]});
+  const begin=async()=>{if(touch)await finger('touchStart');else{await page.mouse.move(width/2,height/2);await page.mouse.down();}};
+  const finish=async()=>{if(touch)await finger('touchEnd');else await page.mouse.up();};
+  // Inject cancellation for an ignored second pointer while the owner uses
+  // actual mouse/touch input. It must not release or consume the owner gesture.
+  const cancelOther=async()=>{for(const type of ['pointercancel','lostpointercapture'])await canvas.dispatchEvent(type,{pointerId:9999,isPrimary:false,pointerType:'touch'});};
+  await begin();await page.keyboard.press('Escape');await finish();await expect(root).toHaveAttribute('data-index','0');await page.getByRole('button',{name:'繼續遊戲',exact:true}).click();
+  if(mode==='photo'){
+   await begin();await cancelOther();if(touch)await finger('touchMove',width/2+35,height/2+20);else await page.mouse.move(width/2+35,height/2+20,{steps:4});await finish();expect(Number(await root.getAttribute('data-pan-x'))).toBeLessThan(0);
+   await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-film','1');await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-index','1');await expect(root).toHaveAttribute('data-film','0');
+   await page.clock.runFor(120);await expect(root).toHaveAttribute('data-flash','false');const previousStars=Number(await root.getAttribute('data-stars'));await begin();if(touch)await finger('touchMove',width/2-width*.12,height/2+height*.0484);else await page.mouse.move(width/2-width*.12,height/2+height*.0484,{steps:4});await finish();capture=await page.screenshot({type:'jpeg',quality:92});for(let i=0;i<2;i++)await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-stars',String(previousStars+3));await expect(root).toHaveAttribute('data-index','2');
+   for(let i=0;i<2;i++)await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-ended','true');await expect(root).toHaveAttribute('data-flash','false');await expect(page.getByRole('status')).toContainText('三位客人已拍完');await expect(page.getByRole('button',{name:'按下快門',exact:true})).toBeDisabled();
+  }else{
+   const leftButton=page.getByRole('button',{name:'退回大餅',exact:true}),rightButton=page.getByRole('button',{name:'收下鈔票',exact:true});
+   const leftRect=await leftButton.boundingBox(),rightRect=await rightButton.boundingBox();expect(leftRect!.x+leftRect!.width).toBeLessThan(width/2);expect(rightRect!.x).toBeGreaterThan(width/2);expect(Math.abs(leftRect!.y-rightRect!.y)).toBeLessThan(2);
+   const deck=cashDeck(42),first=deck[0];await page.getByRole('button',{name:first.valid?'退回大餅':'收下鈔票',exact:true}).dblclick();await expect(root).toHaveAttribute('data-index','0');await expect(root).toHaveAttribute('data-mistakes','1');await page.waitForTimeout(180);
+   await begin();await cancelOther();const dx=first.valid?70:-70;if(touch)await finger('touchMove',width/2+dx,height/2);else await page.mouse.move(width/2+dx,height/2,{steps:4});await finish();await expect(root).toHaveAttribute('data-index','1');await expect(root).toHaveAttribute('data-decision',first.valid?'keep':'reject');await expect(page.getByRole('status')).toContainText('已分類 1 / 30 張');await page.waitForTimeout(700);await expect(root).toHaveAttribute('data-cash-settled','true');await expect(root.locator('.night-sort-flight')).toHaveAttribute('data-direction',first.valid?'keep':'reject');await expect(root.locator('.night-sort-flight')).toHaveCSS('opacity','0');capture=await page.screenshot({type:'jpeg',quality:92});
+   // A predominantly vertical gesture does not sort a card.
+   await begin();if(touch)await finger('touchMove',width/2+5,height/2+60);else await page.mouse.move(width/2+5,height/2+60,{steps:4});await finish();await expect(root).toHaveAttribute('data-index','1');
+   for(let i=1;i<deck.length;i++){await page.waitForTimeout(180);await page.getByRole('button',{name:deck[i].valid?'收下鈔票':'退回大餅',exact:true}).click();await expect(root).toHaveAttribute('data-index',String(i+1));}
+   await expect(root).toHaveAttribute('data-ended','true');await expect(page.getByRole('status')).toContainText('100 萬盤點完成');await expect(root).toHaveAttribute('data-cash-settled','true');await expect(page.getByRole('button',{name:'收下鈔票',exact:true})).toBeDisabled();
+  }
+  const stats=await sharp(capture).stats();expect(stats.channels.slice(0,3).some(c=>c.stdev>20)).toBe(true);await info.attach(`${mode}-atelier-gameplay-${width}x${height}.jpg`,{body:capture,contentType:'image/jpeg'});
+  // Controls remain in-bounds and physically clickable, including the smallest
+  // landscape screen. Actual hit targets, not only CSS declarations.
+  const bounds=await root.getByRole('button').evaluateAll(buttons=>buttons.filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom};}));for(const b of bounds){expect(b.width).toBeGreaterThanOrEqual(44);expect(b.height).toBeGreaterThanOrEqual(44);expect(b.x).toBeGreaterThanOrEqual(0);expect(b.y).toBeGreaterThanOrEqual(0);expect(b.right).toBeLessThanOrEqual(width);expect(b.bottom).toBeLessThanOrEqual(height);}
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(root).toHaveAttribute('data-index','0');await expect(root).toHaveAttribute('data-ended','false');
+  if(mode==='photo'){await begin();await page.clock.fastForward(12001);await expect(root).toHaveAttribute('data-index','1');if(touch)await finger('touchMove',width/2+30,height/2+20);else await page.mouse.move(width/2+30,height/2+20);await finish();await expect(root).toHaveAttribute('data-pan-x','0');await expect(root).toHaveAttribute('data-pan-y','0');}
+  await page.evaluate(()=>window.dispatchEvent(new Event('atelier-dispose')));await expect(root).toHaveCount(0);await expect(page.locator('canvas')).toHaveCount(0);expect(errors).toEqual([]);
+  // Existing reporter stdout retains bounded public synthetic originals on pass
+  // and failure. Native full-resolution JPEG output, never resized or postprocessed.
+  // Transport limit is not a graphics/performance acceptance budget.
+  expect(capture.byteLength).toBeLessThanOrEqual(2*1024*1024);const {createHash}=createRequire(import.meta.url)('node:crypto');const id=`${mode}-${width}x${height}`,encoded=capture.toString('base64'),parts=Math.ceil(encoded.length/3072);console.log('PHOTO_CASH_ATELIER_CAPTURE '+JSON.stringify({format:'photo-cash-atelier-preview/v2',mimeType:'image/jpeg',nativeQuality:92,candidate:process.env.GITHUB_SHA??'local-uncommitted',id,bytes:capture.byteLength,sha256:createHash('sha256').update(capture).digest('hex'),parts,viewport:{width,height},metrics}));for(let i=0;i<parts;i++)console.log(`PHOTO_CASH_ATELIER_JPEG ${id} ${i+1}/${parts} ${encoded.slice(i*3072,(i+1)*3072)}`);
+ }finally{await context.close();}
+});
+
+// Separate from the unchanged 45-second 30-card acceptance case: compare the
+// retained framebuffer to a complete native redraw at the identical viewport.
+for(const [width,height,dpr] of [[1440,1000,1],[390,844,2],[667,375,1]] as const)test(`AD cash damage rendering ${width}x${height}@${dpr} matches full redraw`,async({browser})=>{
+ const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:dpr});
+ try{
+  const page=await context.newPage();
+  const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {mountPhotoCashAtelier} from './apps/portal-web/src/games/photo-cash-atelier';mountPhotoCashAtelier(document.body,'','cash');`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022'}).outputFiles[0].text;
+  await page.setContent(`<html><head><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`);
+  const root=page.locator('.night-atelier'),canvas=root.getByRole('application');
+  await expect(root).toHaveAttribute('data-native','true');
+  const compareFullRedraw=async()=>{
+   const retained=await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL());
+   // ResizeObserver invalidates the retained buffer. Restore original viewport
+   // before comparison, so this does not substitute a smaller acceptance image.
+   await page.setViewportSize({width:width+1,height});
+   await expect.poll(()=>canvas.evaluate(el=>(el as HTMLCanvasElement).width)).toBe(Math.floor((width+1)*Math.min(dpr,RULES.maxDpr)));
+   await page.setViewportSize({width,height});
+   await expect.poll(()=>canvas.evaluate(el=>(el as HTMLCanvasElement).width)).toBe(Math.floor(width*Math.min(dpr,RULES.maxDpr)));
+   const full=await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL());
+   expect(retained).toBe(full);
+  };
+  await page.mouse.move(width/2,height/2);await page.mouse.down();
+  await page.mouse.move(width/2+(cashDeck(42)[0].valid?70:-70),height/2,{steps:4});
+  await compareFullRedraw(); // tilted/moved paper and its live shadow
+  await page.mouse.up();await expect(root).toHaveAttribute('data-index','1');
+  await page.waitForTimeout(250);await compareFullRedraw(); // old shadow erased
+
+ }finally{await context.close();}
+});
 
 test.afterEach(async({page},testInfo)=>{
   if(testInfo.title!=='UX-15c: completed guided export survives development StrictMode replay and production cold reload'
@@ -271,6 +449,8 @@ test('UX-2: secondary pointers cannot release or cancel a real cooking hold, and
 });
 
 for(const width of [320,1440])for(const kind of ['knead','pour'] as const)test(`UX-2: native Tab cancels the keyboard ${kind} hold without scoring or losing the dish at ${width}px`,async({page})=>{
+  // The 1440 pour case took 19.1-30.5 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+  test.setTimeout(75_000);
   await page.setViewportSize({width,height:900});await openKitchen(page,'margherita-pizza');
   const game=page.locator('.ck-game'),recipe=recipeOf('margherita-pizza')!;
   if(kind==='pour'){
@@ -358,7 +538,8 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
 }
 
 test('UX-1/5: a completed cooking run can replay the same seed or move to the next real recipe',async({page})=>{
-  test.setTimeout(120000);await openKitchen(page,'egg-fried-rice');await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'換一道料理 →',exact:true}).click();await expect(page.locator('.ck-game h1')).toHaveText('滷肉飯');expect(new URL(page.url()).searchParams.get('recipe')).toBe('braised-pork-rice');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
+  // 48.3-86.6 s in Verify 43701950520, 43707780287 and 43715862147.
+  test.setTimeout(180_000);await openKitchen(page,'egg-fried-rice');await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'換一道料理 →',exact:true}).click();await expect(page.locator('.ck-game h1')).toHaveText('滷肉飯');expect(new URL(page.url()).searchParams.get('recipe')).toBe('braised-pork-rice');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
 });
 
 test('UX-4: all six 3D scenes keep bounded real draw calls and avoid unchanged diagnostic mutations',async({page})=>{
@@ -568,6 +749,8 @@ test('PT-light: context loss pauses the same run, fallback is explicit, retry pr
 });
 
 for(const light of [false,true])test(`PT-light: ${light?'light':'native'} cells reject held pointer/Space/Enter across waves and retain assistive clicks`,async({page})=>{
+  // Native took 18.7-28.9 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+  if(!light)test.setTimeout(60_000);
   if(light)await openLightHoliday(page);else await openParty(page,'holiday');
   for(const [index,key]of ['Space','Enter','pointer'].entries()){
     const round=index*3;await partyAdvance(page,round*PT.holidayRoundMs+300);
@@ -1074,7 +1257,7 @@ import {actCooking,advanceCooking,cookingScore,currentStep,newCookingRun,type Co
 import {COOKBOOK_KEY,COOKING_RUN_KEY} from '../../apps/portal-web/src/games/cooking/storage.js';
 async function openKitchen(page:Page,id:string){
   await page.clock.install({time:new Date('2026-10-25T02:00:00Z')});await page.goto(`/play?game=kitchen&practice=1&recipe=${id}&seed=42`);
-  await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
   await page.clock.pauseAt(new Date('2026-10-25T02:01:00Z'));await page.getByRole('button',{name:'開始料理',exact:true}).click();await exitStartedFullscreen(page);
 }
 
@@ -1123,9 +1306,9 @@ for(const width of [320,1440])for(const kind of ['slice','knead'] as const)test(
   await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(game).toHaveAttribute('data-cooking-state','playing');await expect(meter).toHaveText(kind==='slice'?'1 / 6':'1 / 4');expect(errors).toEqual([]);
 });
 
-test('UX-7: the real pan, boiling pot and oven accept direct scene taps with the same persisted rules',async({page},testInfo)=>{
+test('UX-7: the real pan takes an upward scoop, the boiling pot and oven direct scene taps, with the same persisted rules',async({page},testInfo)=>{
   test.setTimeout(120000);await page.setViewportSize({width:390,height:844});await page.clock.install();await page.goto('/play');
-  for(const kind of ['pan','boil','bake'] as const){await page.goto('/play');const f=kitchenCheckpoint(kind);await page.evaluate(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'繼續料理',exact:true}).click();await exitStartedFullscreen(page);await page.getByRole('button',{name:'中火',exact:true}).click();const advance=()=>page.clock.runFor(currentStep(f.run).durationMs*(kind==='bake'?.8:.55));if(kind==='pan')await withBoundedCpuProfile(page,testInfo,advance);else await advance();await page.locator('.ck-scene').scrollIntoViewIfNeeded();const p=await scenePoint(page,.5,.5);await page.mouse.click(p.x,p.y);await page.locator('.ck-game').press('Escape');const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);if(kind==='pan')expect(saved.active.flipped).toBe(true);if(kind==='boil'){expect(saved.active.count).toBe(1);expect(saved.active.foam).toBe(0);}if(kind==='bake'){expect(saved.reports).toHaveLength(f.run.step+1);expect(saved.reports.at(-1)!.score).toBeGreaterThanOrEqual(85);}}
+  for(const kind of ['pan','boil','bake'] as const){await page.goto('/play');const f=kitchenCheckpoint(kind);await page.evaluate(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'繼續料理',exact:true}).click();await exitStartedFullscreen(page);await page.getByRole('button',{name:'中火',exact:true}).click();const advance=()=>page.clock.runFor(currentStep(f.run).durationMs*(kind==='bake'?.8:.55));if(kind==='pan')await withBoundedCpuProfile(page,testInfo,advance);else await advance();await page.locator('.ck-scene').scrollIntoViewIfNeeded();if(kind==='pan'){const from=await scenePoint(page,.5,.65),to=await scenePoint(page,.5,.42);await page.mouse.move(from.x,from.y);await page.mouse.down();await page.mouse.move(to.x,to.y,{steps:5});await page.mouse.up();}else{const p=await scenePoint(page,.5,.5);await page.mouse.click(p.x,p.y);}await page.locator('.ck-game').press('Escape');const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);if(kind==='pan')expect(saved.active.flipped).toBe(true);if(kind==='boil'){expect(saved.active.count).toBe(1);expect(saved.active.foam).toBe(0);}if(kind==='bake'){expect(saved.reports).toHaveLength(f.run.step+1);expect(saved.reports.at(-1)!.score).toBeGreaterThanOrEqual(85);}}
 });
 
 test('UX-7: loading never starts the clock; late completion requires retry and real context loss keeps the same dish',async({page})=>{
@@ -1134,21 +1317,21 @@ test('UX-7: loading never starts the clock; late completion requires retry and r
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42',{waitUntil:'domcontentloaded'});const route=await requested,response=await route.fetch(),url=route.request().url();
   await expect(page.locator('.ck-visual-loading')).toBeVisible();await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeDisabled();expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBeNull();await page.clock.fastForward(14999);await expect(page.locator('.ck-visual-loading')).toBeVisible();await page.clock.fastForward(1);await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
   await page.getByRole('button',{name:'開始料理',exact:true}).click();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await route.fulfill({response});await page.evaluate(async value=>{await import(value);},url);await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
-  await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');
-  const old=await page.locator('.ck-kitchen-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await old.evaluate(gl=>gl.getExtension('WEBGL_lose_context')!.loseContext());await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(1);await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');expect(await old.evaluate(gl=>gl.isContextLost())).toBe(true);await old.dispose();
+  await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');
+  const old=await page.locator('.ck-kitchen-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await old.evaluate(gl=>gl.getExtension('WEBGL_lose_context')!.loseContext());await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(1);await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');expect(await old.evaluate(gl=>gl.isContextLost())).toBe(true);await old.dispose();
   const active=await page.locator('.ck-kitchen-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);expect(await active.evaluate(gl=>gl.isContextLost())).toBe(true);await active.dispose();expect(errors).toEqual([]);
 });
 
 test.describe('UX-7 real touch cooking',()=>{
   test.use({hasTouch:true,isMobile:true,viewport:{width:390,height:844}});
   test('the rendered dough receives a native touch hold and releases once at the real timing target',async({page})=>{
-    await openKitchen(page,'margherita-pizza');await expect(page.locator('.ck-visual-3d')).toBeVisible();const p=await scenePoint(page,.5,.5),cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:p.x,y:p.y}]});await page.clock.runFor(750);await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 4');const canvas=page.locator('.ck-kitchen-canvas canvas');expect(await canvas.evaluate(c=>(c as HTMLCanvasElement).width)).toBeLessThanOrEqual(960);expect(await canvas.evaluate(c=>(c as HTMLCanvasElement).height)).toBeLessThanOrEqual(672);const stats=await page.locator('.ck-kitchen-canvas').evaluate(el=>({...el.dataset}));expect(Number(stats.renderCalls)).toBeGreaterThan(0);expect(Number(stats.renderCalls)).toBeLessThanOrEqual(100);expect(Number(stats.renderGeometries)).toBeLessThan(100);expect(Number(stats.renderTextures)).toBeLessThanOrEqual(3);await cdp.detach();
+    await openKitchen(page,'margherita-pizza');await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);const p=await scenePoint(page,.5,.5),cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:p.x,y:p.y}]});await page.clock.runFor(750);await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 4');const canvas=page.locator('.ck-kitchen-canvas canvas');expect(await canvas.evaluate(c=>(c as HTMLCanvasElement).width)).toBeLessThanOrEqual(960);expect(await canvas.evaluate(c=>(c as HTMLCanvasElement).height)).toBeLessThanOrEqual(672);const stats=await page.locator('.ck-kitchen-canvas').evaluate(el=>({...el.dataset}));expect(Number(stats.renderCalls)).toBeGreaterThan(0);expect(Number(stats.renderCalls)).toBeLessThanOrEqual(100);expect(Number(stats.renderGeometries)).toBeLessThan(100);expect(Number(stats.renderTextures)).toBeLessThanOrEqual(3);await cdp.detach();
   });
 });
 
 test('UX-7: a failed kitchen renderer loads the usable illustration, and a draw fault preserves the same dish',async({page})=>{
-  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');await expect(page.locator('.ck-visual-light')).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await page.unroute('**/assets/kitchen-stage-*.js');await page.reload();await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.getByRole('button',{name:'繼續料理',exact:true}).click();
-  const clear=await page.evaluateHandle(()=>WebGL2RenderingContext.prototype.clear);await page.evaluate(()=>{WebGL2RenderingContext.prototype.clear=function(){throw Error('Synthetic toy kitchen draw fault');};});await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await page.evaluate(original=>{WebGL2RenderingContext.prototype.clear=original;},clear);await clear.dispose();await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');expect(errors).toEqual([]);
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');await expect(page.locator('.ck-visual-light')).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await page.unroute('**/assets/kitchen-stage-*.js');await page.reload();await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await page.getByRole('button',{name:'繼續料理',exact:true}).click();
+  const clear=await page.evaluateHandle(()=>WebGL2RenderingContext.prototype.clear);await page.evaluate(()=>{WebGL2RenderingContext.prototype.clear=function(){throw Error('Synthetic toy kitchen draw fault');};});await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await page.evaluate(original=>{WebGL2RenderingContext.prototype.clear=original;},clear);await clear.dispose();await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');expect(errors).toEqual([]);
 });
 async function scenePoint(page:Page,x:number,y:number){const box=await page.locator('.ck-scene').boundingBox();expect(box).toBeTruthy();return {x:box!.x+x*box!.width,y:box!.y+y*box!.height};}
 async function playRecipe(page:Page,recipe:Recipe){
@@ -1159,7 +1342,7 @@ async function playRecipe(page:Page,recipe:Recipe){
     if(s.kind==='mix'){const first=await scenePoint(page,.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();for(let i=1;i<=s.goal*32;i++){const angle=i*Math.PI/16,p=await scenePoint(page,.5+.3*Math.cos(angle),.52+.3*Math.sin(angle));await page.mouse.move(p.x,p.y);}await page.mouse.up();}
     if(s.kind==='knead')for(let i=0;i<s.goal;i++){await page.locator('.ck-game').focus();await page.keyboard.down('Space');await page.clock.runFor(s.holdMs);await page.keyboard.up('Space');await page.clock.runFor(160);}
     if(s.kind==='pan'||s.kind==='boil'||s.kind==='bake'){const slider=page.getByRole('slider'),box=await slider.boundingBox();await slider.click({position:{x:8+(box!.width-16)*s.heat/100,y:box!.height/2}});
-      if(s.kind==='pan'){await page.clock.runFor(s.durationMs*.55);await page.getByRole('button',{name:'翻面！',exact:true}).click();await page.clock.runFor(s.durationMs*.65);}
+      if(s.kind==='pan'){await page.clock.runFor(s.durationMs*.55);{const b=(await page.locator('.ck-scene-pan').boundingBox())!;await expect(page.getByRole('button',{name:'翻面！',exact:true})).toHaveCount(0);await page.mouse.move(b.x+b.width*.5,b.y+b.height*.65);await page.mouse.down();await page.mouse.move(b.x+b.width*.5,b.y+b.height*.42,{steps:5});await page.mouse.up();}await page.clock.runFor(s.durationMs*.65);}
       if(s.kind==='boil'){for(let i=0;i<3;i++){await page.clock.runFor(2300);const skim=page.getByRole('button',{name:/撈掉泡沫/});if(await skim.isEnabled())await skim.click();}await page.clock.runFor(3000);}
       if(s.kind==='bake'){await page.clock.runFor(s.durationMs*.8);await page.getByRole('button',{name:'出爐！',exact:true}).click();}}
     if(s.kind==='pour'){await page.locator('.ck-game').focus();await page.keyboard.down('Space');await page.clock.runFor(s.durationMs*s.target);await page.keyboard.up('Space');}
@@ -1174,7 +1357,7 @@ async function playRecipe(page:Page,recipe:Recipe){
   await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+100));
 }
 test('UX-7: a real-clock 3D cooking journey completes mixing, timed kneading and folding into a shareable result',async({page})=>{
-  const recipe=recipeOf('rice-balls')!,errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await page.setViewportSize({width:390,height:844});await page.goto('/play?game=kitchen&practice=1&recipe=rice-balls&seed=42');await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  const recipe=recipeOf('rice-balls')!,errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await page.setViewportSize({width:390,height:844});await page.goto('/play?game=kitchen&practice=1&recipe=rice-balls&seed=42');await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await page.getByRole('button',{name:'開始料理',exact:true}).click();
   for(const [index,s]of recipe.steps.entries()){
     if(s.kind==='mix'){const first=await scenePoint(page,.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();for(let i=1;i<=s.goal*32;i++){const a=i*Math.PI/16,p=await scenePoint(page,.5+.3*Math.cos(a),.52+.3*Math.sin(a));await page.mouse.move(p.x,p.y);}await page.mouse.up();}
     // One native key press owns the real hold interval. Separate traced down/up
@@ -1397,7 +1580,8 @@ test('UX-9: corn dog coating cancels native animation frames on touch release an
 });
 
 for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as MarketId[])test(`UX-9: ${id} cooks through actual controls to its own inspectable, downloadable and shareable result`,async({page},testInfo)=>{
- test.setTimeout(120000);const errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await marketOpen(page,id);
+ // Corn dog, the slowest, took 42.6-82.0 s in Verify 43701950520, 43707780287 and 43715862147.
+ test.setTimeout(165_000);const errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await marketOpen(page,id);
  if(id==='corn-dog'){await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');await marketTime(page,24000);await marketButton(page,'翻這一面');await marketTime(page,24000);await marketButton(page,'起鍋瀝油');await marketTime(page,4000);}
  if(id==='steak-dinner'){await marketAdd(page,'牛排');await marketAdd(page,'薯條');await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('0');await marketTime(page,23000);await marketButton(page,'翻這一面');await marketTime(page,23000);}
  if(id==='shawarma'){await marketAdd(page,'餅皮');await marketTime(page,6000);for(let i=0;i<4;i++)await marketButton(page,'削一刀');await marketAdd(page,'生菜');await marketAdd(page,'番茄');for(let i=0;i<3;i++)await marketButton(page,`包一折 · ${i}/3`);}
@@ -1424,7 +1608,8 @@ test('UX-1/9: lobby can cold-open both a legacy game and a free kitchen without 
 
 // UX-11: the visible food, rather than a stale selected dropdown, owns a direct touch.
 test('UX-11: touching a real corn dog selects and flips that piece; lifted food moves to the dressing tray with its own sauce',async({page},testInfo)=>{
- test.setTimeout(120000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await marketOpen(page,'corn-dog');
+ // 43.6-84.9 s in Verify 43701950520, 43707780287 and 43715862147.
+ test.setTimeout(180_000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await marketOpen(page,'corn-dog');
  for(let i=0;i<2;i++){await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');}
  await marketTime(page,22000);await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('1');
  const surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const b=(await surface.boundingBox())!,cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});

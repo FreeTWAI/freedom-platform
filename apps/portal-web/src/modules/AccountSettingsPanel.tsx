@@ -1,8 +1,9 @@
+import {legacyHash} from '../portal-route';
 import {useEffect,useId,useRef,useState,type FormEvent,type ReactNode} from 'react';
 import {useModuleMutation,type ModulePanelProps} from './shared';
 import {AccountDeactivation} from './AccountDeactivation';
 import {EmailChangePanel} from './EmailChange';
-import {ClientConnections} from './ClientConnections';
+
 import {AvatarEditor} from './AvatarEditor';
 import type {AvatarMetadata} from './MemberAvatar';
 import {GitHubConnectionPanel} from './GitHubSocial';
@@ -10,7 +11,7 @@ import {TotpSettings} from './TotpSettings';
 import {MemberSocialLinks} from './MemberSocialLinks';
 import {MemberShare} from './MemberShare';
 import {sharingMutationState} from './authoring-drafts';
-import {createSettingsLeaveRegistry,settingsMutationBlocksLeave,type RegisterSettingsLeave} from './account-settings-leave';
+import {createSettingsLeaveRegistry,initialSettingsSection,settingsMutationBlocksLeave,type RegisterSettingsLeave,type SettingsSection} from './account-settings-leave';
 import {EmailVerificationPanel} from './EmailVerification';
 import {AccountSecurity} from './AccountSecurity';
 import {GoogleAccount} from './GoogleAccount';
@@ -26,19 +27,50 @@ type Account={user_id:string;avatar:AvatarMetadata;nickname:string;identity_labe
 const audienceOptions: [Audience,string][]=[['public','平台公開'],['friends','平台好友'],['squad','小隊夥伴'],['guild','公會夥伴']];
 const fail=(e:unknown)=>e instanceof Error?e.message:'暫時無法讀取，請稍後再試。';
 
-type AccountPanelProps=ModulePanelProps&{registerLeave?:(guard:((hash:string|null)=>boolean)|null)=>void;children?:ReactNode|((registerLeave:RegisterSettingsLeave)=>ReactNode);profileExtras?:(registerLeave:RegisterSettingsLeave)=>ReactNode;focusProfileExtras?:boolean;focusConnections?:boolean};
+type AccountPanelProps=ModulePanelProps&{registerLeave?:(guard:((hash:string|null)=>boolean)|null)=>void;children?:ReactNode|((registerLeave:RegisterSettingsLeave)=>ReactNode);profileExtras?:(registerLeave:RegisterSettingsLeave)=>ReactNode;focusProfileExtras?:boolean;focusConnections?:boolean;publicPage?:(register:RegisterSettingsLeave)=>ReactNode;focusPublicPage?:boolean};
 export function AccountPanel(props:AccountPanelProps){
   return <AccountSettings key={`${props.session.user.user_id}:${props.client.sessionGeneration}`} {...props}/>;
 }
-function AccountSettings({client,session,onNavigate,registerLeave,children,profileExtras,focusProfileExtras,focusConnections}:AccountPanelProps){
+function AccountSettings({client,session,registerLeave,children,profileExtras,focusProfileExtras,focusConnections,publicPage,focusPublicPage}:AccountPanelProps){
   const [account,setAccount]=useState<Account|null>(null),[nickname,setNickname]=useState(''),[identityLabel,setIdentityLabel]=useState<IdentityLabel|''>(''),[contacts,setContacts]=useState<Account['contacts']|null>(null),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[member,setMember]=useState<MemberCardData|null>(null),[labels,setLabels]=useState<Record<string,string>>({});
   const mutationScope={userId:session.user.user_id,type:'account-settings'};
   const {mutate,busy,error,lastFailureUnknown}=useModuleMutation(client,mutationScope);
   const mutationState=sharingMutationState(mutationScope);
   const formId=useId(),generation=client.sessionGeneration;
   const childGuards=useRef(createSettingsLeaveRegistry()).current;
+  const publicPageGuards=useRef(createSettingsLeaveRegistry()).current;
   const profileExtrasRef=useRef<HTMLDetailsElement>(null);
   const connectionsRef=useRef<HTMLDetailsElement>(null);
+  const hasPublicPage=Boolean(publicPage);
+  const [openSection,setOpenSection]=useState<SettingsSection|null>(()=>initialSettingsSection({focusPublicPage,hasPublicPage,focusConnections}));
+  // Load the optional editor on first use, then keep its draft and leave guard mounted.
+  const [publicPageVisited,setPublicPageVisited]=useState(Boolean(focusPublicPage&&hasPublicPage));
+  const publicPageRef=useRef<HTMLDetailsElement>(null);
+  // The hash picks the open section; going back to plain #account reopens 個人資料. Sections stay mounted, so drafts survive.
+  const focusSection:SettingsSection|null=focusPublicPage&&hasPublicPage?'public-page':focusConnections?'security':focusProfileExtras?'profile':null;
+  const lastFocusSection=useRef(focusSection);
+  useEffect(()=>{
+    const previous=lastFocusSection.current;lastFocusSection.current=focusSection;
+    if(focusSection==='public-page')setPublicPageVisited(true);
+    if(focusSection)setOpenSection(focusSection);
+    else if(previous)setOpenSection('profile');
+  },[focusSection]);
+  useEffect(()=>{
+    const details=publicPageRef.current;
+    if(!focusPublicPage||!details)return;
+    let ancestor=details.parentElement;
+    while(ancestor){if(ancestor instanceof HTMLDetailsElement)ancestor.open=true;ancestor=ancestor.parentElement;}
+    details.open=true;
+    // The shell focuses main after navigation. Reveal this explicit destination
+    // afterwards, without stealing focus from a modal or a newly used control.
+    const frame=requestAnimationFrame(()=>{
+      const summary=details.querySelector('summary');
+      const active=document.activeElement;
+      if(!details.isConnected||!details.open||legacyHash(window.location.hash)!=='#account?view=page'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
+      if(active===document.body||active?.id==='main-content'||active===summary)summary?.focus();
+    });
+    return()=>cancelAnimationFrame(frame);
+  },[focusPublicPage]);
   useEffect(()=>{
     const details=connectionsRef.current;
     if(!focusConnections||!details)return;
@@ -50,7 +82,7 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
     const frame=requestAnimationFrame(()=>{
       const summary=details.querySelector('summary');
       const active=document.activeElement;
-      if(!details.isConnected||!details.open||window.location.hash!=='#account?view=connections'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
+      if(!details.isConnected||!details.open||legacyHash(window.location.hash)!=='#account?view=connections'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
       if(active===document.body||active?.id==='main-content'||active===summary)summary?.focus();
     });
     return()=>cancelAnimationFrame(frame);
@@ -69,13 +101,15 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
   const pending=useRef<{body:{nickname:string;identity_label:IdentityLabel|null;contacts:Record<string,unknown>};version:number}|null>(null);
   const scope=useRef({client,generation});scope.current={client,generation};
   const live=()=>mounted.current&&scope.current.client===client&&scope.current.generation===generation&&client.sessionGeneration===generation;
-  const dirty=Boolean(account&&contacts&&(nickname!==account.nickname||identityLabel!==(account.identity_label??'')||JSON.stringify(contacts)!==JSON.stringify(account.contacts)));
-  const guardState=useRef({dirty});guardState.current={dirty};
+  const profileDirty=Boolean(account&&(nickname!==account.nickname||identityLabel!==(account.identity_label??'')));
+  const contactsDirty=Boolean(account&&contacts&&JSON.stringify(contacts)!==JSON.stringify(account.contacts));
+  const dirty=profileDirty||contactsDirty;
+  const guardState=useRef({dirty,profileDirty,contactsDirty});guardState.current={dirty,profileDirty,contactsDirty};
   useEffect(()=>{
     mounted.current=true;
-    const guard=()=>{const state=guardState.current;return saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()?false:!state.dirty||window.confirm('還有修改尚未儲存，確定離開？');};
+    const guard=(nextHash:string|null)=>{const target=nextHash===null?null:legacyHash(nextHash);if(target==='#account'||target?.startsWith('#account?'))return true;const state=guardState.current;return saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()||!publicPageGuards.canLeave()?false:!state.dirty||window.confirm('還有修改尚未儲存，確定離開？');};
     registerLeave?.(guard);
-    const unload=(event:BeforeUnloadEvent)=>{const state=guardState.current;if(state.dirty||saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()){event.preventDefault();event.returnValue='';}};
+    const unload=(event:BeforeUnloadEvent)=>{const state=guardState.current;if(state.dirty||saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()||!publicPageGuards.canLeave()){event.preventDefault();event.returnValue='';}};
     window.addEventListener('beforeunload',unload);
     return()=>{mounted.current=false;request.current++;registerLeave?.(null);window.removeEventListener('beforeunload',unload);};
   },[client,generation,registerLeave,mutationState]);
@@ -113,21 +147,44 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
       if(saved){pending.current=null;fill(saved);setNotice('修改已儲存。');window.dispatchEvent(new Event('freedom-profile-updated'));await load();}
     }finally{saving.current=false;if(live())setSaveLoading(false);}
   }
+  function selectSection(next:SettingsSection){
+    if(openSection===next){setOpenSection(null);return;}
+    if(saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave())return;
+    const leavingPublicPage=next!=='public-page'&&publicPageVisited;
+    if(leavingPublicPage&&!publicPageGuards.canLeave())return;
+    const state=guardState.current;
+    const leavingAccountDraft=openSection==='profile'||openSection==='visibility'
+      ?state.dirty
+      :(state.profileDirty&&next!=='profile')||(state.contactsDirty&&next!=='visibility');
+    if(leavingAccountDraft&&!window.confirm('還有修改尚未儲存，確定離開？'))return;
+    if(leavingPublicPage)setPublicPageVisited(false);
+    if(leavingAccountDraft&&account){fill(account);setNotice('');}
+    if(next==='public-page')setPublicPageVisited(true);
+    setOpenSection(next);
+  }
   const locked=busy||saveLoading||lastFailureUnknown;
-  const saveButton=<button type="submit" form={formId} className="btn btn-primary" disabled={locked}>{busy?'儲存中…':'儲存修改'}</button>;
+  const saveClass=loadError?'btn btn-secondary':'btn btn-primary';
+  const saveButton=<button type="submit" form={formId} className={saveClass} disabled={locked}>{busy?'儲存中…':'儲存修改'}</button>;
   return <section className="module-panel account-panel account-settings" onInvalidCapture={event=>{
     // Native validation must be able to reveal/focus a field in a closed disclosure.
     let parent=(event.target as HTMLElement).parentElement;
-    while(parent&&parent!==event.currentTarget){if(parent instanceof HTMLDetailsElement)parent.open=true;parent=parent.parentElement;}
+    while(parent&&parent!==event.currentTarget){
+      if(parent instanceof HTMLDetailsElement){
+        const section=parent.dataset.settingsSection as SettingsSection|undefined;
+        if(section)setOpenSection(section);
+        parent.open=true;
+      }
+      parent=parent.parentElement;
+    }
   }}>
-    <div className="account-settings-intro"><p>改名字、選擇分享對象，或管理登入安全。</p>{onNavigate&&<button type="button" className="btn btn-small btn-ghost" disabled={locked} onClick={()=>onNavigate('profile')}>返回我的個人空間</button>}</div>
-    <details className="card account-settings-section"><summary><strong>分享名片設定（免登入）</strong><span>見面時出示 QR Code，先確認你願意公開的內容</span></summary><div className="stack account-settings-body"><MemberShare client={client}/></div></details>
+    <div className="account-settings-intro"><p>改名字、選擇分享對象，或管理登入安全。</p></div>
+
     <Status error={loadError||error} notice={notice}/>
     {loadError&&<button type="button" className="btn btn-small btn-ghost" disabled={locked} onClick={()=>{if(!dirty||window.confirm('放棄尚未儲存的修改，重新載入？'))void load();}}>重新載入我的資料</button>}
     {!account&&!loadError&&<p role="status">載入會員資料…</p>}
     {lastFailureUnknown&&<div className="banner" role="alert"><p>儲存結果還沒確認，請先留在這裡。再次確認不會重複儲存。</p><button type="button" className="btn btn-small" disabled={busy} onClick={()=>void submit(undefined,true)}>確認儲存結果</button></div>}
-    <details className="card account-settings-section" open>
-      <summary><strong>個人資料</strong><span>名字、頭像和聯絡方式</span></summary>
+    <details className="card account-settings-section" data-settings-section="profile" open={openSection==='profile'}>
+      <summary onClick={event=>{event.preventDefault();selectSection('profile');}}><strong>個人資料</strong><span>名字、頭像和聯絡方式</span></summary>
       <div className="stack account-settings-body">
         {account&&contacts&&<>
           <form id={formId} onSubmit={event=>void submit(event)} className="stack" aria-label="修改個人資料">
@@ -148,8 +205,10 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
         {member&&<details className="account-settings-more"><summary>查看目前的會員名片</summary><MemberCard member={member} labels={labels} client={client}/></details>}
       </div>
     </details>
-    <details className="card account-settings-section">
-      <summary data-guide-anchor="account:email-visibility"><strong>誰能看到我</strong><span>聯絡方式和分享名片</span></summary>
+    {publicPage&&<details ref={publicPageRef} className="card account-settings-section" data-settings-section="public-page" data-public-page open={openSection==='public-page'}><summary onClick={event=>{event.preventDefault();selectSection('public-page');}}><strong>公開個人頁</strong><span>誰能看你的個人頁、介紹、封面和版面</span></summary><div className="stack account-settings-body">{publicPageVisited&&publicPage(publicPageGuards.register)}</div></details>}
+    <details className="card account-settings-section" data-settings-section="member-share" open={openSection==='member-share'}><summary onClick={event=>{event.preventDefault();selectSection('member-share');}}><strong>分享名片設定（免登入）</strong><span>見面時出示 QR Code，先確認你願意公開的內容</span></summary><div className="stack account-settings-body"><MemberShare client={client}/></div></details>
+    <details className="card account-settings-section" data-settings-section="visibility" open={openSection==='visibility'}>
+      <summary data-guide-anchor="account:email-visibility" onClick={event=>{event.preventDefault();selectSection('visibility');}}><strong>誰能看到我</strong><span>聯絡方式和分享名片</span></summary>
       <div className="stack account-settings-body">
         <p>名字和頭像可由同工坊已加入的會員看見。下方只設定聯絡方式，不會隱藏已發布的貼文或其他內容。</p>
         <p className="field-hint" id="contact-audience-hint">社群帳號由本人填寫，尚未驗證身分。每項聯絡方式可選多個對象，符合其中一項就能看見。選「不公開」就不分享這項資料。「平台公開」是所有已登入的工坊會員；好友須雙方接受，小隊與公會依目前有效成員關係判斷。</p>
@@ -159,21 +218,21 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
             <label className="field">{contactLabels[key]}<input form={formId} disabled={locked} aria-label={contactLabels[key]} type={key==='email'?'email':'text'} value={key==='email'?account.login_email:contacts[key].value} readOnly={key==='email'} maxLength={key==='github'?39:key==='email'?200:100} autoComplete="off" onChange={key==='email'?undefined:e=>setContacts({...contacts,[key]:{...contacts[key],value:e.target.value}})}/>{key==='email'&&<span className="field-hint">也是登入信箱</span>}</label>
             <AudienceChoices label={contactLabels[key]} form={formId} disabled={locked} audiences={contacts[key].audiences} onChange={audiences=>setContacts({...contacts,[key]:{...contacts[key],audiences}})}/>
           </div>)}</div>
-          <div className="actions"><button type="submit" form={formId} className="btn btn-primary" disabled={locked}>{busy?'儲存中…':'儲存分享對象'}</button></div>
+          <div className="actions"><button type="submit" form={formId} className={saveClass} disabled={locked}>{busy?'儲存中…':'儲存分享對象'}</button></div>
         </>}
       </div>
     </details>
-    <details className="card account-settings-section">
-      <summary><strong>帳號與安全</strong><span>密碼、登入裝置和進階設定</span></summary>
+    <details className="card account-settings-section" data-settings-section="security" open={openSection==='security'}>
+      <summary onClick={event=>{event.preventDefault();selectSection('security');}}><strong>帳號與安全</strong><span>密碼、登入裝置和進階設定</span></summary>
       <div className="stack account-settings-body">
         {account&&<EmailVerificationPanel client={client} email={account.login_email} verified={account.email_verified}/>}
         {account&&<GoogleAccount client={client} hasPassword={account.has_password!==false}/>}
         {account?.has_password===false&&<PasswordSetup client={client} email={account.login_email}/>}
-        <AccountSecurity client={client} hasPassword={account?account.has_password!==false:false} onAccountChanged={refreshSecurityVersion}/>
+        <AccountSecurity client={client} hasPassword={account?account.has_password!==false:false} secondary={Boolean(loadError)} onAccountChanged={refreshSecurityVersion}/>
         <details className="account-settings-more"><summary>兩步驟驗證</summary>{account&&account.has_password!==false&&<TotpSettings key={session.user.user_id} client={client} email={account.login_email}/>}</details>
         <details className="account-settings-more"><summary>更換登入信箱</summary>{account&&account.has_password!==false&&<EmailChangePanel client={client} email={account.login_email}/>}</details>
         {typeof children==='function'?children(childGuards.register):children}
-        <details ref={connectionsRef} className="account-settings-more" data-account-connections><summary>連結 GitHub 與其他工具</summary><GitHubConnectionPanel/><ClientConnections client={client}/></details>
+        <details ref={connectionsRef} className="account-settings-more" data-account-connections><summary>連結 GitHub 與其他工具</summary><GitHubConnectionPanel/><a className="btn btn-secondary btn-small" href="#automation/connections">工具連線</a></details>
         <OwnReports client={client}/>
         <details className="account-settings-more"><summary>停用帳號</summary>{account&&account.has_password!==false&&<AccountDeactivation client={client} version={account.aggregate_version} disabled={locked}/>}</details>
       </div>

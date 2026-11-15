@@ -1,0 +1,74 @@
+/** The sole authority for the member agent lane. Exact REGISTERED patterns only.
+ * message is a reserved scope name and grants no operation yet. */
+export type AgentScope = 'read' | 'share' | 'rsvp' | 'react' | 'message';
+export type AgentMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+export interface AgentOperation {
+  id: string; method: AgentMethod; route: string; scope: AgentScope; title: string;
+  screen: 'events' | 'credit' | 'shares' | 'notifications' | 'guilds' | 'posts' | 'services' | 'works' | 'profile';
+  example?: Record<string, unknown>; publicItem?: boolean; granted?: false; ifMatch?: boolean; featureFlag?: string;
+}
+export const agentOperations: readonly AgentOperation[] = [
+  {id:'tools.identity',method:'POST',route:'/api/v1/guilds/:guild/tools/:tool/token',scope:'read',title:'取得工具專屬身分',screen:'notifications',example:{}},
+  {id:'guilds.list',method:'GET',route:'/api/v1/guilds',scope:'read',title:'查看公會',screen:'guilds'},
+  {id:'tools.list',method:'GET',route:'/api/v1/public/guilds/:guild/tools',scope:'read',title:'查看公會工具',screen:'guilds'},
+  {id:'events.list',method:'GET',route:'/api/v1/events',scope:'read',title:'查看活動',screen:'events'},
+  {id:'events.read',method:'GET',route:'/api/v1/events/:id',scope:'read',title:'查看活動內容',screen:'events'},
+  {id:'events.share',method:'POST',route:'/api/v1/events',scope:'share',title:'分享活動',screen:'events',publicItem:true,example:{title:'讀書會',starts_at:'2099-01-10T10:00:00Z',location:'線上'}},
+  {id:'events.links',method:'POST',route:'/api/v1/events/:id/share',scope:'share',title:'分享活動連結',screen:'events',example:{}},
+  {id:'events.update',method:'POST',route:'/api/v1/events/:id/update',scope:'share',title:'編輯自己的活動',screen:'events',ifMatch:true,example:{title:'讀書會',description:'一起交流',starts_at:'2099-01-10T10:00:00Z',ends_at:'2099-01-10T11:00:00Z',mode:'online',location:'線上',capacity:null}},
+  {id:'events.announce',method:'POST',route:'/api/v1/events/:id/announcements',scope:'share',title:'通知活動參加者',screen:'events',ifMatch:true,example:{message:'活動通知'}},
+  {id:'events.cancel',method:'POST',route:'/api/v1/events/:id/cancel',scope:'share',title:'取消自己的活動',screen:'events',ifMatch:true,example:{}},
+  {id:'events.interest',method:'POST',route:'/api/v1/events/:id/interest',scope:'rsvp',title:'原站活動有興趣',screen:'events',example:{}},
+  // Public/browser/admin surfaces are documented here but never grant bearer authority.
+  {id:'events.public-list',method:'GET',route:'/api/v1/public/events',scope:'read',title:'公開近期活動（匿名）',screen:'events',granted:false},
+  {id:'events.html',method:'GET',route:'/events/:id',scope:'read',title:'活動頁（匿名或瀏覽器）',screen:'events',granted:false},
+  {id:'events.calendar',method:'GET',route:'/events/:id/calendar.ics',scope:'read',title:'活動行事曆（匿名或瀏覽器）',screen:'events',granted:false,featureFlag:'FREEDOM_EVENT_PARTICIPATION_ENABLED'},
+  {id:'events.calendar-feed',method:'GET',route:'/events.ics',scope:'read',title:'公開行事曆（匿名）',screen:'events',granted:false,featureFlag:'FREEDOM_EVENT_PARTICIPATION_ENABLED'},
+  {id:'events.guest-interest',method:'POST',route:'/api/v1/public/events/:id/interest',scope:'rsvp',title:'原站活動訪客興趣（匿名）',screen:'events',granted:false},
+  {id:'events.claim-queue',method:'GET',route:'/admin/api/event-organizer-claims',scope:'read',title:'主辦認領佇列（管理員）',screen:'events',granted:false},
+  {id:'events.claim-review',method:'POST',route:'/admin/api/event-organizer-claims/:id/review',scope:'share',title:'主辦認領核實（管理員）',screen:'events',granted:false},
+  {id:'events.claim',method:'POST',route:'/api/v1/events/:id/claim',scope:'share',title:'主辦認領（本人操作）',screen:'events',granted:false},
+  {id:'events.rsvp',method:'POST',route:'/api/v1/events/:id/rsvp',scope:'rsvp',title:'報名或取消',screen:'events',example:{going:true}},
+  {id:'events.waitlist',ifMatch:true,featureFlag:'FREEDOM_EVENT_PARTICIPATION_ENABLED',method:'POST',route:'/api/v1/events/:id/waitlist',scope:'rsvp',title:'活動候補',screen:'events',example:{action:'join'}},
+  {id:'repositories.share',method:'POST',route:'/api/v1/opensource/projects',scope:'share',title:'分享儲存庫',screen:'shares',publicItem:true,example:{repository_url:'https://github.com/example/project',title:'專案名稱',description:'專案介紹',use_notes:'使用方式',relationship:'curator',consent_to_share:true}},
+  {id:'credit.records',method:'GET',route:'/api/v1/me/contribution-records',scope:'read',title:'我的貢獻紀錄',screen:'credit'},
+  {id:'credit.outcomes',method:'GET',route:'/api/v1/me/contribution-outcomes',scope:'read',title:'我的貢獻成果',screen:'credit'},
+  {id:'credit.achievements',featureFlag:'FREEDOM_SOCIAL_ACHIEVEMENTS_ENABLED',method:'GET',route:'/api/v1/me/social-achievements',scope:'read',title:'我的社群成果',screen:'credit'},
+  {id:'notifications.list',method:'GET',route:'/api/v1/me/notifications',scope:'read',title:'我的通知',screen:'notifications'},
+  {id:'notifications.mark_read',method:'POST',route:'/api/v1/me/notifications/:id/read',scope:'read',title:'標成已讀',screen:'notifications',example:{}},
+  {id:'notifications.mark_all_read',method:'POST',route:'/api/v1/me/inbox/read-all',scope:'read',title:'通知全部標成已讀',screen:'notifications',example:{scope:'notifications'}},
+  {id:'agent.events',method:'GET',route:'/api/v1/agent/events',scope:'read',title:'我的變更',screen:'notifications'},
+  {id:'shares.preview',method:'POST',route:'/api/v1/shares/preview',scope:'share',title:'預覽分享',screen:'shares',example:{kind:'repository',url:'https://github.com/example/project'}},
+  {id:'shares.create',method:'POST',route:'/api/v1/shares',scope:'share',title:'發布分享',screen:'shares',publicItem:true,example:{kind:'repository',url:'https://github.com/example/project'}},
+  {id:'shares.list',method:'GET',route:'/api/v1/shares',scope:'read',title:'查看自己的分享',screen:'shares'},
+  {id:'shares.read',method:'GET',route:'/api/v1/shares/:share_id',scope:'read',title:'查看自己的分享內容',screen:'shares'},
+  {id:'shares.retract',method:'POST',route:'/api/v1/shares/:share_id/retract',scope:'share',title:'撤回自己的分享',screen:'shares',example:{}},
+  {id:'shares.report',method:'POST',route:'/api/v1/shares/:share_id/report',scope:'share',title:'檢舉分享（限本人）',screen:'shares',granted:false,example:{reason:'內容不適當'}},
+  {id:'shares.links',method:'POST',route:'/api/v1/shares/:share_id/links',scope:'share',title:'建立自己的分享連結',screen:'shares',example:{}},
+  {id:'shares.star',method:'POST',route:'/api/v1/shares/:share_id/star',scope:'react',title:'收藏分享（未開放）',screen:'shares',granted:false,example:{}},
+  {id:'shares.held',method:'GET',route:'/admin/api/shares/held',scope:'share',title:'檢舉處理（限管理員）',screen:'shares',granted:false},
+  {id:'shares.restore',method:'POST',route:'/admin/api/shares/:id/restore',scope:'share',title:'恢復分享（限管理員）',screen:'shares',granted:false},
+  {id:'shares.confirm',method:'POST',route:'/admin/api/shares/:id/confirm',scope:'share',title:'確認檢舉（限管理員）',screen:'shares',granted:false},
+  {id:'credit.read',method:'GET',route:'/api/v1/me/credit',scope:'read',title:'我的貢獻',screen:'credit'},
+  {id:'credit.results',method:'GET',route:'/api/v1/me/share-results',scope:'read',title:'我的分享成果',screen:'credit'},
+  {id:'posts.list',method:'GET',route:'/api/v1/social-posts',scope:'read',title:'查看貼文',screen:'posts'},
+  {id:'posts.comments',method:'GET',route:'/api/v1/social-posts/:id/comments',scope:'read',title:'查看貼文留言',screen:'posts'},
+  {id:'posts.note',method:'POST',route:'/api/v1/social-posts/notes',scope:'share',title:'發短文',screen:'posts',publicItem:true,example:{text:'今天完成了新作品'}},
+  {id:'posts.link',method:'POST',route:'/api/v1/social-posts',scope:'share',title:'分享連結貼文',screen:'posts',publicItem:true,example:{url:'https://example.com/post',title:'分享一篇教學',note:'推薦閱讀'}},
+  {id:'posts.edit',method:'POST',route:'/api/v1/social-posts/:id/edit',scope:'share',title:'編輯自己的貼文',screen:'posts',ifMatch:true,example:{text:'更新後的短文'}},
+  {id:'posts.delete',method:'DELETE',route:'/api/v1/social-posts/:id',scope:'share',title:'刪除自己的貼文',screen:'posts',example:{}},
+  {id:'posts.like',method:'POST',route:'/api/v1/social-posts/:id/like',scope:'react',title:'按讚',screen:'posts',example:{liked:true}},
+  {id:'posts.comment',method:'POST',route:'/api/v1/social-posts/:id/comments',scope:'react',title:'留言',screen:'posts',publicItem:true,example:{text:'寫得很清楚'}},
+  {id:'services.mine',method:'GET',route:'/api/v1/member-services/mine',scope:'read',title:'查看我的服務',screen:'services'},
+  {id:'services.create',method:'POST',route:'/api/v1/member-services',scope:'share',title:'上架服務',screen:'services',publicItem:true,example:{title:'網站架構諮詢',category:'tech',summary:'提供網站健檢與開發指導',service_mode:'online',contacts:[{label:'預約連結',url:'https://example.com/service'}]}},
+  {id:'services.edit',method:'PUT',route:'/api/v1/member-services/:id',scope:'share',title:'編輯自己的服務',screen:'services',ifMatch:true,example:{title:'更新後網站諮詢',category:'tech',summary:'提供最新網站健檢與開發指導',service_mode:'both',contacts:[{label:'預約連結',url:'https://example.com/service'}]}},
+  {id:'services.pause',method:'POST',route:'/api/v1/member-services/:id/pause',scope:'share',title:'暫停服務',screen:'services',ifMatch:true,example:{}},
+  {id:'services.resume',method:'POST',route:'/api/v1/member-services/:id/resume',scope:'share',title:'恢復服務',screen:'services',ifMatch:true,example:{}},
+  {id:'services.delete',method:'DELETE',route:'/api/v1/member-services/:id',scope:'share',title:'刪除自己的服務',screen:'services',ifMatch:true,example:{}},
+  {id:'works.create',method:'POST',route:'/api/v1/showcases',scope:'share',title:'發布作品',screen:'works',publicItem:true,example:{title:'開源協作作品',description:'記錄開發流程與可重現示範',public_url:'https://example.com/work',consent_to_share:true}},
+  {id:'profile.read',method:'GET',route:'/api/v1/me/positioning',scope:'read',title:'查看我的定位卡',screen:'profile'},
+];
+// Report, claim and star are person-only; react covers likes and comments.
+export function agentOperation(method:string,registeredPattern:string,operations:readonly AgentOperation[]=agentOperations) {
+  return operations.find(op=>op.granted!==false&&op.method===method&&op.route===registeredPattern);
+}

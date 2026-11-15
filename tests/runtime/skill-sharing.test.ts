@@ -108,9 +108,9 @@ test('LINE, Facebook, X and Threads links share the visible introduction and URL
  assert.equal(sharePlatformUrl('x',url,text),'https://twitter.com/intent/tweet?text='+enc(text+'\n'+url));
  assert.equal(sharePlatformUrl('threads',url,text),'https://www.threads.com/intent/post?text='+enc(text+'\n'+url));
  const expected=(link:string,words:string)=>platforms.map(platform=>[platform,sharePlatformUrl(platform,link,words)]);
- // The page row and the preview row start from the same selected payload.
- assert.deepEqual(platformLinks(render('42')),[...expected(url,text),...expected(url,text)]);
- assert.deepEqual(platformLinks(render()),[...expected(base,book.title+' · 自由工坊'),...expected(base,book.title+' · 自由工坊')]);
+ // The preview row inside the dialog carries the four share-platform links once.
+ assert.deepEqual(platformLinks(render('42')),expected(url,text));
+ assert.deepEqual(platformLinks(render()),expected(base,book.title+' · 自由工坊'));
  const page=harness(render('42'),{});
  page.get('open').click();assert.deepEqual(page.links(),expected(url,text).map(([,href])=>href));
  page.get('reroll').click();const rolled=page.url(),intro=page.intro();assert.notEqual(rolled,url);
@@ -170,11 +170,10 @@ test('late share completion cannot restore status after the preview closes; sync
 test('all catalog introductions show authored usage and source before collaboration, with explicit destinations',()=>{
  for(const item of communityCatalog.skill_books){
   const html=render(undefined,item.id),guide=item.guide!;
-  const introduction=html.slice(html.indexOf('<section class="public-skill-introduction"'),html.indexOf('<section class="public-skill-next"'));
+  const introduction=html.slice(html.indexOf('<section class="public-skill-introduction"'),html.indexOf('data-share-root'));
   for(const value of [...guide.audience,guide.status,...guide.features,...guide.prerequisites,...guide.first_steps,guide.first_result])assert.ok(introduction.includes(escape(value)),item.id+': '+value);
-  assert.ok(html.indexOf('<h2>開始使用</h2>')<html.indexOf('<h2 id="collaboration-title">'),item.id);
-  assert.ok(html.includes('到 GitHub 看原始碼 ↗'),item.id);
-  assert.ok(html.includes('<bdi>'+escape(new URL(item.upstream_url).host+new URL(item.upstream_url).pathname)+'</bdi>'),item.id);
+  assert.ok(html.indexOf('<h2>開始用</h2>')<html.indexOf('<h2 id="collaboration-title">'),item.id);
+  assert.ok(html.includes('href="'+escape(item.upstream_url)+'"'),item.id);
   assert.ok(html.includes('class="sf-legend"'),item.id);
   assert.ok(html.includes('<dt>指南核對版本</dt><dd><code>'+escape(guide.source_commit)),item.id);
  }
@@ -195,24 +194,26 @@ test('catalog skill CTA follows readable content and preserves the selected intr
  assert.ok(html.includes('不用註冊就能閱讀'));assert.ok(html.includes('免費加入，探索更多資源'));
  assert.ok(html.includes('return_to=%2Fdevelopment%2Fskills%2F'+id+'&amp;skill_intro=7'));
  assert.ok(html.includes('<script src="/skill-acquisition.js" defer></script>'));
- assert.ok(html.includes('href="/#skills">登入工坊 Star'), 'original author-support entry remains available');
- assert.ok(html.includes('到 GitHub 看原始碼'));assert.equal(meta(html,'og:url'),base+'?intro=7');
+ assert.ok(html.includes('href="/#explore/resources">登入工坊 Star'), 'original author-support entry remains available');
+ assert.ok(html.includes('href="'+escape(book.upstream_url)+'"'));assert.equal(meta(html,'og:url'),base+'?intro=7');
 });
 
 
-test('every public skill offers author, Star, Fork and share in the hero while retaining instructions and destinations',()=>{
+test('every public skill offers author, Star and share in the hero while retaining dated usage notes and destinations',()=>{
  for(const item of communityCatalog.skill_books){
   const html=render(undefined,item.id);
+  const start=html.indexOf('id="skill-start"');
+  const notes=html.indexOf('id="skill-usage-notes"');
   const reading=html.indexOf('<section class="public-skill-introduction"');
-  const destinations=html.indexOf('<section class="public-skill-next"');
   const share=html.indexOf('data-share-root');
   const social=html.indexOf('<section class="public-github-social"');
-  assert.ok(reading>0&&destinations>reading,item.id);
-  assert.ok(share>destinations&&social>0&&social<reading,item.id);
+  assert.ok(start>0&&notes>start&&reading>notes&&share>reading,item.id);
+  if(item.introduction_url){const destinations=html.indexOf('<section class="public-skill-next"');assert.ok(destinations>reading&&share>destinations,item.id);}
+  assert.ok(social>0&&social<start,item.id);
   assert.ok(html.indexOf('data-skill-author')<social,item.id);
-  assert.ok(html.indexOf('data-share-launch')<reading,item.id);
-  assert.ok(html.indexOf('href="#skill-start"')<reading,item.id);
-  assert.ok(html.includes('href="/#skills">登入工坊 Star'),item.id);
+  assert.ok(html.indexOf('data-share-launch')<start,item.id);
+  assert.ok(html.indexOf('href="#skill-start"')<social,item.id);
+  assert.ok(html.includes('href="/#explore/resources">登入工坊 Star'),item.id);
   assert.ok(html.includes(escape(item.guide!.first_result)),item.id);
  }
 });

@@ -47,7 +47,8 @@ const TABS = [
 ] as const;
 type QueueTab = typeof TABS[number][0];
 
-export function AdminReviewCenter({ client, busy, onMutate }: {
+export function AdminReviewCenter({ client, busy, onMutate, selectedId }: {
+  selectedId?:string|null;
   client: AdminClient;
   busy: boolean;
   onMutate: (path: string, body: unknown, version?: number | null) => Promise<boolean>;
@@ -61,6 +62,8 @@ export function AdminReviewCenter({ client, busy, onMutate }: {
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminDetail | null>(null);
+  const [selectedRow, setSelectedRow] = useState<PullRow | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const listSeq = useRef(0);
@@ -76,16 +79,15 @@ export function AdminReviewCenter({ client, busy, onMutate }: {
       const params = new URLSearchParams({ queue, limit: '25', offset: String(offset) });
       if (repository) params.set('repository_id', repository);
       if (guild) params.set('guild_key', guild);
-      const page = await client.request<Page>(`/review-center/pulls?${params.toString()}`);
+      const [page, nextSummary, people] = await Promise.all([
+        client.request<Page>(`/review-center/pulls?${params.toString()}`),
+        offset === 0 ? client.request<Summary>('/review-center/summary') : Promise.resolve(null),
+        offset === 0 ? client.request<Directory>('/review-center/reviewers') : Promise.resolve(null),
+      ]);
       if (ticket !== listSeq.current) return;
       if (offset === 0) {
-        const [nextSummary, people] = await Promise.all([
-          client.request<Summary>('/review-center/summary'),
-          client.request<Directory>('/review-center/reviewers'),
-        ]);
-        if (ticket !== listSeq.current) return;
-        setSummary(nextSummary);
-        setDirectory(people);
+        if (nextSummary) setSummary(nextSummary);
+        if (people) setDirectory(people);
         setItems(page.items);
       } else {
         setItems(current => [...current, ...page.items]);
@@ -101,25 +103,39 @@ export function AdminReviewCenter({ client, busy, onMutate }: {
 
   const reloadDetail = useCallback(async (id: string) => {
     const ticket = ++detailSeq.current;
+    setDetailLoading(true);
     try {
       const value = await client.request<AdminDetail>(`/review-center/pulls/${id}`);
       if (ticket !== detailSeq.current) return;
       setDetail(value);
+      if (selectedId === id) setSelectedRow(value);
       setOpenId(id);
     } catch (cause) {
       if (ticket !== detailSeq.current) return;
       setError(cause instanceof Error ? cause.message : '無法載入這個拉取請求。');
+    } finally {
+      if (ticket === detailSeq.current) setDetailLoading(false);
     }
-  }, [client]);
+  }, [client, selectedId]);
 
   useEffect(() => {
     detailSeq.current += 1;
     void loadQueue(tab, 0, repositoryId, guildFilter);
   }, [loadQueue, tab, repositoryId, guildFilter]);
 
+  useEffect(() => {
+    detailSeq.current += 1;
+    setOpenId(null);
+    setDetail(null);
+    setSelectedRow(null);
+    if (selectedId) void reloadDetail(selectedId);
+    else setDetailLoading(false);
+  }, [selectedId, reloadDetail]);
+
   async function choose(id: string) {
     if (openId === id) {
       detailSeq.current += 1;
+      setDetailLoading(false);
       setOpenId(null);
       setDetail(null);
       return;
@@ -145,9 +161,11 @@ export function AdminReviewCenter({ client, busy, onMutate }: {
   ];
   const guildChoices = directory?.guild_choices ?? [];
 
+  const rows = selectedId ? (selectedRow?.pull_id === selectedId ? [selectedRow] : []) : items;
+
   return <section className="stack review-center">
-    <div className="card-head"><h2>PR 審核</h2><button className="btn btn-ghost" type="button" disabled={busy || loading} onClick={() => void loadQueue(tab, 0, repositoryId, guildFilter)}>更新</button></div>
-    <dl className="admin-summary review-counts" aria-label="審核概況">
+    <div className="card-head"><h2>PR 審核</h2><button className="btn btn-ghost" type="button" disabled={busy || loading || detailLoading} onClick={() => void (selectedId?reloadDetail(selectedId):loadQueue(tab, 0, repositoryId, guildFilter))}>更新</button></div>
+    <details hidden={!!selectedId}><summary>紀錄與設定</summary><dl className="admin-summary review-counts" aria-label="審核概況">
       {countLine.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}
     </dl>
     {!!summary?.repositories.length && <ul className="review-modes" aria-label="儲存庫模式">
@@ -157,15 +175,16 @@ export function AdminReviewCenter({ client, busy, onMutate }: {
       <label className="field">儲存庫<select aria-label="儲存庫" value={repositoryId} onChange={event => { setItems([]); setOpenId(null); setDetail(null); setRepositoryId(event.target.value); }}><option value="">全部</option>{(summary?.repositories ?? []).map(repo => <option key={repo.repository_id} value={repo.repository_id}>{repo.full_name}</option>)}</select></label>
       <label className="field">歸屬<select aria-label="歸屬篩選" value={guildFilter} onChange={event => { setItems([]); setOpenId(null); setDetail(null); setGuildFilter(event.target.value); }}><option value="">全部</option><option value="none">無歸屬</option>{guildChoices.map(guild => <option key={guild.guild_key} value={guild.guild_key}>{guild.name}</option>)}</select></label>
     </div>
-    <div className="actions" role="tablist" aria-label="審核佇列">
+    </details>
+    {!selectedId && <div className="actions" role="tablist" aria-label="審核佇列">
       {TABS.map(([key, label]) => <button type="button" role="tab" aria-selected={tab === key} key={key} className="btn btn-ghost" onClick={() => { if (tab !== key) { setItems([]); setOpenId(null); setDetail(null); setTab(key); } }}>{label}</button>)}
-    </div>
+    </div>}
     {error && <p className="banner banner-error" role="alert">{error}</p>}
     {loading && <p role="status">正在載入審核佇列…</p>}
     <ul className="review-list" aria-label="拉取請求">
-      {items.map(row => <ReviewQueueRow key={row.pull_id} row={row} open={openId === row.pull_id} onToggle={() => void choose(row.pull_id)}>
+      {rows.map(row => <ReviewQueueRow key={row.pull_id} row={row} open={openId === row.pull_id} onToggle={() => void choose(row.pull_id)}>
         {openId === row.pull_id && detail?.pull_id === row.pull_id && <ReviewDetail
-          detail={detail} viewer={summary?.viewer ?? null} repo={(summary?.repositories ?? []).find(item => item.repository_id === detail.repository_id) ?? null}
+          compact={!!selectedId} detail={detail} viewer={summary?.viewer ?? null} repo={(summary?.repositories ?? []).find(item => item.repository_id === detail.repository_id) ?? null}
           guilds={guildChoices} books={directory?.skill_book_choices ?? []} busy={busy} onError={setError} onMutate={onMutate} onDone={() => void afterWrite(row.pull_id)}
           onHandoff={body => client.request<HandoffResult>(`/review-center/pulls/${row.pull_id}/handoffs`, body.body, { key: body.key })}
           onHandoffRefresh={() => void reloadDetail(row.pull_id)}
@@ -173,19 +192,20 @@ export function AdminReviewCenter({ client, busy, onMutate }: {
         {openId === row.pull_id && detail?.pull_id !== row.pull_id && <p role="status">正在載入細節…</p>}
       </ReviewQueueRow>)}
     </ul>
-    {!loading && !items.length && !error && <p className="muted">這個佇列目前沒有拉取請求。</p>}
-    {nextOffset !== null && <button type="button" className="btn btn-ghost" disabled={loading || busy} onClick={() => void loadQueue(tab, nextOffset, repositoryId, guildFilter)}>載入更多</button>}
-    <IssueHandoff
+    {!loading && !(selectedId && detailLoading) && !rows.length && !error && <p className="muted">這個佇列目前沒有拉取請求。</p>}
+    {!selectedId && nextOffset !== null && <button type="button" className="btn btn-ghost" disabled={loading || busy} onClick={() => void loadQueue(tab, nextOffset, repositoryId, guildFilter)}>載入更多</button>}
+    <details hidden={!!selectedId}><summary>維護設定</summary><IssueHandoff
       repositories={(summary?.repositories ?? []).filter(repo => repo.installation_state === 'active' && repo.mode !== 'off').map(repo => ({ id: repo.repository_id, full_name: repo.full_name }))}
       blockedReason={summary && summary.viewer.status !== 'ready' ? HANDOFF_BLOCKED[summary.viewer.status] : undefined}
       submit={(repositoryId, body, key) => client.request<HandoffResult>(`/review-center/repositories/${repositoryId}/issue-handoffs`, body, { key })}
     />
     <SettingsBlock repositories={summary?.repositories ?? []} directory={directory} guilds={guildChoices} books={directory?.skill_book_choices ?? []} busy={busy} onMutate={onMutate} onSaved={() => void afterWrite(openId)} />
+    </details>
   </section>;
 }
 
-function ReviewDetail({ detail, viewer, repo, guilds, books, busy, onError, onMutate, onDone, onHandoff, onHandoffRefresh }: {
-  detail: AdminDetail; viewer: Viewer | null; repo: Repo | null; guilds: { guild_key: string; name: string }[]; books: SkillBookChoice[]; busy: boolean;
+function ReviewDetail({ compact=false, detail, viewer, repo, guilds, books, busy, onError, onMutate, onDone, onHandoff, onHandoffRefresh }: {
+  compact?: boolean; detail: AdminDetail; viewer: Viewer | null; repo: Repo | null; guilds: { guild_key: string; name: string }[]; books: SkillBookChoice[]; busy: boolean;
   onError: (message: string) => void;
   onMutate: (path: string, body: unknown, version?: number | null) => Promise<boolean>;
   onDone: () => void;
@@ -197,12 +217,14 @@ function ReviewDetail({ detail, viewer, repo, guilds, books, busy, onError, onMu
   const [assignReason, setAssignReason] = useState('');
   const [releaseReason, setReleaseReason] = useState('');
   const [pauseReason, setPauseReason] = useState('');
+  const [decision, setDecision] = useState('');
   const [showHandoff, setShowHandoff] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
   const [showRelease, setShowRelease] = useState(false);
   const [showPause, setShowPause] = useState(false);
   const [showOwnership, setShowOwnership] = useState(false);
   function closeForms() {
+    setDecision('');
     setShowAssign(false);
     setShowRelease(false);
     setShowPause(false);
@@ -248,16 +270,20 @@ function ReviewDetail({ detail, viewer, repo, guilds, books, busy, onError, onMu
   return <>
     <PullFacts detail={detail} />
     <div className="review-detail stack">
+      {compact && <label className="field">決定<select aria-label="決定" value={decision} disabled={busy} onChange={event=>{const value=event.target.value;setDecision(value);setShowAssign(value==='assign');setShowRelease(value==='release');setShowPause(value==='pause');setShowOwnership(value==='ownership');}}>
+        <option value="">請選擇</option><option value="claim" disabled={unavailable||!!selfBlock||!!claimBlock}>我來審</option><option value="assign" disabled={unavailable||!!claimBlock}>指派給…</option>{detail.claim&&<option value="release">放棄認領</option>}<option value="pause">{detail.paused?'恢復':'暫停'}</option><option value="ownership" disabled={!repo}>變更歸屬</option><option value="resync">重新同步</option>
+      </select></label>}
       <div className="actions review-actions">
-        <button type="button" className="btn btn-ghost" disabled={busy || unavailable || !!selfBlock || !!claimBlock} onClick={() => void claim()}>我來審</button>
-        <button type="button" className="btn btn-ghost" disabled={busy || unavailable || !!claimBlock} onClick={() => setShowAssign(value => !value)}>指派給…</button>
-        {detail.claim && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setShowRelease(value => !value)}>放棄認領</button>}
+        {!compact&&<button type="button" className="btn btn-ghost" disabled={busy || unavailable || !!selfBlock || !!claimBlock} onClick={() => void claim()}>我來審</button>}
+        {!compact&&<button type="button" className="btn btn-ghost" disabled={busy || unavailable || !!claimBlock} onClick={() => setShowAssign(value => !value)}>指派給…</button>}
+        {detail.claim && !compact && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setShowRelease(value => !value)}>放棄認領</button>}
         <a className="btn btn-ghost" href={`${detail.html_url}/files`} target="_blank" rel="noopener noreferrer">{GITHUB_REVIEW_LINK}</a>
-        <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setShowPause(value => !value)}>{detail.paused ? '恢復' : '暫停'}</button>
-        <button type="button" className="btn btn-ghost" disabled={busy || !repo} onClick={() => setShowOwnership(value => !value)}>變更歸屬…</button>
-        <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void onMutate(`/review-center/pulls/${detail.pull_id}/resync`, {}).then(saved)}>重新同步</button>
+        {!compact&&<button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setShowPause(value => !value)}>{detail.paused ? '恢復' : '暫停'}</button>}
+        {!compact&&<button type="button" className="btn btn-ghost" disabled={busy || !repo} onClick={() => setShowOwnership(value => !value)}>變更歸屬…</button>}
+        {!compact&&<button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void onMutate(`/review-center/pulls/${detail.pull_id}/resync`, {}).then(saved)}>重新同步</button>}
         <PullHandoffButton open={showHandoff} onToggle={() => setShowHandoff(value => !value)} />
       </div>
+      {compact&&(decision==='claim'||decision==='resync')&&<button type="button" className="btn btn-primary btn-small" disabled={busy||(decision==='claim'&&(unavailable||!!selfBlock||!!claimBlock))} onClick={()=>{if(decision==='claim')void claim();else void onMutate(`/review-center/pulls/${detail.pull_id}/resync`,{}).then(saved);}}>確認</button>}
       {showHandoff && <PullHandoffForm detail={detail} submit={(body, key) => onHandoff({ body, key })} onRefresh={onHandoffRefresh} />}
       {unavailable && <p className="field-hint">{CLAIM_UNAVAILABLE}</p>}
       {!!selfBlock && <p className="field-hint">{selfBlock}</p>}
@@ -265,17 +291,17 @@ function ReviewDetail({ detail, viewer, repo, guilds, books, busy, onError, onMu
       {showAssign && <form className="stack" onSubmit={event => void assign(event)}>
         <label className="field">審查人<select aria-label="審查人" value={assignValue} onChange={event => setAssignValue(event.target.value)}>{people.map(person => <option key={reviewerOptionValue(person)} value={reviewerOptionValue(person)}>{reviewerOptionLabel(person)}</option>)}{!people.length && <option value="">目前沒有可指派的公會長、技能書維護者或管理員</option>}</select></label>
         <label className="field">指派理由<input value={assignReason} onChange={event => setAssignReason(event.target.value)} minLength={3} maxLength={1000} required /></label>
-        <div className="actions"><button className="btn btn-primary" disabled={busy}>確認指派</button></div>
+        <div className="actions"><button className="btn btn-primary" disabled={busy}>{compact?'確認':'確認指派'}</button></div>
       </form>}
       {showRelease && detail.claim && <form className="stack" onSubmit={event => void release(event)}>
         <label className="field">放棄理由<input value={releaseReason} onChange={event => setReleaseReason(event.target.value)} minLength={3} maxLength={1000} required /></label>
-        <div className="actions"><button className="btn btn-primary" disabled={busy}>確認放棄認領</button></div>
+        <div className="actions"><button className="btn btn-primary" disabled={busy}>{compact?'確認':'確認放棄認領'}</button></div>
       </form>}
       {showPause && <form className="stack" onSubmit={event => void pause(event)}>
         <label className="field">{detail.paused ? '恢復理由' : '暫停理由'}<input value={pauseReason} onChange={event => setPauseReason(event.target.value)} minLength={3} maxLength={1000} required /></label>
-        <div className="actions"><button className="btn btn-primary" disabled={busy}>{detail.paused ? '確認恢復' : '確認暫停'}</button></div>
+        <div className="actions"><button className="btn btn-primary" disabled={busy}>{compact?'確認':detail.paused ? '確認恢復' : '確認暫停'}</button></div>
       </form>}
-      {showOwnership && repo && <OwnershipForm repo={repo} guilds={guilds} books={books} busy={busy} hint={`會套用到整個 ${repo.full_name}。`} onMutate={onMutate} onSaved={() => saved(true)} />}
+      {showOwnership && repo && <OwnershipForm confirmLabel={compact?'確認':undefined} repo={repo} guilds={guilds} books={books} busy={busy} hint={`會套用到整個 ${repo.full_name}。`} onMutate={onMutate} onSaved={() => saved(true)} />}
     </div>
   </>;
 }
@@ -362,8 +388,8 @@ export function ownershipChoice(ownership: { guild_key: string | null; open_to_g
   return ownership.open_to_guilds ? 'open' : 'admin';
 }
 
-function OwnershipForm({ repo, guilds, books, busy, hint, onMutate, onSaved }: {
-  repo: Repo; guilds: { guild_key: string; name: string }[]; books: SkillBookChoice[]; busy: boolean; hint?: string;
+function OwnershipForm({ confirmLabel='儲存歸屬', repo, guilds, books, busy, hint, onMutate, onSaved }: {
+  confirmLabel?: string; repo: Repo; guilds: { guild_key: string; name: string }[]; books: SkillBookChoice[]; busy: boolean; hint?: string;
   onMutate: (path: string, body: unknown, version?: number | null) => Promise<boolean>;
   onSaved: () => void;
 }) {
@@ -394,7 +420,7 @@ function OwnershipForm({ repo, guilds, books, busy, hint, onMutate, onSaved }: {
     {scope === 'skill_book' && <label className="field">技能書<select aria-label="技能書" value={bookId} onChange={event => setBookId(event.target.value)}><option value="">不指定</option>{books.map(book => <option key={book.skill_book_id} value={book.skill_book_id}>{book.title}</option>)}</select></label>}
     {scope === 'skill_book' && bookId !== '' && <p className="field-hint">這本書的維護者也能審這個儲存庫，不論上面選哪個歸屬。</p>}
     <label className="field">歸屬理由<input value={reason} onChange={event => setReason(event.target.value)} minLength={3} maxLength={1000} required /></label>
-    <div className="actions"><button className="btn btn-primary" disabled={busy}>儲存歸屬</button></div>
+    <div className="actions"><button className="btn btn-primary" disabled={busy}>{confirmLabel}</button></div>
   </form>;
 }
 

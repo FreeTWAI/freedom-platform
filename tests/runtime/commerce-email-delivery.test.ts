@@ -16,10 +16,12 @@ import {
   CommerceEmailSendError,
   FixtureEmailSender,
   createWorkerEmailSender,
+  isPermanentCommerceEmailError,
   type CloudflareEmailErrorCode,
   type CommerceEmailErrorCode,
   type CommerceEmailMessage,
 } from '../../modules/agent-commerce/operations/notifications/email-port.js';
+import { withSendLimit } from '../../apps/platform-api/src/mail-send-limit.js';
 import { renderCommerceEmail } from '../../modules/agent-commerce/operations/notifications/templates.js';
 import { runDueCommerceWork } from '../../modules/agent-commerce/operations/due-work.js';
 import { MemoryEffectJournal } from '../../modules/agent-commerce/operations/journal/memory.js';
@@ -1023,6 +1025,7 @@ describe('commerce email delivery, executor integration, sweep and worker sender
       ['E_SENDER_NOT_VERIFIED', 'sender_not_verified'],
       ['E_TOO_MANY_RECIPIENTS', 'invalid_message'],
       ['E_RATE_LIMIT_EXCEEDED', 'rate_limited'],
+      ['mail_send_timeout', 'mail_send_timeout'],
       ['UNKNOWN_ERROR', 'send_failed'],
     ] as const) {
       nextFailure = { code: cfCode, message: 'sensitive detail must not leak' };
@@ -1036,5 +1039,35 @@ describe('commerce email delivery, executor integration, sweep and worker sender
         },
       );
     }
+  });
+
+  test('mail_send_timeout is a temporary commerce error that reschedules retry instead of failing permanently', async () => {
+    const p = await freshPlaced();
+    const emailId = await queueTemplate(p, 'order_access');
+    const initialRow = (
+      await f.x.h.pool.query('SELECT created_at FROM commerce_outbound_emails WHERE email_id = $1', [emailId])
+    ).rows[0];
+    const now = new Date(initialRow.created_at.getTime());
+    const journal = new MemoryEffectJournal('local');
+    const rawSender = createWorkerEmailSender({ send: () => new Promise(() => {}) });
+    const hangingSender = { send: withSendLimit(rawSender.send.bind(rawSender), 50) };
+    assert.equal(isPermanentCommerceEmailError('mail_send_timeout' as CommerceEmailErrorCode), false);
+    const origError = console.error;
+    console.error = () => {};
+    try {
+      await runDueCommerceWork(
+        f.x.runtime,
+        { freedomEnv: 'local', origin: f.origin, now: () => now, emailEnabled: true, emailSender: hangingSender, journal },
+        { targets: [emailId], limit: 1 },
+      );
+    } finally {
+      console.error = origError;
+    }
+    const row = (await f.x.h.pool.query('SELECT state, attempts, last_error FROM commerce_outbound_emails WHERE email_id = $1', [emailId])).rows[0];
+    const due = (await f.x.h.pool.query("SELECT due_at FROM commerce_due_work WHERE kind = 'email' AND target_id = $1", [emailId])).rows[0];
+    assert.equal(row.state, 'queued');
+    assert.equal(row.attempts, 1);
+    assert.equal(row.last_error, 'mail_send_timeout');
+    assert.equal(due.due_at.getTime(), now.getTime() + 60_000);
   });
 });

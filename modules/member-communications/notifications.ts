@@ -64,3 +64,20 @@ export async function notifyMember(q:Pick<PoolClient,'query'>,input:NotifyMember
     [n.community_id,n.recipient_ref,n.kind,n.source_key,n.title,n.body,n.action?.tab??null,n.action?.resource_id??null]);
   return inserted.rows[0]?{notification_id:inserted.rows[0].notification_id}:null;
 }
+
+export const eventAccessSql = `e.community_id=$1 AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref)) AND (
+  e.organizer_ref=$2 OR (e.state='published' AND (e.visibility<>'guild' OR EXISTS(
+    SELECT 1 FROM positioning_profession_memberships m WHERE m.community_id=e.community_id AND m.user_id=$2 AND m.guild_key=e.guild_key AND m.state='active')))
+  OR (e.state='pending' AND EXISTS(SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
+    ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
+    WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)))`;
+export const eventNoticeAccessSql = `(n.kind NOT IN ('event_submitted','event_review_needed','event_approved','event_rejected','event_start_reminder','event_waitlist_invited','event_schedule_changed','event_cancelled','event_announcement')
+  OR n.action_resource_id IS NULL OR EXISTS(SELECT 1 FROM community_events e
+    WHERE e.event_id::text=n.action_resource_id::text AND (${eventAccessSql} OR (
+      n.kind='event_cancelled' AND e.state='cancelled' AND e.community_id=$1
+      AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref))
+      AND (e.visibility<>'guild' OR EXISTS(SELECT 1 FROM positioning_profession_memberships m
+        WHERE m.community_id=e.community_id AND m.user_id=$2 AND m.guild_key=e.guild_key AND m.state='active'))
+      AND (EXISTS(SELECT 1 FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.user_id=$2 AND r.confirmed_at IS NOT NULL)
+        OR EXISTS(SELECT 1 FROM community_event_waitlist w WHERE w.event_id=e.event_id AND w.member_ref=$2))
+    ))))`;

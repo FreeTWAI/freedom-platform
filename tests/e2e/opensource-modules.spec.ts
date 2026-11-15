@@ -7,7 +7,7 @@ import { test,expect,type Page } from './fixtures.js';
 async function login(page:Page,email='maker@local.test'){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
 }
 
 test('member writes a private campaign, revises it and records a manual share that persists',async({page})=>{
@@ -148,6 +148,8 @@ test('open-source entry clearly collects GitHub/use/license context and rejects 
   await login(page);await navigate(page, '開源投稿');
   await expect(page.getByRole('heading',{name:'投稿你的開源工具',exact:true})).toBeVisible();
   await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://untrusted.example/owner/repository');
+  await page.getByRole('button',{name:'下一步',exact:true}).click();
+  await page.getByRole('button',{name:'我自己填',exact:true}).click();
   await page.getByLabel('作品名稱',{exact:true}).fill('不應送出網路的測試');
   await page.getByLabel('一句話介紹',{exact:true}).fill('驗證只接受 GitHub 儲存庫。');
   await fillSkillPageContent(page);

@@ -33,7 +33,7 @@ beforeEach(async () => {
   }
 });
 function details() {
-  return { title: '合成待審活動', description: '隔離配額驗證', starts_at: new Date(Date.now() + 86400000).toISOString(),
+  return { title: `合成活動 ${randomUUID().slice(0,8)}`, description: '隔離配額驗證', starts_at: new Date(Date.now() + 86400000).toISOString(),
     ends_at: new Date(Date.now() + 90000000).toISOString(), mode: 'online', location: '線上教室', capacity: null };
 }
 async function create(session = sessions[0], key = randomUUID(), body = details()) {
@@ -41,7 +41,7 @@ async function create(session = sessions[0], key = randomUUID(), body = details(
     method: 'POST', headers: { Origin: origin, Cookie: session.cookie, 'X-CSRF-Token': session.csrf,
       'Content-Type': 'application/json', 'Idempotency-Key': key }, body: JSON.stringify(body),
   });
-  return { status: response.status, data: z.object({ event_id: z.uuid().optional(), code: z.string().optional() }).parse(await response.json()) };
+  return { status: response.status, data: z.object({ event_id: z.uuid().optional(), code: z.string().optional(), detail: z.string().optional() }).parse(await response.json()) };
 }
 async function effects() {
   return (await pool.query(`SELECT (SELECT count(*)::int FROM community_events) AS events,
@@ -55,7 +55,7 @@ test('new event submissions are capped per member; rejection has no effects and 
   assert.equal(first.status, 201);
   for (let i = 1; i < 5; i++) assert.equal((await create()).status, 201);
   const before = await effects();
-  assert.deepEqual(before, { events: 5, bulletins: 5, notifications: 10, receipts: 5 });
+  assert.deepEqual(before, { events: 5, bulletins: 5, notifications: 0, receipts: 5 });
   const denied = await create();
   assert.equal(denied.status, 429); assert.equal(denied.data.code, 'auth_rate_limited');
   assert.deepEqual(await effects(), before);
@@ -63,7 +63,7 @@ test('new event submissions are capped per member; rejection has no effects and 
   assert.equal(replay.status, 201); assert.equal(replay.data.event_id, first.data.event_id);
   assert.deepEqual(await effects(), before);
   assert.equal((await create(sessions[2])).status, 201, 'another member retains an independent budget');
-  await pool.query("UPDATE auth_rate_limits SET window_start=now()-interval '61 minutes' WHERE bucket=$1",
+  await pool.query("UPDATE auth_rate_limits SET window_start=now()-interval '25 hours' WHERE bucket=$1",
     [tokenHash(`event-create-member/${DEMO_USERS[0].user_id}`)]);
   assert.equal((await create()).status, 201, 'the budget reopens after its window');
 });
@@ -72,7 +72,7 @@ test('concurrent last-slot submissions cannot exceed the member budget', async (
   for (let i = 0; i < 4; i++) assert.equal((await create()).status, 201);
   const results = await Promise.all([create(), create()]);
   assert.deepEqual(results.map(r => r.status).sort(), [201, 429]);
-  assert.deepEqual(await effects(), { events: 5, bulletins: 5, notifications: 10, receipts: 5 });
+  assert.deepEqual(await effects(), { events: 5, bulletins: 5, notifications: 0, receipts: 5 });
 });
 
 test('a failed command rolls back quota consumption along with events and notifications', async () => {
@@ -95,7 +95,7 @@ test('invalid timestamp offsets are validation errors without quota or command e
   const before = await snapshot(), key = randomUUID();
   const body = { ...details(), starts_at: '2099-01-01T00:00:00Z', ends_at: '2099-01-02T00:00:00+15:59' };
   for (const ends_at of ['2099-01-02T00:00:00+16:00', '2099-01-02T00:00:00-16:00', '2099-01-02T00:00:00+23:00', '2099-01-02T00:00:00+1600', '2099-01-02T00:00:00-1600', '2099-01-02T00:00:00+2300', '2099-01-02T00:00:00+1559', '2099-01-02T00:00:00-1559', '0000-01-02T00:00:00Z']) {
-    const denied = await create(sessions[0], key, { ...body, ends_at });
+    const denied = await create(sessions[0], key, { ...body, title: `時間驗證 ${randomUUID().slice(0,8)}`, ends_at });
     assert.equal(denied.status, 422, ends_at); assert.equal(denied.data.code, 'validation_failed');
     assert.deepEqual(await snapshot(), before);
   }
@@ -110,9 +110,41 @@ test('invalid timestamp offsets are validation errors without quota or command e
     ['2099-01-02T00:00:00.123456-15:59', '2099-01-02 15:59:00.123456'],
     ['2099-01-02T00:00:00Z', '2099-01-02 00:00:00.000000'],
   ] as const) {
-    const accepted = await create(sessions[0], randomUUID(), { ...body, ends_at });
+    const accepted = await create(sessions[0], randomUUID(), { ...body, title: `時間驗證 ${randomUUID().slice(0,8)}`, ends_at });
     assert.equal(accepted.status, 201, ends_at);
     const stored = (await pool.query("SELECT to_char(ends_at AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS.US') AS instant FROM community_events WHERE event_id=$1", [accepted.data.event_id])).rows[0];
     assert.equal(stored.instant, expected);
   }
+});
+
+test('UX-F-09: end-time validation errors name 結束時間 in Chinese without raw ends_at: prefix', async () => {
+  const badOrder = await create(sessions[0], randomUUID(), {
+    ...details(), starts_at: '2099-01-02T12:00:00Z', ends_at: '2099-01-02T11:00:00Z',
+  });
+  assert.equal(badOrder.status, 422);
+  assert.equal(badOrder.data.code, 'validation_failed');
+  assert.doesNotMatch(badOrder.data.detail ?? '', /ends_at\s*:/);
+  assert.match(badOrder.data.detail ?? '', /^結束時間/);
+  assert.match(badOrder.data.detail ?? '', /結束時間須晚於開始時間/);
+
+  const badFormat = await create(sessions[0], randomUUID(), {
+    ...details(), starts_at: '2099-01-02T12:00:00Z', ends_at: '2099-01-02T00:00:00+16:00',
+  });
+  assert.equal(badFormat.status, 422);
+  assert.equal(badFormat.data.code, 'validation_failed');
+  assert.doesNotMatch(badFormat.data.detail ?? '', /ends_at\s*:/);
+  assert.match(badFormat.data.detail ?? '', /^結束時間/);
+
+  const created = await create(sessions[0], randomUUID(), details());
+  assert.equal(created.status, 201);
+  const updatedRes = await app.request(origin + `/api/v1/events/${created.data.event_id}/update`, {
+    method: 'POST',
+    headers: { Origin: origin, Cookie: sessions[0].cookie, 'X-CSRF-Token': sessions[0].csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID(), 'If-Match': '"1"' },
+    body: JSON.stringify({ ...details(), starts_at: '2099-01-02T12:00:00Z', ends_at: '2099-01-02T12:00:00Z' }),
+  });
+  assert.equal(updatedRes.status, 422);
+  const updatedData = z.object({ code: z.string().optional(), detail: z.string().optional() }).parse(await updatedRes.json());
+  assert.equal(updatedData.code, 'validation_failed');
+  assert.doesNotMatch(updatedData.detail ?? '', /ends_at\s*:/);
+  assert.match(updatedData.detail ?? '', /^結束時間/);
 });

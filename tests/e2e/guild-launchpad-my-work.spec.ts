@@ -1542,7 +1542,7 @@ test('PA-002 committed but unreadable create and Result responses retain their e
       else await route.fulfill({ response });
     });
     await page.getByRole('button', { name: '建立', exact: true }).click(); await expect.poll(() => committed).toBe(true);
-    await page.getByRole('button', { name: '會員首頁', exact: true }).click();
+    await page.getByRole('button', { name: '動態', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`#guilds/${guildKey}$`));
     await page.evaluate(() => { window.location.hash = 'positioning'; });
     await expect(page).toHaveURL(new RegExp(`#guilds/${guildKey}$`));
@@ -1571,7 +1571,7 @@ test('PA-002 committed but unreadable create and Result responses retain their e
     await page.evaluate(() => { window.location.hash = 'positioning'; }); await expect(page).toHaveURL(new RegExp(`#guilds/${guildKey}$`));
     await expect(form.getByLabel('小活動 1', { exact: true })).toBeDisabled(); release();
     await expect(page.getByRole('button', { name: '重試', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: '會員首頁', exact: true }).click();
+    await page.getByRole('button', { name: '動態', exact: true }).click();
     await expect(form).toBeVisible();
     await page.getByRole('button', { name: '設定', exact: true }).click();
     await page.getByRole('menu', { name: '個人檔案' }).getByRole('menuitem', { name: '登出', exact: true }).click();

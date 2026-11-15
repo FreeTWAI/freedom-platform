@@ -1,6 +1,3 @@
-.work-sharing-entry { display: flex; gap: 8px; flex-wrap: wrap; }
-.work-sharing-entry a { display: flex; align-items: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); text-decoration: none; background: var(--bg-elev); }
-.work-sharing-entry a[aria-current="page"] { border-color: var(--focus); font-weight: 700; background: var(--green-soft); }
 .work-sharing-form { width: 100%; max-width: 760px; margin-inline: auto; }
 .work-sharing-form input, .work-sharing-form textarea, .work-sharing-form select { font-size: 16px; }
 .work-sharing-form details > summary, .work-sharing-advanced > summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; color: var(--muted); }
@@ -14,8 +11,9 @@
 .work-sharing-form .field-hint { font-size: 14px; }
 .personal-content .btn-secondary { width: fit-content; max-width: 100%; min-height: 44px; padding: 8px 14px; color: var(--ink); background: var(--bg-elev); border: 1px solid var(--line); }
 .personal-content .btn-secondary:hover:not(:disabled), .personal-content .btn-secondary:focus-visible { color: var(--ink); background: var(--bg-elev); border-color: var(--focus); }
+.work-sharing-entry { margin-top: 0; }
+.showcase-panel details > summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; }
+.showcase-panel .btn { min-height: 44px; }
 @media (max-width: 480px) {
-  .work-sharing-entry { gap: 6px; }
-  .work-sharing-entry a { flex: 1; justify-content: center; padding-inline: 10px; }
   .work-sharing-form .actions > .btn-primary { width: 100%; }
 }

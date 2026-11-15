@@ -2,9 +2,7 @@ import { RepositoryLibrary } from './Community';
 import { useCallback,useEffect,useRef,useState,type FormEvent } from 'react';
 import { requireItems } from '../api';
 import { useModuleMutation,type ModulePanelProps } from './shared';
-import { SkillUpload,type SkillOpenRequest } from './SkillUpload';
-import { SimpleSkillSubmission } from './SimpleSkillSubmission';
-import { WorkSharingEntry } from './WorkSharingEntry';
+import { SkillSubmission } from './SkillSubmission';
 import {projectSkillBookPath,projectSkillDraft,type ProjectSkillBook} from './SkillPublication';
 import { GitHubAuthorFollow } from './GitHubAuthorFollow';
 
@@ -24,10 +22,9 @@ function LoadError({error,retry}:{error:string|null;retry:()=>void}) {
 
 export function OpenSourcePanel({client,session,onNavigate}:ModulePanelProps) {
   const [projects,setProjects]=useState<Project[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState<string|null>(null);
-  const [openRequest,setOpenRequest]=useState<SkillOpenRequest|null>(null);
-  const openNonce=useRef(0);
-  const openSkill=(submissionId:string,mode: 'preview'|'complete')=>{openNonce.current+=1;setOpenRequest({submissionId,mode,nonce:openNonce.current});};
   const [resumeId,setResumeId]=useState<string|null>(()=>new URLSearchParams(window.location.hash.split('?')[1]??'').get('submission'));
+  const [resumeTrigger,setResumeTrigger]=useState(0);
+  const openSkill=(submissionId:string)=>{setResumeId(submissionId);setResumeTrigger(value=>value+1);const nextHash=`#opensource?submission=${encodeURIComponent(submissionId)}`;if(window.location.hash!==nextHash)window.location.hash=nextHash;};
   const [projectId,setProjectId]=useState<string|null>(()=>new URLSearchParams(window.location.hash.split('?')[1]??'').get('project'));
   useEffect(()=>{const change=()=>{const params=new URLSearchParams(window.location.hash.split('?')[1]??'');setResumeId(params.get('submission'));setProjectId(params.get('project'));};window.addEventListener('hashchange',change);return()=>window.removeEventListener('hashchange',change)},[]);
   const loadSequence=useRef(0);
@@ -49,9 +46,7 @@ export function OpenSourcePanel({client,session,onNavigate}:ModulePanelProps) {
   },[client,session.user.user_id,projectId]);
   useEffect(()=>{setProjects([]);void refresh();return()=>{loadSequence.current++;};},[refresh]);
   return <div className="stack">
-    <WorkSharingEntry current="opensource"/>
-    <SimpleSkillSubmission key={`${session.user.user_id}:${client.sessionGeneration}`} userId={session.user.user_id} resumeId={resumeId} client={client} withdrawnProjectIds={projects.filter(project=>Boolean(project.sharing_withdrawn_at)).map(project=>project.project_id)} onPublished={refresh} onOpenDraft={openSkill}/>
-    <details className="card work-sharing-advanced"><summary>使用 Agent 或聊天 AI 協助整理（進階）</summary><div className="stack"><p className="hint">已有 Agent 草稿，或想讓 AI 整理介紹與分享短文，可使用原有上傳工具。</p><div className="actions"><SkillUpload client={client} onPublished={refresh} openRequest={openRequest}/></div></div></details>
+    <SkillSubmission key={`${session.user.user_id}:${client.sessionGeneration}`} userId={session.user.user_id} resumeId={resumeId} resumeTrigger={resumeTrigger} client={client} withdrawnProjectIds={projects.filter(project=>Boolean(project.sharing_withdrawn_at)).map(project=>project.project_id)} onPublished={refresh}/>
     <LoadError error={loadError} retry={()=>void refresh()}/>
       <section className="stack" aria-label="社群開源作品"><div className="section-head"><h2>社群開源作品</h2><p>目前顯示 {projects.length} 件 · 自由探索，不必先談商務合作</p></div>
         {loading&&<p role="status">正在載入作品…</p>}

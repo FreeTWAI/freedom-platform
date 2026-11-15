@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useLayoutEffect,useRef,useState,type FormEvent} from 'react';
 import {ApiError,type PortalClient,type RequestOptions} from '../api';
 import type {SessionPayload} from '../types';
-import {formatIsoLocal,localInputToIso} from '../format';
+import {formatIsoLocal} from '../format';
 import './EventParticipation.css';
 import {readEventParticipationToken} from './event-participation-token';
 export {readEventParticipationToken} from './event-participation-token';
@@ -215,24 +215,16 @@ export function GuestEventParticipation(props:GuestEventParticipationProps){
   useEffect(()=>{const update=()=>setToken(readEventParticipationToken());window.addEventListener('hashchange',update);window.addEventListener('popstate',update);return()=>{window.removeEventListener('hashchange',update);window.removeEventListener('popstate',update);}},[]);
   return token?<ParticipationPanel key={props.id+token} client={props.client} eventId={props.id} token={token} actor="guest"/>:<ManagementRequest key={props.id} {...props}/>;
 }
-function localTime(value:string){const date=new Date(value);return new Date(date.getTime()-date.getTimezoneOffset()*60_000).toISOString().slice(0,16);}
 function OrganizerControls({client,event,onChanged}:Omit<EventParticipationOrganizerProps,'session'>){
   const transport=useParticipationTransport(client,`organizer:${event.event_id}`,null),[value,setValue]=useState<EventParticipationDTO|null>(null);
-  const [latest,setLatest]=useState(event),policyTouched=useRef(false);
+  const policyTouched=useRef(false);
   const [enabled,setEnabled]=useState(false),[minutes,setMinutes]=useState(''),[initialized,setInitialized]=useState(false);
-  const [starts,setStarts]=useState(()=>localTime(event.starts_at)),[ends,setEnds]=useState(()=>localTime(event.ends_at)),[capacity,setCapacity]=useState(event.capacity===null?'':String(event.capacity));
-  const reload=useCallback(async()=>{const [next,current]=await Promise.all([transport.get<EventParticipationDTO>(`/events/${event.event_id}/participation`),transport.get<OrganizerParticipationEvent>(`/events/${event.event_id}`)]);if(next)setValue(next);if(current)setLatest(current);if(next&&current)transport.reloaded();},[event.event_id,transport.get]);
+  const reload=useCallback(async()=>{const [next,current]=await Promise.all([transport.get<EventParticipationDTO>(`/events/${event.event_id}/participation`),transport.get<OrganizerParticipationEvent>(`/events/${event.event_id}`)]);if(next)setValue(next);if(next&&current)transport.reloaded();},[event.event_id,transport.get]);
   useEffect(()=>{if(!value||value.event_version<event.aggregate_version)void reload();},[reload,event.aggregate_version]);
   useEffect(()=>{if(value&&!initialized){if(!policyTouched.current){setEnabled(value.waitlist_enabled);setMinutes(value.response_window_minutes===null?'':String(value.response_window_minutes));}setInitialized(true);}},[value,initialized]);
   async function policy(e:FormEvent){e.preventDefault();if(!value||enabled&&!positive(minutes))return;if(await transport.mutate('PATCH',`/events/${event.event_id}/waitlist-policy`,{waitlist_enabled:enabled,response_window_minutes:enabled?Number(minutes):null},value.event_version)){await reload();onChanged?.();}}
-  async function schedule(e:FormEvent){
-    e.preventDefault();if(!value||!starts||!ends||!Number.isFinite(Date.parse(starts))||!Number.isFinite(Date.parse(ends))||capacity!==''&&!positive(capacity))return;
-    const starts_at=localInputToIso(starts),ends_at=localInputToIso(ends);if(Date.parse(ends_at)<=Date.parse(starts_at))return;
-    if(await transport.mutate('PATCH',`/events/${event.event_id}/schedule`,{starts_at,ends_at,capacity:capacity===''?null:Number(capacity)},value.event_version)){await reload();onChanged?.();}
-  }
-  const invalidSchedule=!starts||!ends||!Number.isFinite(Date.parse(starts))||!Number.isFinite(Date.parse(ends))||Date.parse(ends)<=Date.parse(starts)||capacity!==''&&!positive(capacity);
   return <details className="event-participation">
-    <summary>主辦者：候補規則與改期</summary>
+    <summary>候補規則</summary>
     <div className="stack">
       <form className="stack" onSubmit={e=>void policy(e)}>
         <h3>候補回覆規則</h3>
@@ -242,15 +234,6 @@ function OrganizerControls({client,event,onChanged}:Omit<EventParticipationOrgan
         <p className="field-hint">必須明確選擇回覆時間，沒有預設期限。最晚以活動開始時間為限；邀請會保留名額，但只有接受才算報名。</p>
         <button className="btn btn-ghost btn-small" disabled={!value||transport.blocked||enabled&&!positive(minutes)}>儲存候補規則</button>
       </form>
-      {latest.state==='published'&&<form className="stack" onSubmit={e=>void schedule(e)}>
-        <h3>已發布活動的時間與容量</h3>
-        <p className="field-hint">目前已儲存：{formatIsoLocal(latest.starts_at)} ～ {formatIsoLocal(latest.ends_at)}；容量 {latest.capacity===null?'不限':latest.capacity}。下方未送出的輸入不會被重新載入覆蓋。</p>
-        <label className="field">開始時間（依裝置時區）<input required type="datetime-local" value={starts} onChange={e=>setStarts(e.target.value)}/></label>
-        <label className="field">結束時間（依裝置時區）<input required type="datetime-local" value={ends} onChange={e=>setEnds(e.target.value)}/></label>
-        <label className="field">人數上限（空白代表不限）<input type="number" min={1} step={1} value={capacity} onChange={e=>setCapacity(e.target.value)}/></label>
-        <p className="field-hint">保留原類型、公會與可見範圍。降低容量不會強制取消既有報名；伺服器會拒絕低於已佔用名額的容量。</p>
-        <button className="btn btn-ghost btn-small" disabled={!value||transport.blocked||invalidSchedule}>儲存時間與容量</button>
-      </form>}
       <Feedback transport={transport} reload={async()=>{await reload();onChanged?.();}}/>
       {!value&&!transport.error&&<p role="status">正在讀取主辦設定…</p>}
       {!value&&transport.error&&!transport.stale&&!transport.retry&&<button className="btn btn-ghost btn-small" type="button" onClick={()=>void reload()}>重新讀取主辦設定</button>}

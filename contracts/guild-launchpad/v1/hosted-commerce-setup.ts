@@ -46,7 +46,7 @@ const orderCount=z.object({count:z.number().int().min(0).max(99),more:z.boolean(
 export const StoreOverviewSchema=StoreReadinessSchema.extend({tenant_id:OpaqueId,instance_id:OpaqueId,environment:ProviderEnvironmentSchema,checked_at:IsoTimeSchema,
   orders:z.object({open:orderCount,awaiting_offline_payment:orderCount,needs_action:orderCount}).strict().nullable()}).strict();
 export const AdminStoreReadinessQuerySchema=z.object({limit:z.string().regex(/^(?:[1-9]|[1-4][0-9]|50)$/).optional(),offset:z.string().regex(/^(?:0|[1-9][0-9]{0,14})$/).optional()}).strict();
-export const AdminStoreReadinessItemSchema=z.object({tenant_id:OpaqueId,tenant_display_name:z.string(),tenant_status:z.string(),instance_id:OpaqueId,instance_status:z.string(),
+export const AdminStoreReadinessItemSchema=z.object({created_at:IsoTimeSchema.optional(),tenant_id:OpaqueId,tenant_display_name:z.string(),tenant_status:z.string(),instance_id:OpaqueId,instance_status:z.string(),
   store:z.object({name:z.string(),slug:z.string().nullable(),public_path:z.string().nullable()}).strict().nullable(),module_release_ref:z.string(),readiness:StoreReadinessSchema,
   admission:z.object({active:StoreAdmissionViewSchema.nullable(),last_revoked:StoreAdmissionViewSchema.nullable()}).strict(),admin_is_member:z.boolean()}).strict();
 export const AdminStoreReadinessPageSchema=z.object({environment:ProviderEnvironmentSchema,checked_at:IsoTimeSchema,release_sha:z.string().nullable(),

@@ -1,3 +1,4 @@
+import {eventAppPath} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page,type Request,type Route} from './fixtures.js';
 import {quickJoin} from './quick-join.js';
@@ -11,7 +12,7 @@ function event(letter:string):CommunityEvent{
 }
 async function login(page:Page){
  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
- const home=page.getByRole('heading',{name:'會員首頁',exact:true}),join=page.getByRole('region',{name:'快速加入公會',exact:true});await expect(home.or(join)).toBeVisible();if(await join.isVisible())await quickJoin(page);await expect(home).toBeVisible();
+ const home=page.getByRole('heading',{name:'動態',exact:true}),join=page.getByRole('region',{name:'快速加入公會',exact:true});await expect(home.or(join)).toBeVisible();if(await join.isVisible())await quickJoin(page);await expect(home).toBeVisible();
 }
 // Real login/session/site and the built App. Synthetic read resources only;
 // this suite does not claim server authorization, history retention or DB facts.
@@ -48,7 +49,7 @@ for(const width of [1280,390])for(const entry of ['path','notification'] as cons
  await page.setViewportSize({width,height:900});const routes=new ReadRoutes(page,new URL(baseURL!).origin,entry==='path'?503:'network');
  try{
   await routes.install();await login(page);
-  if(entry==='path')await page.goto(`/events/${routes.b.event_id}`);
+  if(entry==='path')await page.goto(eventAppPath(`/events/${routes.b.event_id}`));
   else{
    await page.goto(`/#events/${routes.a.event_id}`);await expect(detail(page).getByRole('heading',{name:routes.a.title,exact:true})).toBeVisible();await page.locator('.notification-bell-trigger').click();const notifications=page.getByRole('region',{name:'最近通知',exact:true});await notifications.getByRole('button').filter({has:page.getByText(routes.notification.title,{exact:true})}).click();await expect(notifications).toBeHidden();
   }

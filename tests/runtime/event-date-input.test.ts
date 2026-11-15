@@ -101,7 +101,7 @@ const noNetwork=()=>{throw Error('Real network forbidden');};
 const frame=(fn:()=>void)=>queueMicrotask(fn);
 const bundled=buildSync({stdin:{contents:`export {EventsPanel,blankEvent,eventPayload} from './apps/portal-web/src/modules/EventsPanel'; export {ApiError} from './apps/portal-web/src/api';`,resolveDir:process.cwd(),sourcefile:'event-date-ui-entry.ts'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',jsx:'automatic',loader:{'.css':'empty'}});
 const production={exports:{} as any};
-runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:{language:'zh-TW',languages:['zh-TW'],clipboard:{writeText:noNetwork}},fetch:noNetwork,requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='zod')return require('zod');throw Error(name);}});
+runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:{language:'zh-TW',languages:['zh-TW'],clipboard:{writeText:noNetwork}},fetch:noNetwork,requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='react-dom')return require('react-dom');if(name==='qrcode')return require('qrcode');if(name==='zod')return require('zod');throw Error(name);}});
 const {EventsPanel,ApiError}=production.exports;
 const OWNER='30000000-0000-4000-8000-000000000001',ID='10000000-0000-4000-8000-000000000001';
 const stored=(patch:any={})=>({help_need:null,event_id:ID,organizer_ref:OWNER,organizer_name:'合成主辦',title:'合成活動',description:'合成說明',starts_at:'2099-01-01T12:00:00.000Z',ends_at:'2099-01-01T13:00:00.000Z',mode:'online',location:'合成場地',capacity:null,state:'pending',visibility:'workshop',event_kind:'other',topic:null,online_url:null,guild_key:null,review_guild_key:null,can_review:false,review_reason:null,banner_url:null,banner_orientation:null,video_url:null,video_mime:null,attending_count:0,my_rsvp:null,aggregate_version:1,registration_policy:'community_member',prize_details:[],...patch});
@@ -123,21 +123,21 @@ function panel(t:TestContext){
  const settle=async(r:any,value:any,reject=false)=>{assert(r);await React.act(async()=>{r[reject?'reject':'resolve'](value);await new Promise(resolve=>setImmediate(resolve));});};
  const ready=async(items:any[]=[])=>{for(const r of reads().filter(r=>!r.done)){r.done=true;await settle(r,{items:r.path==='/events'?items:[]});}};
  const submit=()=>{const form=h.nodes().find(n=>n.nodeName==='FORM');assert(form);flush(()=>form.dispatchEvent({type:'submit'}));};
- return {...h,props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
+ return {...h,button:(name:string)=>{if(name==='編輯活動'&&!props.locationHash.includes('/manage')){props.locationHash='#events/'+ID+'/manage';h.setProps(props);}return h.button(name);},props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
 }
-const ack=(request:any,overrides:any={})=>stored({...request.body,aggregate_version:(request.options?.ifMatch??0)+1,...overrides});
+const ack=(request:any,overrides:any={})=>stored({...request.body,state:request.path==='/events'?'published':'pending',aggregate_version:(request.options?.ifMatch??0)+1,...overrides});
 const tuple=(r:any)=>JSON.stringify({path:r.path,body:r.body,options:r.options});
 
 async function openDraft(h:ReturnType<typeof panel>,editing:boolean){
- await h.ready(editing?[stored()]:[]);h.click(h.button(editing?'編輯草稿':'辦活動'));
- h.change('活動名稱','保留的合成活動');h.change('活動說明','保留的合成說明');h.change('線上場地','合成場地');
+ await h.ready(editing?[stored()]:[]);h.click(h.button(editing?'編輯活動':'辦活動'));
+ h.change('活動名稱','保留的合成活動');h.change('活動說明','保留的合成說明');h.change(editing?'線上場地':'地點','合成場地');
  h.change('開始時間','2099-01-01T12:00');h.change('結束時間','2099-01-01T13:00');
 }
 for(const editing of [false,true]){
  for(const label of ['開始時間','結束時間'])test(`invalid ${label} remains editable and can recover when ${editing?'editing':'creating'}`,async t=>{
   const h=panel(t);await openDraft(h,editing);h.change(label,'10000-01-01T12:00');h.submit();
   assert.equal(h.writes().length,0,'invalid date never sends a command');
-  for(const [field,value] of [['活動名稱','保留的合成活動'],['活動說明','保留的合成說明'],['線上場地','合成場地'],[label,'10000-01-01T12:00']]){
+  for(const [field,value] of [['活動名稱','保留的合成活動'],['活動說明','保留的合成說明'],[editing?'線上場地':'地點','合成場地'],[label,'10000-01-01T12:00']]){
    assert.equal(propsOf(h.field(field)).disabled,false,'form remains editable');assert.equal(propsOf(h.field(field)).value,value,'draft is preserved');
   }
   assert.match(h.text(),/年份須為四位數/);
@@ -149,7 +149,7 @@ for(const editing of [false,true]){
   assert.equal(request.body.starts_at,new Date('2099-01-01T12:00').toISOString());assert.equal(request.body.ends_at,new Date('2099-01-01T13:00').toISOString());
   assert.equal(propsOf(h.field(label)).disabled,true,'real pending command locks the editor');assert.equal(h.leave(),false);
   await h.settle(request,ack(request));await h.ready([ack(request)]);
-  assert.equal(h.nodes().filter(n=>n.nodeName==='FORM').length,0);assert.match(h.text(),editing?/活動已更新/:/活動已送出審核/);assert.equal(h.writes().length,1);
+  assert.equal(h.nodes().filter(n=>n.nodeName==='FORM').length,0);assert.match(h.text(),editing?/活動已更新/:/活動已發布/);assert.equal(h.writes().length,1);
  });
  test(`four-digit upper boundary retains its original payload when ${editing?'editing':'creating'}`,async t=>{
   const h=panel(t);await openDraft(h,editing);h.change('開始時間','9999-01-01T12:00');h.change('結束時間','9999-01-01T13:00');h.submit();

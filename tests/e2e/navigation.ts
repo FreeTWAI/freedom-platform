@@ -1,3 +1,8 @@
+import {adminNavigate} from './admin-navigation.js';
+import {TAB_TITLES} from '../../apps/portal-web/src/features/metadata';
+import {resolvePortalRoute,portalHash,PORTAL_PLACES} from '../../apps/portal-web/src/portal-route';
+import {GUILD_TOOLS} from '../../apps/portal-web/src/guild-tools/catalog';
+import type {TabId} from '../../apps/portal-web/src/types';
 import { expect, type Page, type Locator } from './fixtures.js';
 
 /** Member tools are secondary; open their visible disclosure before choosing one.
@@ -13,22 +18,16 @@ export async function openPageTools(page:Page){
   }
 }
 
-/** Resize an already mounted home and wait for its responsive disclosure update. */
+/** The personal disclosure stays member-controlled at every viewport size. */
 export async function setHomeViewport(page:Page,size:{width:number;height:number}){
-  const guide=page.locator('.home-guide-disclosure');
-  await expect(guide).toBeAttached();
-  const wasWide=await page.evaluate(()=>window.matchMedia('(min-width:861px)').matches);
-  await page.setViewportSize(size);
-  const wide=size.width>=861;
-  // React applies the media change after the viewport changes. Wait before a
-  // native open click, but preserve member-opened state within the same range.
-  if(wasWide!==wide)await expect(guide).toHaveJSProperty('open',wide);
+ await expect(page.locator('.home-personal')).toBeAttached();
+ await page.setViewportSize(size);
 }
 
 /** Open the optional home guide through its visible mobile disclosure. */
 export async function openHomeGuide(page:Page){
   // Lazy home content may mount after the shell title becomes visible.
-  const guide=page.locator('.home-guide-disclosure');
+  const guide=page.locator('.home-personal');
   await expect(guide).toBeAttached();
   if(!await guide.evaluate(element=>(element as HTMLDetailsElement).open))await guide.locator(':scope > summary').click();
   await expect(guide).toHaveJSProperty('open',true);
@@ -54,45 +53,45 @@ export async function expandHomeSections(page:Page){
 }
 
 export async function openFeatureSearch(page:Page){
-  await closeChat(page);
-  const menu=page.getByRole('button',{name:'開啟選單',exact:true});
-  if(await menu.isVisible())await menu.click();
-  const more=page.locator('.nav-more');
-  if(!await more.evaluate(element=>(element as HTMLDetailsElement).open))await more.locator(':scope > summary').click();
+ await closeChat(page);
+ const menu=page.getByRole('button',{name:'開啟選單',exact:true});
+ if(await menu.isVisible())await menu.click();
 }
-
-/** Follow the same visible navigation a member uses, including phone menus and groups. */
-export async function navigate(page: Page, name: string) {
-  await expect(page.locator('.shell')).toBeVisible();
-  if (name === '我的訊息') {
-    await openChat(page);
-    return;
-  }
-  await closeChat(page);
-  if (['我的名片', '入門指南'].includes(name)) {
-    const settings = page.getByRole('button', { name: '設定', exact: true });
-    if (await settings.getAttribute('aria-expanded') !== 'true') await settings.click();
-    await page.getByRole('menuitem', { name:name==='我的名片'?'資料與帳號設定':name, exact: true }).click();
-    return;
-  }
-  const menu = page.getByRole('button', { name: '開啟選單', exact: true });
-  if (await menu.isVisible()) await menu.click();
-  const navigation = page.getByRole('navigation', { name: '主要工作區', includeHidden: true });
-  await expect(navigation).toBeVisible();
-  const target = navigation.getByRole('button', { name, exact: true, includeHidden: true });
-  if (await target.count() === 0) {
-    const more = navigation.locator('.nav-more');
-    if (!await more.evaluate(element => (element as HTMLDetailsElement).open)) await more.locator(':scope > summary').click();
-    await navigation.getByRole('searchbox').fill(name);
-  }
-  await expect(target).toHaveCount(1);
-  const groups = target.locator('xpath=ancestor::details');
-  // Open the outer disclosure before its nested group, using visible controls.
-  for (let index = 0; index < await groups.count(); index++) {
-    const group = groups.nth(index);
-    if (!await group.evaluate(element => (element as HTMLDetailsElement).open)) await group.locator(':scope > summary').click();
-  }
-  await target.click();
+/** Compatibility names describe the existing task; navigation uses the five visible places. */
+export async function navigate(page:Page,name:string) {
+ await expect(page.locator('.shell')).toBeVisible();
+ if(name==='我的訊息'){await openChat(page);return;}
+ await closeChat(page);
+ const automation:Record<string,string>={'模型設定':'#automation/models','工具連線':'#automation/connections','裝置連線':'#automation/devices'};
+ const aliases:Record<string,TabId>={'AI 整理供貨商品':'supplier','AI 製作銷售網站':'retail','購買與預留紀錄':'reservations','我的定位':'positioning','供貨商品管理':'stores','我的名片':'account','私人 AI 工作室':'private-ai','會員首頁':'home','我的內容':'my-content'};
+ const tab=(automation[name]?'private-ai':aliases[name])??Object.entries(TAB_TITLES).find(([,title])=>title===name)?.[0] as TabId;
+ if(!tab)throw new Error('Unmapped navigation task: '+name);
+ const hash=automation[name]??(name==='供貨商品管理'?portalHash('stores','/supply'):portalHash(tab));
+ const route=resolvePortalRoute(hash),place=PORTAL_PLACES.find(p=>p.id===route.place)!;
+ const current=resolvePortalRoute(new URL(page.url()).hash);
+ // Stay in the current place when its view picker is already available. A declined
+ // leave guard keeps the current place: do not search for controls in the rejected
+ // destination or issue a second navigation attempt.
+ if(current.place!==route.place||route.toolId||route.place==='home'||route.place==='guilds'){
+  await openFeatureSearch(page);
+  const destination=page.locator('#workspace-navigation').getByRole('button',{name:place.title,exact:true,includeHidden:true});
+  await destination.click();
+  if(await destination.getAttribute('aria-current')!=='page')return;
+ }
+ if(route.toolId){
+  await page.getByLabel('公會工具',{exact:true}).selectOption(route.guildKey!);
+  const tool=GUILD_TOOLS.find(t=>t.guild_key===route.guildKey&&t.tool_id===route.toolId)!;
+  await page.getByRole('button',{name:tool.title,exact:true}).click();
+  if(tab==='tasks')await page.getByLabel('工作檢視',{exact:true}).selectOption('discovery');
+ }else if(tab==='guild-workspace')await page.getByRole('button',{name:'公會管理',exact:true}).click();
+ else if(tab==='community'||tab==='community-hub')await page.getByRole('button',{name:'社群',exact:true}).click();
+ else if(tab==='opensource'){
+  await page.getByRole('button',{name:'分享或提交',exact:true}).click();
+  const composer=page.getByRole('dialog',{name:'分享',exact:true});
+  await composer.getByRole('button',{name:'更多',exact:true}).click();
+  await composer.getByRole('button',{name:'開源投稿',exact:true}).click();
+ }
+ else if(['me','explore','automation'].includes(route.place))await page.getByLabel(place.title+'檢視',{exact:true}).selectOption(hash);
 }
 
 /** Choose an optional feed through the same secondary dialog a member opens. */
@@ -167,14 +166,9 @@ export async function openAdminNavigation(page:Page){
   return navigation;
 }
 export async function navigateAdmin(page:Page,name:string){
-  const navigation=await openAdminNavigation(page);
-  const button=navigation.getByRole('button',{name,exact:true});
-  const changed=await button.getAttribute('aria-current')!=='page';
-  await button.click();
-  const workspace=page.getByRole('region',{name:`${name}工作區`,exact:true});
-  await expect(workspace).toBeVisible();
-  if(changed)await expect(workspace).toBeFocused();
-  await expect(page.getByRole('dialog',{name:'切換管理功能',exact:true})).toBeHidden();
+ const keys:Record<string,string>={'會員管理':'members','公會管理':'guilds','公會申請':'guild-applications','管理員名單':'admins','作者認領審核':'author-claims','社群認證審核':'community-certifications','商店准入':'store-admissions','PR 審核':'review-center','GitHub 連結':'github','操作紀錄':'audit','系統錯誤日誌':'errors','系統憑證':'credentials','技能書維護者':'guild-workspace'};
+ await adminNavigate(page,keys[name]??name);
+ const workspace=page.getByRole('region',{name:`${name}工作區`,exact:true});await expect(workspace).toBeVisible();await expect(workspace).toBeFocused();await expect(page.getByRole('dialog',{name:'切換管理功能',exact:true})).toBeHidden();
 }
 
 /** Traverse real tab stops rather than programmatically forcing focus-visible. */
@@ -203,5 +197,126 @@ export async function openAccountSettings(page:Page,...labels:string[]){
       if(!await parent.evaluate(element=>(element as HTMLDetailsElement).open))await parent.locator(':scope > summary').click();
     }
     if(!await target.evaluate(element=>(element as HTMLDetailsElement).open))await target.locator(':scope > summary').click();
+  }
+}
+
+/** Remove the new per-member feed rows before deleting synthetic fixture users. */
+export async function clearMemberAgentEvents(db: import('pg').Pool | import('pg').PoolClient, ids: string[]) {
+  await db.query('DELETE FROM agent_change_events WHERE user_id=ANY($1::uuid[])', [ids]);
+}
+
+/** Reveal the retained event fields through the current optional-settings disclosure. */
+export async function openEventOptions(page: Page) {
+  const options=page.locator('form.experience-editor details').filter({has:page.getByText('選填設定',{exact:true}).or(page.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}))});
+  await expect(options).toHaveCount(1);
+  if(!await options.evaluate(element=>(element as HTMLDetailsElement).open))await options.locator(':scope > summary').click();
+  await expect(options).toHaveJSProperty('open',true);
+}
+
+/** Reconstruct a pre-revamp pending event for the retained draft-editing tests.
+ * New publication is asserted separately; this SQL is fixture setup, not a UI transition. */
+export async function seedLegacyEventDraft(db: import('pg').Pool, eventId: string) {
+  const result=await db.query("UPDATE community_events SET state='pending' WHERE event_id=$1 AND state='published' RETURNING event_id",[eventId]);
+  expect(result.rowCount).toBe(1);
+}
+
+/** Open feature lookup in Explore; keep its current content-query history. */
+export async function openExploreFeatureSearch(page: Page) {
+  await closeChat(page);
+  if(resolvePortalRoute(new URL(page.url()).hash).hash.split('?')[0]!=='#explore'){
+    await openFeatureSearch(page);
+    const explore=page.locator('#workspace-navigation').getByRole('button',{name:'探索',exact:true,includeHidden:true});
+    await explore.click();
+    if(resolvePortalRoute(new URL(page.url()).hash).hash.split('?')[0]!=='#explore')return;
+  }
+  const unified=page.getByRole('region',{name:'社群內容搜尋條件',exact:true});
+  const lookup=page.locator('.place-feature-search');
+  await expect(unified.or(lookup)).toBeVisible();
+  if(await lookup.isVisible()&&!await lookup.evaluate(element=>(element as HTMLDetailsElement).open))await lookup.locator(':scope > summary').click();
+}
+
+/** Assert an existing task's canonical address and its current place/tool heading. */
+export async function expectDestination(page: Page, legacy: string) {
+  const route=resolvePortalRoute(legacy.startsWith('#')?legacy:'#'+legacy);
+  const title=route.toolId?GUILD_TOOLS.find(tool=>tool.guild_key===route.guildKey&&tool.tool_id===route.toolId)!.title:PORTAL_PLACES.find(place=>place.id===route.place)!.title;
+  await expect.poll(()=>new URL(page.url()).hash).toBe(route.hash);
+  await expect(page.getByRole('heading',{level:1})).toHaveText(title);
+}
+
+/** Public event URLs retain their member tools behind the visible management link. */
+export async function openEventManagement(page: Page, eventId?: string) {
+  if(eventId)await page.goto(`/events/${eventId}`);
+  const manager=page.getByRole('region',{name:'管理活動',exact:true}),detail=page.getByRole('region',{name:'活動專頁',exact:true});
+  const link=page.getByRole('link',{name:'活動管理',exact:true}).or(page.getByRole('link',{name:'參與設定',exact:true}));
+  await expect(manager.or(detail).or(link)).toBeVisible();
+  if(!await manager.isVisible()&&!await detail.isVisible())await link.click();
+  const nativeManage=detail.getByRole('link',{name:'管理活動',exact:true});
+  if(await nativeManage.isVisible())await nativeManage.click();
+  await expect(manager.or(detail)).toBeVisible();
+  if(eventId)expect(new URL(page.url()).hash).toBe(`#explore/events/${eventId}${await manager.isVisible()?'/manage':''}`);
+}
+
+/** The native event app retains authoring, guest retry and private participation controls.
+ * The default /events/:id response is now the separate server-rendered public page. */
+export function eventAppPath(path:string){
+  const url=new URL(path,'https://example.test');
+  url.searchParams.set('app','1');
+  return url.pathname+url.search+url.hash;
+}
+
+/** Guild card secondary actions (including 查看成員) are collapsed under 更多. */
+export async function openGuildCardMore(card: Locator) {
+  const settings = card.locator('.guild-membership-settings');
+  await expect(settings).toBeAttached();
+  if (!await settings.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await settings.locator(':scope > summary').click();
+  }
+  await expect(settings).toHaveJSProperty('open', true);
+}
+
+/** Expose private AI views when private_ai_enabled defaults to false (UX-M-07/UX-V-11). */
+export async function enablePrivateAiViews(page: Page) {
+  await page.route('**/api/v1/site', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), private_ai_enabled: true } });
+  });
+}
+
+/** Signed-out landing secondary resources, demo shortcuts, roles and tools sit inside 更多. */
+export async function openLoginMore(page: Page) {
+  const more = page.locator('details.login-more');
+  await expect(more.locator(':scope > summary')).toBeVisible();
+  if (!await more.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await more.locator(':scope > summary').click();
+  }
+  await expect(more).toHaveJSProperty('open', true);
+}
+
+/** Skill shelf discovery tabs and purpose selects sit inside the 篩選 drawer. */
+export async function openSkillFilterDrawer(shelf: Locator) {
+  const drawer = shelf.locator('details.skill-library-filter-drawer');
+  await expect(drawer).toBeAttached();
+  if (!await drawer.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await drawer.locator(':scope > summary').click();
+  }
+  await expect(drawer).toHaveJSProperty('open', true);
+}
+
+/** Skill card secondary actions (分享技能 and GitHub star) sit inside 更多. */
+export async function openSkillCardMore(card: Locator) {
+  const more = card.locator('details.skill-card-more');
+  await expect(more).toBeAttached();
+  if (!await more.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await more.locator(':scope > summary').click();
+  }
+  await expect(more).toHaveJSProperty('open', true);
+}
+
+/** Skill shelves paginate 20 cards per page behind the 更多 button. */
+export async function expandSkillShelf(shelf: Locator) {
+  await expect(shelf.locator('.skill-library-count')).toBeVisible();
+  const more = shelf.locator('> .actions').getByRole('button', { name: '更多', exact: true });
+  for (let step = 0; step < 20 && await more.isVisible(); step++) {
+    await more.click();
   }
 }

@@ -12,7 +12,7 @@ import { Pool } from 'pg';
 import { createPool, LOCAL_DATABASE_URL } from '../../packages/db/index.js';
 import { migrate } from '../../scripts/database.js';
 import sharp from 'sharp';
-import { seedLocal, DEMO_USERS, DEMO_PASSWORD } from '../../packages/testing/seed.js';
+import { seedLocal, DEMO_USERS, DEMO_PASSWORD, DEMO_COMMUNITY } from '../../packages/testing/seed.js';
 import { tokenHash } from '../../modules/identity-membership/service.js';
 import { trackedGitHubRepositories } from '../../modules/community/github-sync.js';
 import { catalogMetricTargets } from '../../modules/github-social/service.js';
@@ -29,7 +29,7 @@ const databaseUrl = Object.assign(new URL(serverUrl), { pathname: '/' + database
 
 // Required by Miniflare even when the database uses local trust auth.
 const workerDatabase = new URL(databaseUrl);
-workerDatabase.password ||= 'synthetic-workerd-only';
+workerDatabase.password ||= process.env.PGPASSWORD || 'synthetic-workerd-only';
 const origin = 'http://127.0.0.1:8787';
 const SHELL = '<!doctype html><title>workerd shell</title>';
 // Same date as wrangler.jsonc: the newest the pinned workerd 1.20260921.1 supports.
@@ -130,7 +130,7 @@ async function assertBuildAssetHeaders(fetch: (path: string, init?: RequestInit)
   const baseCsp = security.headers.get('content-security-policy') ?? '';
   assert.doesNotMatch(baseCsp, /(?:^|;)\s*frame-src(?:\s|;|$)/);
   assert.equal(homeSecurity.headers.get('content-security-policy'),
-    baseCsp.replace("; base-uri", "; frame-src https://aisns.evitina.tw https://freetwai.github.io; base-uri"));
+    baseCsp.replace("; base-uri", "; frame-src 'self' https://aisns.evitina.tw https://freetwai.github.io; base-uri"));
   const securityHeaders = ['content-security-policy', 'x-content-type-options', 'referrer-policy'];
   assert.equal(security.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(security.headers.get('referrer-policy'), 'no-referrer');
@@ -439,4 +439,54 @@ test('workerd: the maintainer webhook is 503 without a secret and 401 for a bad 
     assert.equal(((await rejected.json()) as any).code, 'webhook_signature_invalid');
     assert.equal((await db.query('SELECT count(*)::int AS n FROM maintainer_webhook_deliveries')).rows[0].n, 0);
   } finally { await withSecret.dispose(); }
+});
+
+test('workerd registers a hosted tool, proves its origin and exchanges identity with an operator-generated key', async () => {
+  const {execFileSync}=await import('node:child_process');
+  const {BRIDGE_VERSION}=await import('../../modules/guild-tools/contract.js');
+  const {verifyToolToken}=await import('../../modules/guild-tools/tokens.js');
+  const generated=execFileSync(process.execPath,['scripts/generate-guild-tool-signing-key.mjs'],{encoding:'utf8'});
+  let proof='';const requests:{url:string;method:string;cookie:string|null;authorization:string|null}[]=[];
+  const hosted=new Miniflare(convertV4MiniflareOptions({workers:[{
+    name:'guild-tool-hosting-test',modules:true,scriptPath:resolve(bundleDir,'worker.js'),
+    compatibilityDate,compatibilityFlags:['nodejs_compat'],
+    bindings:{FREEDOM_ENV:'local',APP_ORIGIN:origin,FREEDOM_GUILD_TOOL_SIGNING_KEY:generated},
+    hyperdrives:{HYPERDRIVE:workerDatabase.href},
+    assets:{directory:assetsDir,binding:'ASSETS',routerConfig:{has_user_worker:true,invoke_user_worker_ahead_of_assets:true},assetConfig:{html_handling:'auto-trailing-slash',not_found_handling:'none'}},
+    outboundService:async(request:Request)=>{
+      requests.push({url:request.url,method:request.method,cookie:request.headers.get('cookie'),authorization:request.headers.get('authorization')});
+      assert.equal(new URL(request.url).hostname,'tool.pages.dev');
+      return request.url.endsWith('/.well-known/freedom-guild-tool.txt')?new Response(proof,{headers:{'content-type':'text/plain'}})
+        :new Response('<html></html>',{headers:{'content-type':'text/html'}});
+    },
+  }]} as any));
+  const send=(path:string,init?:RequestInit)=>hosted.dispatchFetch(origin+path,init as any) as unknown as Promise<Response>;
+  try{
+    const login=await send('/api/v1/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({email:DEMO_USERS[0].email,password:DEMO_PASSWORD})});
+    assert.equal(login.status,200);const session=await login.json() as any,cookie=login.headers.get('set-cookie')!.split(';')[0];
+    await db.query("INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier) VALUES($1,$2,$3,'guild_games','active','full') ON CONFLICT(community_id,user_id,guild_key) DO UPDATE SET state='active'",[randomUUID(),DEMO_COMMUNITY,session.user.user_id]);
+    await db.query("INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,'guild_games',$2) ON CONFLICT(community_id,guild_key) DO UPDATE SET user_id=$2",[DEMO_COMMUNITY,session.user.user_id]);
+    const post=(path:string,body:unknown)=>send(path,{method:'POST',headers:{Origin:origin,Cookie:cookie,'X-CSRF-Token':session.csrf_token,'Content-Type':'application/json','Idempotency-Key':randomUUID(),'If-Match':'"1"'},body:JSON.stringify(body)});
+    const base='/api/v1/guilds/guild_games/tools';
+    const access=await send(base+'/access',{headers:{Cookie:cookie}});assert.equal(access.status,200);
+    const capabilities=await access.json() as any;assert.equal(capabilities.registration_available,true);assert.equal(capabilities.token_exchange_available,true);
+    const absent=await call(base+'/access',{headers:{Cookie:cookie}});const noKey=await absent.json() as any;
+    assert.equal(noKey.registration_available,true);assert.equal(noKey.token_exchange_available,false);
+    const body={tool_id:'hosted',title:'工具',entry_url:'https://tool.pages.dev/',bridge_version:BRIDGE_VERSION,profile:'origin',scopes:['context:read','session:exchange'],permissions:[]};
+    for(const entry_url of ['https://Tool.pages.dev/','https://tool.pages.dev:443/','https://private.example.test/']){
+      assert.equal((await post(base,{...body,entry_url})).status,422);assert.equal(requests.length,0);
+    }
+    const challenge=await post(base+'/origin-challenges',{entry_url:body.entry_url});assert.equal(challenge.status,201);
+    const challengeBody=await challenge.json() as any;proof=challengeBody.contents;
+    const registration=await post(base,{...body,origin_challenge_id:challengeBody.challenge_id});assert.equal(registration.status,201);
+    const registered=await registration.json() as any;assert.equal((await post(base+'/hosted/accept',{})).status,200);
+    assert.equal(requests.length,2);for(const request of requests){assert.equal(request.method,'GET');assert.equal(request.cookie,null);assert.equal(request.authorization,null);}
+    const exchange=await post(base+'/hosted/token',{});assert.equal(exchange.status,200);
+    const token=await exchange.json() as any,jwks=await (await send('/.well-known/guild-tool-jwks.json')).json() as any;
+    assert.equal(jwks.keys.length,1);assert.equal(jwks.keys[0].d,undefined);
+    assert.equal((await verifyToolToken(token.access_token,jwks.keys[0],origin,registered.id)).tool_origin,'https://tool.pages.dev');
+    assert.deepEqual(await (await post('/api/v1/public/guild-tool-token/status',{token:token.access_token,audience:registered.id})).json(),{active:true});
+    // A tool's backend makes the documented call with no Origin, Cookie or CSRF header.
+    assert.deepEqual(await (await send('/api/v1/public/guild-tool-token/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token.access_token,audience:registered.id})})).json(),{active:true});
+  }finally{await hosted.dispose();}
 });

@@ -43,19 +43,25 @@ export function publicPostCatalogResources(note: string, publicOrigin: string) {
 function catalogResourcesHtml(note: string, publicOrigin: string) {
   const resources = publicPostCatalogResources(note, publicOrigin);
   if (!resources.length) return '';
-  const links = resources.map(item => `<li><a class="catalog-resource-link" href="${escapeHtml(item.path)}"><span>${escapeHtml(item.title)}</span><span class="muted">免登入閱讀技能資源 <span aria-hidden="true">→</span></span></a></li>`).join('');
-  return `<section class="catalog-resources" aria-labelledby="catalog-resources-title"><h2 id="catalog-resources-title">貼文提到的技能資源</h2><p class="muted">來自工坊技能目錄；原作與授權見資源頁。</p><ul>${links}</ul></section>`;
+  const links = resources.map(item => `<li><a class="catalog-resource-link" href="${escapeHtml(item.path)}"><span>${escapeHtml(item.title)}</span><span class="muted">查看 <span aria-hidden="true">→</span></span></a></li>`).join('');
+  return `<section class="card catalog-resources" aria-label="貼文提到的技能資源"><h2 id="catalog-resources-title">技能資源</h2><ul>${links}</ul><p class="muted">原作與授權見資源頁</p></section>`;
 }
 
-function documentHtml(title: string, metadata: string, body: string) {
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="color-scheme" content="light dark"><title>${escapeHtml(title)}</title>${metadata}<link rel="stylesheet" href="/social-post.css"><script src="/social-post.js" defer></script>${PUBLIC_REVALIDATION_MARKUP}</head><body><a class="skip-link" href="#post-content">跳到貼文</a><header class="site-header"><a class="brand" href="/" aria-label="自由工坊首頁"><img src="/brand/freedom-workshop.webp" width="1280" height="720" alt="自由工坊"></a><span class="site-label">工坊分享</span></header><main id="post-content" tabindex="-1">${body}</main><footer class="site-footer"><a href="/">回到自由工坊</a></footer></body></html>`;
+function documentHtml(title: string, metadata: string, body: string, brandLink = true) {
+  const brand = brandLink
+    ? '<a class="brand" href="/" aria-label="自由工坊首頁"><img src="/brand/freedom-workshop.webp" width="1280" height="720" alt="自由工坊"></a>'
+    : '<span class="brand"><img src="/brand/freedom-workshop.webp" width="1280" height="720" alt="自由工坊"></span>';
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="color-scheme" content="light dark"><title>${escapeHtml(title)}</title>${metadata}<link rel="stylesheet" href="/social-post.css"><script src="/social-post.js" defer></script>${PUBLIC_REVALIDATION_MARKUP}</head><body><a class="skip-link" href="#post-content">跳到貼文</a><header class="site-header">${brand}<span class="site-label">工坊分享</span></header><main id="post-content" tabindex="-1">${body}</main></body></html>`;
 }
 
 /** A missing or withdrawn publication must not keep its previous title, OG,
  * author or image. A separate member login intent preserves old private links. */
 export function unavailableSocialPostHtml(id: string) {
-  const memberLink = id.length===36&&uuid.test(id) ? `<a class="button primary" href="/?social-post=${id}#account">會員登入後查看</a>` : '';
-  return documentHtml('目前無法閱讀這則貼文｜自由工坊', '', `<section class="card unavailable"><p class="eyebrow">工坊分享</p><h1>目前無法閱讀這則貼文</h1><p>這則貼文尚未開放免登入閱讀，或目前已無法查看。</p><p class="muted">如果你已是會員，可以登入後確認是否有閱覽權限。</p>${memberLink}</section>`);
+  const validId = id.length===36&&uuid.test(id);
+  const memberLink = validId
+    ? `<a class="button primary btn-primary" href="/?social-post=${id}#account">會員登入後查看</a>`
+    : '<a class="button primary btn-primary" href="/">回到首頁</a>';
+  return documentHtml('目前無法閱讀這則貼文｜自由工坊', '', `<section class="card unavailable"><h1>目前無法閱讀這則貼文</h1><div class="actions">${memberLink}</div><p class="muted">這則貼文尚未開放免登入閱讀，或目前已無法查看。</p></section>`, validId);
 }
 
 export function publicSocialPostHtml(page: PublicSocialPostPage, publicOrigin: string, registrationEnabled: boolean) {
@@ -70,8 +76,9 @@ export function publicSocialPostHtml(page: PublicSocialPostPage, publicOrigin: s
     ? `<h1 class="visually-hidden">${escapeHtml(post.author.display_name)}的貼文</h1><div class="post-text">${escapeHtml(post.note ?? post.title)}</div>`
     : `<h1>${escapeHtml(post.title)}</h1>${post.note ? `<div class="post-text">${escapeHtml(post.note)}</div>` : ''}${post.url ? `<a class="source-link" href="${escapeHtml(post.url)}" target="_blank" rel="noopener noreferrer">查看原文 <span aria-hidden="true">↗</span><span class="visually-hidden">（在新分頁開啟）</span></a>` : ''}`;
   const related = page.related.slice(0, 3).map(item => `<article class="preview-card"><p class="author">${escapeHtml(item.author.display_name)}</p><h3>${escapeHtml(item.title)}</h3><p class="preview-text">${escapeHtml(item.summary)}</p><a class="button secondary" data-related-post="${escapeHtml(item.post_id)}" href="${login(item.post_id)}">登入繼續閱讀</a></article>`).join('');
-  const body = `<article class="card shared-post" data-public-post="${escapeHtml(post.post_id)}" data-public-version="${escapeHtml(page.version)}"><header class="post-author"><span class="author-mark" aria-hidden="true">${escapeHtml(Array.from(post.author.display_name)[0] ?? '工')}</span><div><p class="author">${escapeHtml(post.author.display_name)}</p><p class="post-date"><time datetime="${escapeHtml(post.created_at)}">${escapeHtml(date)}</time>${post.edited_at ? ' · 已編輯' : ''}</p></div><span class="public-label">公開分享</span></header>${text}${post.image_url ? `<img class="post-image" src="${escapeHtml(post.image_url)}" alt="貼文附圖" width="640" height="360">` : ''}${catalogResourcesHtml(post.note ?? '', publicOrigin)}</article>
-<section class="card reading-invite" aria-labelledby="reading-invite-title"><div><h2 id="reading-invite-title" data-invite-title>把心得或問題留給分享者</h2><p data-invite-description>有實作心得或問題？登入後回到這則貼文交流；留言依原有會員資格開放。</p></div><div class="actions"><a class="button primary" data-post-login="${escapeHtml(post.post_id)}" href="${login(post.post_id)}">登入回原貼文交流</a>${registrationEnabled ? `<a class="button secondary" data-post-join href="${escapeHtml(join(post.post_id))}">建立帳號</a>` : ''}</div></section>
-${related ? `<section class="related" aria-label="更多工坊分享"><h2>更多工坊分享</h2><p class="muted" data-preview-description>先看看幾則分享，登入後就能繼續閱讀。</p><div class="preview-list">${related}</div></section>` : ''}<p class="reading-status muted" role="status" data-reading-status></p>`;
+  const body = `<article class="card shared-post" data-public-post="${escapeHtml(post.post_id)}" data-public-version="${escapeHtml(page.version)}"><header class="post-author"><span class="author-mark" aria-hidden="true">${escapeHtml(Array.from(post.author.display_name)[0] ?? '工')}</span><div><p class="author">${escapeHtml(post.author.display_name)}</p><p class="post-date"><time datetime="${escapeHtml(post.created_at)}">${escapeHtml(date)}</time>${post.edited_at ? ' · 已編輯' : ''}</p></div><span class="public-label">公開分享</span></header>${text}${post.image_url ? `<img class="post-image" src="${escapeHtml(post.image_url)}" alt="貼文附圖" width="640" height="360">` : ''}</article>
+<section class="card reading-invite" aria-labelledby="reading-invite-title"><h2 id="reading-invite-title" data-invite-title>加入討論</h2><div class="actions"><a class="button primary btn-primary" data-post-login="${escapeHtml(post.post_id)}" href="${login(post.post_id)}">登入回原貼文交流</a>${registrationEnabled ? `<a class="button secondary" data-post-join href="${escapeHtml(join(post.post_id))}">建立帳號</a>` : ''}</div><p data-invite-description>登入後交流；留言依原有會員資格開放。</p></section>
+${catalogResourcesHtml(post.note ?? '', publicOrigin)}
+${related ? `<section class="related" aria-label="更多工坊分享"><h2>更多分享</h2><div class="preview-list">${related}</div></section>` : ''}<p class="reading-status muted" role="status" data-reading-status></p>`;
   return documentHtml(`${post.title}｜自由工坊`, metadata, body);
 }

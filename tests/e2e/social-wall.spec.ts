@@ -15,13 +15,16 @@ test('sharing an existing post uses one native link handoff and cancelling never
  await page.getByLabel('貼文內容',{exact:true}).fill(text);await page.getByRole('button',{name:'發布貼文',exact:true}).click();const post=card(page,text);await expect(post).toBeVisible();
  const attempts:string[]=[];page.on('request',request=>{const url=new URL(request.url());if(url.pathname.includes('SocialCrossPlatformShare-')||request.method()==='POST'&&(url.pathname==='/api/v1/social-posts/notes'||url.pathname==='/api/v1/promotion/links'||url.pathname.endsWith('/public-sharing')))attempts.push(url.pathname);});
  const share=post.getByRole('button',{name:'分享貼文連結',exact:true});await share.click();
- const dialog=page.getByRole('dialog',{name:'分享貼文連結',exact:true}),native=dialog.getByRole('button',{name:'系統分享',exact:true});
+ const dialog=page.getByRole('dialog',{name:'分享貼文連結',exact:true});
+ const native=dialog.getByRole('button',{name:/^分享(?:中…)?$/});
+ await expect(dialog.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=`));
  await native.click();await expect(native).toBeDisabled();
  const first=await page.evaluate(()=>(window as any).postShareControl.calls[0]);expect(first.active).toBe(true);
- const postId=(await post.getAttribute('id'))!.slice('social-post-'.length);expect(first.data).toEqual({title:'自由工坊的貼文',url:`${e2eOrigin()}/?social-post=${postId}#social`});
+ const postId=(await post.getAttribute('id'))!.slice('social-post-'.length);expect(first.data).toEqual({title:text,url:`${e2eOrigin()}/?social-post=${postId}#social`});
  await page.evaluate(()=>(window as any).postShareControl.reject(new DOMException('cancelled','AbortError')));await expect(native).toBeEnabled();
  await expect(dialog).toBeVisible();expect(await page.evaluate(()=>(window as any).postShareControl.copies)).toBe(0);
- await native.click();await page.evaluate(()=>(window as any).postShareControl.resolve());await expect(share).toBeEnabled();
+ await native.click();await page.evaluate(()=>(window as any).postShareControl.resolve());await expect(native).toBeEnabled();await expect(share).toBeEnabled();
+ await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).postShareControl.calls.length)).toBe(2);expect(attempts).toEqual([]);
 });
 
@@ -120,11 +123,14 @@ test('wall tools publish topics, mentions, check-ins and pictures; social commen
  for(const theme of ['dark','versefolk']){await page.evaluate(v=>{document.documentElement.dataset.theme=v;window.scrollTo(0,0);},theme);await page.screenshot({path:`test-results/social-wall-${theme}-390.png`,fullPage:false});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  await page.evaluate(()=>{document.documentElement.dataset.theme='light';Object.defineProperty(navigator,'share',{configurable:true,value:undefined});Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:(value:string)=>{(window as any).copiedPostLink=value;return Promise.resolve();}}});});
  await post.getByRole('button',{name:'分享貼文連結',exact:true}).click();const share=page.getByRole('dialog',{name:'分享貼文連結',exact:true});
- const link=await share.getByLabel('貼文連結',{exact:true}).inputValue(),postId=(await post.getAttribute('id'))!.slice('social-post-'.length);
- expect(new URL(link).searchParams.get('social-post')).toBe(postId);expect(new URL(link).hash).toBe('#social');
  await expect(share.getByRole('region',{name:'多平台分享'})).toHaveCount(0);await expect(share.getByRole('button',{name:'了解並開啟'})).toHaveCount(0);
- await share.getByRole('button',{name:'複製貼文連結',exact:true}).click();await expect(share.getByRole('status')).toHaveText('已複製貼文連結');expect(await page.evaluate(()=>(window as any).copiedPostLink)).toBe(link);
- await page.keyboard.press('Escape');await expect(post.getByRole('button',{name:'分享貼文連結',exact:true})).toBeFocused();
+ const postId=(await post.getAttribute('id'))!.slice('social-post-'.length);
+ await expect(share.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=${postId}#social$`));
+ const link=(await share.locator('.skill-share-url').innerText()).trim();
+ expect(new URL(link).searchParams.get('social-post')).toBe(postId);expect(new URL(link).hash).toBe('#social');
+ await share.getByRole('button',{name:'複製連結',exact:true}).click();await expect(share.getByRole('status')).toHaveText('已複製。');expect(await page.evaluate(()=>(window as any).copiedPostLink)).toBe(link);
+ await page.keyboard.press('Escape');await expect(share).toHaveCount(0);
+ await expect(post.getByRole('button',{name:'分享貼文連結',exact:true})).toBeFocused();
  await post.getByRole('button',{name:'#作品',exact:true}).click();await expect(page.locator('.social-active-tag')).toContainText('#作品');await expect(card(page,text)).toBeVisible();await page.getByRole('button',{name:'清除標籤篩選',exact:true}).click();
  expect(errors).toEqual([]);
 });

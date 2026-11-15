@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ApiError, type PortalClient } from '../api';
-import { BrandPoster, CommunityLinks } from './Community';
+import { BrandPoster, CommunityLinks } from './CommunityBrand';
 import { SkillBookCard, type IntroBook } from './SkillBookIntro';
 import {SkillBookStarGate} from './SkillBookCover';
 import {PreviewProfileMenu} from './PreviewProfileMenu';

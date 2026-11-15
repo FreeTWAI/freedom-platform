@@ -4,7 +4,7 @@
 
 | Repo | 本輪內容／資料接點 |
 | --- | --- |
-| freedom-platform | 會員、定位、公會、供貨、零售、作品、行銷 canonical commands；32 個 preview operations、OpenAPI／SDK 及中央 PostgreSQL |
+| freedom-platform | 會員、定位、公會、供貨、零售、作品、行銷 canonical commands；33 個 preview operations、OpenAPI／SDK 及中央 PostgreSQL |
 | freedom-agent-kit | 共用 protocol／client、CLI 會員工作摘要、各 AI 工具 adapter 說明；不複製工作資料 |
 | freedom-storefront | master-store／catalog-store／single-product／service-offer 模板，店主 API helper、靜態內部預覽；service-offer API 尚未接入 |
 | freedom-growth-automation | 草稿／分享 API helper、來源固定的文案與 LINE 格式本機預覽；正式發布／media 執行待接 |
@@ -12,7 +12,7 @@
 | freedom-project-template | 新專案可運行骨架、測試與身分初始化指引 |
 | freedom-project-page | 公開 manifest 的固定介紹頁 builder；不宣稱 signed status／official |
 | FreeTWAI.github.io | 九倉專案目錄來源與靜態 build；2026-10-13 repo 改名後 Pages 設定為 `https://freetwai.github.io/`，目錄內容與跨倉來源更新仍需另行驗證 |
-| .github | 社群模板、共用驗證 workflow；中央 ruleset 強制執行尚未配置，不宣稱已有管理員 gate |
+| .github | 社群模板、共用驗證 workflow；`freedom-platform` 已啟用 `main-baseline` ruleset（PR、`verify`／`CodeQL` 必要 checks、CODEOWNERS＋1 位核准、無 bypass，不等於 immutable workflow enforcement）；各外倉保護仍須逐倉讀回 |
 
 ```mermaid
 flowchart LR
@@ -51,7 +51,7 @@ caller abort 後 SQL 可能還沒結束，另一個 call 也可能尚未 dispatc
 
 ## Auth 與副作用邊界
 
-32-operation preview SDK 仍使用會員 session；Node demo login 只接受 HTTP loopback 及已播種的三個假帳號，CLI 不輸出 session cookie／CSRF。2026-09-23 另已加入 [外部客戶端讀取接線](client-read-connections.md)：商店／供應端經本人在平台批准取得七天、可撤銷的 scoped bearer，只讀核准資源，不可寫入、讀會員聯絡或當 browser session。這兩種接線要分清楚。瀏覽器仍沿用同源 Portal，不放寬 CORS。完整 Store purpose token、Agent ExecutionGrant 與 growth leased Job API 仍待開發，不能拿會員 demo session 當 production service account。
+33-operation preview SDK 仍使用會員 session；Node demo login 只接受 HTTP loopback 及已播種的三個假帳號，CLI 不輸出 session cookie／CSRF。2026-09-23 另已加入 [外部客戶端讀取接線](client-read-connections.md)：商店／供應端經本人在平台批准取得七天、可撤銷的 scoped bearer，只讀核准資源，不可寫入、讀會員聯絡或當 browser session。這兩種接線要分清楚。瀏覽器仍沿用同源 Portal，不放寬 CORS。完整 Store purpose token、Agent ExecutionGrant 與 growth leased Job API 仍待開發，不能拿會員 demo session 當 production service account。
 
 寫入需本人已有 authority、明確重送 key 與原版本。409／412 要重新讀取確認；來源 snapshots 不被後續供貨改價或 GitHub 更新覆寫。事件 transport、provider publication、結帳與金流沒有因檔案放入 repo 就啟用。
 

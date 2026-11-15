@@ -274,7 +274,9 @@ test('legacy omitted help_need preserves pending text; explicit null clears and 
  const host=await login(0);
  const body={title:'舊版編輯',description:'省略欄位相容測試',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'https://example.test/meeting',capacity:1,visibility:'open'};
  const legacy=await request('/events',host,body);assert.equal(legacy.status,201);assert.equal(legacy.data.help_need,null);
- const created=await request('/events',host,{...body,help_need:'協助報到'});assert.equal(created.status,201);
+ const created=await request('/events',host,{...body,title:'獨立舊版編輯',help_need:'協助報到'});assert.equal(created.status,201);assert.equal(created.data.state,'published');
+ // Retained legacy edit lane is seeded explicitly after immediate publication.
+ await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[created.data.event_id]);
  const id=created.data.event_id;
  const version=async()=>Number((await pool.query('SELECT aggregate_version FROM community_events WHERE event_id=$1',[id])).rows[0].aggregate_version);
  const preserved=await request(`/events/${id}/update`,host,{...body,title:'舊版更新標題'},await version());

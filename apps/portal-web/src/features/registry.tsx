@@ -1,3 +1,4 @@
+import {PlaceView} from './PlaceView';
 import type { TabId } from '../types';
 import type { PortalFeatureContext } from './types';
 import { identityFeatures } from './identity';
@@ -16,5 +17,5 @@ export const PORTAL_FEATURES = composePortalFeatures([
 export function renderPortalFeature(tab: TabId, context: PortalFeatureContext) {
   // Called inside the existing keyed PageLoadBoundary, so loading failures and
   // tab changes retain the shell's original recovery and unmount behavior.
-  return PORTAL_FEATURES[tab].render(context);
+  return <PlaceView defaultTab={tab} context={context} render={(view, props) => PORTAL_FEATURES[view].render(props)}/>;
 }

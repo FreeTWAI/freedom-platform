@@ -41,6 +41,8 @@
     "contracts/guild-launchpad/v1/workspace-view.schema.json",
     "apps/platform-api/src/routes/guild-launchpad.ts",
     "apps/platform-api/src/routes/guild-workspace.ts",
+    "apps/portal-web/src/modules/GuildLaunchpadEditor.tsx",
+    "apps/portal-web/src/modules/GuildLaunchpadReading.tsx",
     "apps/portal-web/src/modules/GuildLaunchpad.tsx",
     "apps/portal-web/src/modules/GuildLaunchpad.css",
     "apps/portal-web/src/modules/GuildLaunchpadMyWork.tsx",

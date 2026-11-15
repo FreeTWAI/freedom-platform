@@ -5440,6 +5440,47 @@ test('lease-loss floor replay preserves every original intent and rejects incomp
   }
 });
 
+test('pass-2 source frontier reaches 210 without changing the installed profile or admitting unknown gaps', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'pass2-frontier-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'migrations'));
+  const installed = { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] };
+  for (let n = 1; n <= 206; n++) if (n !== 22) {
+    await writeFile(join(root, 'migrations', `${String(n).padStart(3, '0')}_fixture.sql`), 'SELECT 1;\n');
+  }
+  assert.deepEqual(sourceMigrationProfile(root, installed), { ...installed, last: 206 });
+  await writeFile(join(root, 'migrations/208_unreviewed.sql'), 'SELECT 1;');
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+  await rm(join(root, 'migrations/208_unreviewed.sql'));
+  await writeFile(join(root, 'migrations/208_event_publication.sql'), 'SELECT 1;');
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+  await writeFile(join(root, 'migrations/207_guild_tools.sql'), 'SELECT 1;');
+  assert.deepEqual(sourceMigrationProfile(root, installed), { ...installed, last: 208 });
+  await writeFile(join(root, 'migrations/210_work_public_sharing.sql'), 'SELECT 1;');
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+  await writeFile(join(root, 'migrations/209_event_management.sql'), 'SELECT 1;');
+  assert.deepEqual(sourceMigrationProfile(root, installed), { ...installed, last: 210 });
+  assert.deepEqual(installed, { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] });
+  for (const name of ['204_fixture.sql','205_fixture.sql','206_fixture.sql','207_guild_tools.sql','208_event_publication.sql','209_event_management.sql']) {
+    const path = join(root, 'migrations', name);
+    await rm(path);
+    assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+    await writeFile(path, 'SELECT 1;');
+  }
+  await writeFile(join(root, 'migrations/207_unreviewed.sql'), 'SELECT 1;');
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+  await rm(join(root, 'migrations/207_unreviewed.sql'));
+  // A truncated source cannot satisfy an installed minimum frontier of 210.
+  await rm(join(root, 'migrations/210_work_public_sharing.sql'));
+  assert.throws(() => sourceMigrationProfile(root, { ...installed, last: 210 }), { code: 'release_migration_frontier_mismatch' });
+  await writeFile(join(root, 'migrations/210_work_public_sharing.sql'), 'SELECT 1;');
+  for (const name of ['208_event_publication.sql','209_event_management.sql','210_work_public_sharing.sql']) {
+    await writeFile(join(root, 'migrations', name), 'CREATE ROLE unreviewed;');
+    assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+    await writeFile(join(root, 'migrations', name), 'SELECT 1;');
+  }
+});
+
 function pairedReleaseFixture() {
   const f = scheduledReleaseFixture();
   f.env = { ...f.env, GITHUB_EVENT_NAME: 'workflow_dispatch', RELEASE_MODE: 'deploy-pair', RELEASE_SCHEDULE: '' };

@@ -170,11 +170,11 @@ export function SquadsPanel({client,session,outcomesEnabled=false,eventLinksEnab
   const visibleSquads=squads.filter(squad=>(!onlyMine||squad.owner_ref===selfId||['active','pending'].includes(squad.membership?.state??''))&&(kind==='all'||squad.kind===kind)&&(!search||[squad.name,squad.purpose,squad.communication_channel_name,squad.owner_name].join(' ').toLocaleLowerCase().includes(search)));
   const filtered=Boolean(search||kind!=='all'||onlyMine),isOwner=detail?.owner_ref===selfId;
   return <section className="module-panel squad-panel">
-    <div hidden={Boolean(detail)||creating}>
-      <ModuleBanner eyebrow="" title="找夥伴，一起完成想做的事" description="先看小隊目標，再申請加入；隊長接受後才會成為成員。">
+    {!detail&&!creating&&<div>
+      <ModuleBanner eyebrow="" title="找夥伴，一起完成想做的事" description="">
         <button ref={createTrigger} className="btn btn-primary" onClick={()=>{detailRequest.current++;openSquad.current=null;setDetailLoading(false);setCreating(true);}}>成立一支小隊</button>
       </ModuleBanner>
-    </div>
+    </div>}
     <Status error={loadError||detailError||error} notice={notice}/>
     {(sending||lastFailureUnknown)&&<div className="squad-recovery" role="status">
       {pendingCommand&&<strong>待確認的操作：{squadCommandLabel(pendingCommand.path)}</strong>}
@@ -187,16 +187,19 @@ export function SquadsPanel({client,session,outcomesEnabled=false,eventLinksEnab
       <ReceivedInvitations client={client} mutate={mutate} busy={busy} refreshToken={refreshToken} onChanged={refreshAll}/>
       <section className="squad-directory" aria-labelledby="squad-directory-heading">
         <div className="squad-directory-heading"><h3 id="squad-directory-heading" ref={directoryHeading} tabIndex={-1}>尋找小隊</h3>
-          <div className="actions squad-scope" role="group" aria-label="小隊列表範圍">
+          {(squads.length>0||filtered)&&<div className="actions squad-scope" role="group" aria-label="小隊列表範圍">
             <button type="button" className="btn btn-ghost" aria-pressed={!onlyMine} onClick={()=>setOnlyMine(false)}>尋找小隊</button>
             <button type="button" className="btn btn-ghost" aria-pressed={onlyMine} onClick={()=>setOnlyMine(true)}>我的小隊與申請</button>
-          </div>
+          </div>}
         </div>
+        {(squads.length>0||filtered)&&<>
         <p className="field-hint">{onlyMine?'我建立、已加入或已送出申請的小隊；申請中不代表已加入。':'依目標找夥伴。收到的邀請在上方回覆，不需要再申請一次。'}</p>
         <div className="discovery-toolbar">
           <label className="field discovery-search">搜尋小隊<input data-guide-anchor="squads:search" type="search" value={query} maxLength={150} onChange={event=>setQuery(event.target.value)} placeholder="小隊名稱、目標、頻道或隊主"/></label>
           <label className="field">篩選小隊類型<select value={kind} onChange={event=>setKind(event.target.value as typeof kind)}><option value="all">全部類型</option>{kindOptions}</select></label>
         </div>
+        </>}
+        <details className="module-optional"><summary>說明</summary><p className="field-hint">先看小隊目標，再申請加入；隊長接受後才會成為成員。</p></details>
         <div className="discovery-feedback">
           {squads.length>0&&<p role="status">顯示 {visibleSquads.length} / {squads.length} 支小隊</p>}
           {filtered&&<button className="btn btn-ghost" onClick={()=>{setQuery('');setKind('all');}}>清除小隊篩選</button>}
@@ -216,7 +219,7 @@ export function SquadsPanel({client,session,outcomesEnabled=false,eventLinksEnab
           </div>
         </article>)}</div>
         {loading&&<p role="status">正在載入小隊…</p>}
-        {!loading&&!loadError&&!visibleSquads.length&&<div className="discovery-empty"><h4>{search||kind!=='all'?'沒有符合條件的小隊':onlyMine?'目前沒有你的小隊或申請':'還沒有小隊'}</h4><p className="field-hint">{onlyMine?'切回「尋找小隊」查看目標，再決定是否申請加入。':filtered?'試試其他名稱或清除搜尋與類型篩選。':'你可以成立小隊，寫下目標後邀請夥伴。'}</p></div>}
+        {!loading&&!loadError&&!visibleSquads.length&&<div className="discovery-empty"><h4>{search||kind!=='all'?'沒有符合條件的小隊':onlyMine?'目前沒有你的小隊或申請':'還沒有小隊'}</h4><p className="field-hint">{onlyMine?'切回「尋找小隊」找夥伴。':filtered?'試試其他關鍵字或清除篩選。':'你可以成立小隊，寫下目標後邀請夥伴。'}</p></div>}
         {loadError&&<button className="btn btn-ghost" disabled={loading} onClick={()=>void load(failedOffset)}>重新載入小隊</button>}
         {nextOffset!==null&&<button className="btn btn-ghost" disabled={loading} onClick={()=>void load(nextOffset)}>查看更多小隊</button>}
       </section>

@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { navigate, navigateAdmin, openAdminNavigation, signOut } from './navigation.js';
+import { openWorkForm } from './sharing-authoring-fixture.js';
 import { test, expect, type Page } from './fixtures.js';
 
 // Screenshots are audit evidence only; they never replace the assertions below.
@@ -31,7 +32,7 @@ async function layoutProblems(page: Page) {
 }
 const guildCaps = { managed_guilds: [{ guild_key: 'synthetic-guild', name: '測試公會' }], managed_books: [{ book_id: 'video-autopilot', title: '測試剪輯技能' }], can_discuss: true, can_review_pulls: true };
 const viewports = [['desktop', { width: 1280, height: 900 }], ['mobile', { width: 390, height: 844 }]] as const;
-const memberPages: [string, string][] = [['supplier', '我有東西要賣'], ['retail', '我可以賣東西'], ['marketing', '行銷工作室'], ['workbench', '任務協作'], ['showcase', '作品與合作'], ['engagement', '合作紀錄'], ['guild-workspace', '公會管理']];
+const memberPages: [string, string, string][] = [['supplier', '我有東西要賣', '供貨工具'], ['retail', '我可以賣東西', '零售工具'], ['marketing', '行銷工作室', '行銷'], ['workbench', '任務協作', '工作'], ['showcase', '作品與合作', '探索'], ['engagement', '合作紀錄', '合作紀錄'], ['guild-workspace', '公會管理', '公會']];
 
 test('supplier reply needs an explicit choice and manual-quantity products do not ask for stock', async ({ page }) => {
   await login(page);
@@ -110,6 +111,7 @@ test('cooperation cards say who acts next and link between showcase and records'
   const title = '稽核・合作提示範例';
   await login(page, 'client@local.test');
   await navigate(page, '作品與合作');
+  await openWorkForm(page);
   await expect(page.getByLabel('作品連結（選填）', { exact: true })).toBeVisible();
   await expect(page.getByLabel('成果引用（例如 artifact:template-v1）', { exact: true })).toBeHidden();
   await page.getByLabel('作品標題', { exact: true }).fill(title);
@@ -123,7 +125,7 @@ test('cooperation cards say who acts next and link between showcase and records'
   await settled(page);
   if (await page.getByText('還沒有合作紀錄', { exact: true }).count()) {
     await page.getByRole('link', { name: '作品與合作', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '作品與合作', level: 1, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   } else await navigate(page, '作品與合作');
   const showcase = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) }).first();
   await showcase.getByRole('button', { name: '我想找你合作', exact: true }).click();
@@ -194,10 +196,10 @@ test('every operations page fits desktop and phone with one h1 and labelled fiel
   for (const [viewport, size] of viewports) {
     await page.setViewportSize(size);
     await login(page);
-    for (const [id, label] of memberPages) {
+    for (const [id, label, heading] of memberPages) {
       const navigationLabel = id === 'supplier' ? 'AI 整理供貨商品' : id === 'retail' ? 'AI 製作銷售網站' : label;
       await navigate(page, navigationLabel);
-      await expect(page.getByRole('heading', { name: label, level: 1, exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: heading, level: 1, exact: true })).toBeVisible();
       await settled(page);
       expect(await layoutProblems(page), `${id} ${viewport}`).toEqual({ overflow: false, offenders: [], unlabeled: [], h1: 1 });
       await page.screenshot({ path: `${evidence}/after-${id}-${viewport}.png`, fullPage: true });
@@ -222,12 +224,13 @@ test('admin console fits phone and desktop and never shows an invalid audit time
   for (const [viewport, size] of viewports) {
     await page.setViewportSize(size);
     await page.goto('/admin');
+    await navigateAdmin(page,'會員管理');
     await expect(page.getByRole('heading', { name: '會員管理', exact: true })).toBeVisible();
     await page.locator('.admin-member-row summary').click();
     await expect(page.getByRole('button',{name:'任命管理員',exact:true})).toBeVisible();
     await page.screenshot({path:`${evidence}/after-admin-會員操作-${viewport}.png`,fullPage:true});
     await page.locator('.admin-member-row summary').click();
-    for (const [tab, heading] of [['會員管理', '會員管理'], ['公會管理', '公會管理'], ['會長與維護者', '技能書維護者'], ['操作紀錄', '操作紀錄']]) {
+    for (const [tab, heading] of [['會員管理', '會員管理'], ['公會管理', '公會管理'], ['技能書維護者', '技能書維護者'], ['操作紀錄', '操作紀錄']]) {
       await navigateAdmin(page,tab);
       await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${tab} ${viewport}`).toBe(true);
@@ -245,8 +248,8 @@ test('admin console fits phone and desktop and never shows an invalid audit time
         const rgb=(value:string)=>(value.match(/[\d.]+/g)??[]).slice(0,3).map(Number);
         const luminance=(value:string)=>rgb(value).map(part=>{const c=part/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;}).reduce((sum,c,index)=>sum+c*[.2126,.7152,.0722][index],0);
         const contrast=(a:string,b:string)=>{const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
-        const row=document.querySelector<HTMLElement>('.admin-member-list')!,nav=document.querySelector<HTMLElement>('.admin-tabs')!;
-        return ['.admin-member-identity h3','.admin-member-identity span','.admin-member-positioning'].map(selector=>contrast(getComputedStyle(document.querySelector<HTMLElement>(selector)!).color,getComputedStyle(row).backgroundColor)).concat(contrast(getComputedStyle(document.querySelector<HTMLElement>('.admin-nav-label')!).color,getComputedStyle(nav).backgroundColor));
+        const row=document.querySelector<HTMLElement>('.admin-member-list')!,nav=document.querySelector<HTMLElement>('.admin-tabs button[aria-current="page"]')!;
+        return ['.admin-member-identity h3','.admin-member-identity span','.admin-member-positioning'].map(selector=>contrast(getComputedStyle(document.querySelector<HTMLElement>(selector)!).color,getComputedStyle(row).backgroundColor)).concat(contrast(getComputedStyle(nav).color,getComputedStyle(nav).backgroundColor));
       });
       expect(Math.min(...ratios),`${theme} ${viewport} admin text contrast`).toBeGreaterThanOrEqual(4.5);
       await page.screenshot({path:`${evidence}/after-admin-${theme}-${viewport}.png`,fullPage:true});

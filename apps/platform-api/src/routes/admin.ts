@@ -1,3 +1,6 @@
+import {eventOrganizerClaims,reviewEventOrganizer} from '../../../../modules/community/event-claims.js';
+import {adminTools,disableToolAsAdmin} from '../../../../modules/guild-tools/admin.js';
+import {listHeldShares,moderateShare} from '../../../../modules/shares/moderation.js';
 import {createCommunityCertificationAdminRoutes} from './community-certification.js';
 import type {EffectJournalPort} from '../../../../modules/agent-commerce/operations/journal/journal.js';
 import {createCommerceAdmissionRoutes} from './commerce-admissions.js';
@@ -57,7 +60,10 @@ export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=ver
   if(communityCertificationEnabled===true)app.route('/community-certifications',createCommunityCertificationAdminRoutes(pool,verifyAccess,github.origin,command));
   const paging=(c:Context<AdminEnv>)=>z.object({limit:z.coerce.number().int().min(1).max(100).default(25),offset:z.coerce.number().int().min(0).max(100000).default(0)}).parse(c.req.query());
   const result=(c:Context<AdminEnv>,value:any)=>{if(value.aggregate_version)c.header('ETag',`"${value.aggregate_version}"`);return c.json(value);};
-  app.get('/bootstrap',async c=>c.json({...await adminBootstrap(pool,c.get('admin')),community_certification_enabled:communityCertificationEnabled===true,csrf_token:c.get('adminCsrf'),pending_guild_appointments:await nominatedGuildAppointments(pool,c.get('admin'))}));
+  app.get('/shares/held',async c=>{const {limit,offset}=paging(c),items=await listHeldShares(pool,c.get('admin'),limit+1,offset);return c.json({items:items.slice(0,limit),next_offset:items.length>limit?offset+limit:null});});
+  app.post('/shares/:id/restore',async c=>c.json(await moderateShare(pool,await command(c),z.uuid().parse(c.req.param('id')),'restore')));
+  app.post('/shares/:id/confirm',async c=>c.json(await moderateShare(pool,await command(c),z.uuid().parse(c.req.param('id')),'confirm')));
+  app.get('/bootstrap',async c=>c.json({...await adminBootstrap(pool,c.get('admin')),community_certification_enabled:communityCertificationEnabled===true,store_admissions_enabled:guildLaunchpadEnabled,github_setup_enabled:Boolean(github.tokenKey),tool_reports_enabled:true,csrf_token:c.get('adminCsrf'),pending_guild_appointments:await nominatedGuildAppointments(pool,c.get('admin'))}));
   app.get('/github-app',async c=>c.json({...await githubAppSetupStatus(pool,c.get('admin')),setup_available:Boolean(github.tokenKey)}));
   app.post('/github-app/start',async c=>{
     z.object({}).strict().parse(await c.req.json());
@@ -74,7 +80,7 @@ export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=ver
   app.post('/members/:id/admin',async c=>result(c,await appointPlatformAdmin(pool,await command(c),c.req.param('id'))));
   app.post('/members/:id/status',async c=>result(c,await changeMemberStatus(pool,await command(c),c.req.param('id'))));
   app.get('/guild-applications',async c=>{const {limit,offset}=paging(c),state=z.enum(['pending','approved','declined','all']).parse(c.req.query('state')??'pending');return c.json(await adminApplications(pool,c.get('admin'),limit,offset,state));});
-  app.get('/events',async c=>c.json({items:await listAdminEventQueue(pool,c.get('admin'))}));
+  app.get('/events',async c=>{const {limit,offset}=paging(c),items=await listAdminEventQueue(pool,c.get('admin'),limit+1,offset);return c.json({items:items.slice(0,limit),next_offset:items.length>limit?offset+limit:null});});
   app.post('/events/:id/review',async c=>result(c,await reviewEventAsAdmin(pool,await command(c),z.uuid().parse(c.req.param('id')))));
   app.post('/guild-applications/:id/review',async c=>result(c,await reviewGuildApplication(pool,await command(c),c.req.param('id'))));
   app.get('/guild-discovery',async c=>c.json({...await guildDiscoveryReport(pool,c.get('admin').community_id),ai_configured:Boolean(github.guildReviewer)}));
@@ -83,6 +89,8 @@ export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=ver
     await refreshGuildDiscoveryReports(pool,{communityId:c.get('admin').community_id,reviewer:github.guildReviewer});
     return c.json({...await guildDiscoveryReport(pool,c.get('admin').community_id),ai_configured:Boolean(github.guildReviewer)});
   });
+  app.get('/guild-tools',async c=>{const {limit,offset}=paging(c);return c.json(await adminTools(pool,c.get('admin'),c.req.query('reported')==='true',limit,offset));});
+  app.post('/guild-tools/:id/disable',async c=>c.json(await disableToolAsAdmin(pool,await command(c),c.req.param('id'))));
   app.get('/guilds',async c=>c.json({items:await adminGuilds(pool,c.get('admin'))}));
   app.get('/guilds/:key/master-candidates',async c=>c.json(await adminGuildMasterCandidates(pool,c.get('admin'),c.req.param('key'),c.req.query())));
   app.post('/guilds/:key/master',async c=>result(c,await appointGuildMaster(pool,await command(c),z.string().min(1).max(100).parse(c.req.param('key')))));
@@ -91,6 +99,8 @@ export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=ver
   app.get('/admins',async c=>c.json({items:await adminNominees(pool,c.get('admin'))}));
   app.post('/admins/:id/status',async c=>result(c,await changePlatformAdminStatus(pool,await command(c),c.req.param('id'))));
   app.get('/audit',async c=>c.json({items:await adminAudit(pool,c.get('admin'))}));
+  app.get('/event-organizer-claims',async c=>{const {limit,offset}=paging(c);return c.json(await eventOrganizerClaims(pool,c.get('admin'),z.enum(['pending','all']).parse(c.req.query('state')??'all'),limit,offset));});
+  app.post('/event-organizer-claims/:id/review',async c=>c.json(await reviewEventOrganizer(pool,await command(c),z.uuid().parse(c.req.param('id')))));
   app.get('/author-claims',async c=>c.json(await adminAuthorClaims(pool,c.get('admin'),z.enum(['review','verified']).parse(c.req.query('queue')??'review'))));
   app.post('/author-claims/:id/review',async c=>{
     const value=await reviewAuthorClaim(pool,await command(c),z.uuid().parse(c.req.param('id')));

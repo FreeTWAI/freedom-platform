@@ -1,3 +1,5 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route';
+import {clearMemberAgentEvents} from './navigation.js';
 import {openChat} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
@@ -88,6 +90,7 @@ async function removeOwned(db:Pool,own:Owned){
     await q('DELETE FROM outbox WHERE transition_id IN (SELECT transition_id FROM transition_journal WHERE actor_ref=ANY($1::uuid[]))',[users]);
     await q('DELETE FROM transition_journal WHERE actor_ref=ANY($1::uuid[])',[users]);
     for(const table of ['member_client_errors','command_receipts','sessions'])await q(`DELETE FROM ${table} WHERE user_id=ANY($1::uuid[])`,[users]);
+    await clearMemberAgentEvents(client,users);
     await q('DELETE FROM users WHERE user_id=ANY($1::uuid[])',[users]);
     await client.query('COMMIT');
     for(const [sql,values] of [['positioning_guild_catalog WHERE guild_key=ANY($1::text[])',[guilds]],['guild_creation_applications WHERE application_id=ANY($1::uuid[])',[applications]],
@@ -375,7 +378,7 @@ test('after leaving a guild and a squad through the real API, the open chat clea
       await noOverflow(l);await tall([lThread.getByRole('button',{name:copy[kind].back,exact:true})]);
       await shot(l,kind==='guild'?'revoked-320':'revoked-squad-320');
       await lThread.getByRole('button',{name:copy[kind].back,exact:true}).click();
-      await expect(l).toHaveURL(new RegExp(`${copy[kind].hash}$`));
+      await expect.poll(()=>new URL(l.url()).hash).toBe(canonicalHash(copy[kind].hash));
 
       // The room keeps both messages for the stayer; nothing was written after the leave.
       expect(await count(db,'member_channel_messages WHERE kind=$1 AND channel_key=$2 AND sender_ref=$3',[kind,key,leaver.id])).toBe(1);

@@ -138,12 +138,14 @@ test('private instructions retain safety wording while chat instructions remain 
   assert.doesNotMatch(chat, /synthetic-private-grant|agent-api|Authorization: Bearer/);
 });
 
-test('SkillUpload keeps its original export wired to the same leaf function', () => {
-  const source = readFileSync(new URL('../../apps/portal-web/src/modules/SkillUpload.tsx', import.meta.url), 'utf8');
+test('SkillSubmission keeps its original export wired to the same leaf function', () => {
+  const source = readFileSync(new URL('../../apps/portal-web/src/modules/SkillSubmission.tsx', import.meta.url), 'utf8');
   const module = { exports: {} as { agentInstruction: typeof agentInstruction } };
   runInNewContext(transformSync(source, { loader: 'tsx', format: 'cjs' }).code, {
     module, exports: module.exports,
-    require: (name: string) => name === './skill-upload-instruction' ? { agentInstruction, SKILL_UPLOAD_GUIDE } : {},
+    require: (name: string) => name === './skill-upload-instruction'
+      ? { agentInstruction, SKILL_UPLOAD_GUIDE }
+      : name === './SkillSubmissionPageFields' ? { blankSkillPageFields: () => ({}) } : {},
   });
   assert.equal(module.exports.agentInstruction, agentInstruction);
   assert.equal(module.exports.agentInstruction(origin, secret), expectedPlain);

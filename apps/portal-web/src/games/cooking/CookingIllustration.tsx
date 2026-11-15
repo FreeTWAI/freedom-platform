@@ -33,7 +33,7 @@ export function CookingScene({run,point,onPointerDown,onPointerMove,onPointerUp,
   // reserve a gap between neighbours inside the narrower preparation span.
   const mushroom=s.kind==='slice'&&ingredientVisual(s.ingredient,s.shape)?.id==='mushroom';
   const wholeSize=mushroom?Math.min(65,(800*preparationSpan('mushroom')/(s.goal+1)-4)*70/52):65;
-  return <svg className={`ck-scene ck-scene-${s.kind}`} viewBox="0 0 800 560" role="img" aria-label={`${s.title}操作區`} data-cooking-scene={s.kind} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} onLostPointerCapture={onPointerCancel}>
+  return <svg className={`ck-scene ck-scene-${s.kind}`} viewBox="0 0 800 560" role={s.kind==='pan'?'application':'img'} tabIndex={s.kind==='pan'&&run.status==='playing'?0:undefined} aria-keyshortcuts={s.kind==='pan'?'Space F':undefined} aria-label={`${s.title}操作區${s.kind==='pan'?'，按住鍋面向上推鏟再放開；鍵盤空白鍵或 F 翻炒':''}`} data-cooking-scene={s.kind} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} onLostPointerCapture={onPointerCancel}>
     <rect width="800" height="560" fill="#efe2ca"/>
     <path d="M0 510H800M0 38H800" stroke="#d9c5a8" strokeWidth="2"/>
     {s.kind==='slice'?<>

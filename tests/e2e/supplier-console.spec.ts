@@ -83,7 +83,7 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
     await expect(primary).toBeVisible();
     await expect(a.getByText('成員身分：實習成員', {exact: true})).toBeVisible();
     await primary.getByRole('button', {name: '開始供貨設定', exact: true}).click();
-    await expect(a).toHaveURL(/#stores\/supply\/setup$/);
+    await expect(a).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog\/setup$/);
     const flow = a.getByRole('region', {name: '啟動應用', exact: true});
     await flow.getByLabel('業務空間名稱', {exact: true}).fill(`山林供應空間 ${suffix}`);
     await flow.getByRole('button', {name: '建立業務空間', exact: true}).click();
@@ -102,8 +102,8 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
     await flow.getByRole('button', {name: '確認建立供貨空間', exact: true}).click();
     await flow.getByRole('button', {name: '繼續供貨設定', exact: true}).click();
 
-    await expect(a).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/supply$/);
-    const supplyMatch = new URL(a.url()).hash.match(/^#stores\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/supply$/);
+    await expect(a).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/supply$/);
+    const supplyMatch = new URL(a.url()).hash.match(/^#guilds\/guild_product_quality_supply\/tools\/catalog\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/supply$/);
     expect(supplyMatch).not.toBeNull();
     const [, tenantId, instanceId] = supplyMatch!;
     const aRoot = `/tenants/${tenantId}/storefronts/${instanceId}`;
@@ -241,7 +241,7 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
     await expect(todoRow).toContainText('待確認售價申請');
     await todoRow.getByRole('link', {name: '審核', exact: true}).click();
 
-    await expect(a).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/supply\/terms\/[0-9a-f-]{36}$/);
+    await expect(a).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/supply\/terms\/[0-9a-f-]{36}$/);
     await expect(a.getByRole('heading', {level: 1, name: '審核售價申請', exact: true})).toBeVisible();
     await expect(consoleRoot).toContainText(bStoreName);
     await expect(consoleRoot).toContainText('$220.00');
@@ -360,7 +360,7 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
     const catalogCard = a.locator('article.card').filter({has: a.getByRole('heading', {name: catalogName, exact: true})});
     await expect(catalogCard).toBeVisible();
     await catalogCard.getByRole('link', {name: '查看商品與供貨', exact: true}).click();
-    await expect(a).toHaveURL(new RegExp(`#${storePrefix}/supply$`));
+    await expect(a).toHaveURL(new RegExp(`#guilds/guild_product_quality_supply/tools/catalog/${storePrefix.slice("stores/".length)}/supply$`));
     await expect(a.getByRole('heading', {level: 1, name: '營運概覽', exact: true})).toBeVisible();
     await assertConsoleWording(a);
 
@@ -368,7 +368,7 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
     const guildActions = a.getByRole('region', {name: '主要動作', exact: true});
     await expect(guildActions).toBeVisible();
     await guildActions.getByRole('button', {name: '查看商品與供貨', exact: true}).click();
-    await expect(a).toHaveURL(new RegExp(`#${storePrefix}/supply$`));
+    await expect(a).toHaveURL(new RegExp(`#guilds/guild_product_quality_supply/tools/catalog/${storePrefix.slice("stores/".length)}/supply$`));
     await expect(a.getByRole('heading', {level: 1, name: '營運概覽', exact: true})).toBeVisible();
     await assertConsoleWording(a);
 
@@ -447,7 +447,7 @@ test('SC-E2E-02 retail owner sees the same console with 已開零售 and 前往�
   await assertConsoleWording(page);
 
   await storeLink.click();
-  await expect(page).toHaveURL(new RegExp(`#${store.hash}$`));
+  await expect(page).toHaveURL(new RegExp(`#guilds/guild_commerce_sales/tools/store/${store.hash.slice("stores/".length)}$`));
   await expect(page.locator('.hosted-store')).toBeVisible();
   await expect(page.locator('.supplier-console')).toHaveCount(0);
   await expect(page.locator('.hosted-store-product').filter({hasText: retailProductTitle})).toBeVisible();
@@ -548,14 +548,14 @@ async function progressOverview(page:Page){
 async function startSupplyJourney(page:Page){
  await open(page,`guilds/${supplierGuild}`);
  await page.getByRole('region',{name:'主要動作',exact:true}).getByRole('button',{name:'開始供貨設定',exact:true}).click();
- await expect(page).toHaveURL(/#stores\/supply\/setup$/);
+ await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog\/setup$/);
  return page.getByRole('region',{name:'啟動應用',exact:true});
 }
 async function confirmSupplyJourney(page:Page,flow:Locator){
  await flow.getByRole('button',{name:'確認供貨空間',exact:true}).click();
  await flow.getByRole('button',{name:'確認建立供貨空間',exact:true}).click();
  await flow.getByRole('button',{name:'繼續供貨設定',exact:true}).click();
- await expect(page).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/supply$/);
+ await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/supply$/);
 }
 async function assertSupplyBoundary(page:Page){
  const guide=progressGuide(page);
@@ -664,10 +664,10 @@ test('job progress: existing business space resumes the same unfinished instance
  for(const width of [390,1440])await captureProgressEvidence(page,info,card,'job-progress-guild-resume',width);
  await card.getByRole('button',{name:'繼續設定商品庫',exact:true}).click();await expect(page).toHaveURL(new RegExp(hash+'$'));
  await page.getByRole('link',{name:'切換事業',exact:true}).click();
- const listResume=page.getByRole('link',{name:'繼續設定商品庫',exact:true});await expect(listResume).toHaveAttribute('href',hash);await listResume.click();await expect(page).toHaveURL(new RegExp(hash+'$'));
+ const listResume=page.getByRole('link',{name:'繼續設定商品庫',exact:true});await expect(listResume).toHaveAttribute('href',hash.replace('#guilds/guild_product_quality_supply/tools/catalog/','#stores/'));await listResume.click();await expect(page).toHaveURL(new RegExp(hash+'$'));
  await page.getByRole('link',{name:'返回公會',exact:true}).click();await card.getByRole('button',{name:'開始供貨設定',exact:true}).click();
  const setup=page.getByRole('region',{name:'開始供貨設定',exact:true}),resume=setup.getByRole('region',{name:'繼續未完成的商品庫',exact:true});
- await expect(resume.getByRole('link',{name:'繼續設定商品庫',exact:true})).toHaveAttribute('href',hash);
+ await expect(resume.getByRole('link',{name:'繼續設定商品庫',exact:true})).toHaveAttribute('href',hash.replace('#guilds/guild_product_quality_supply/tools/catalog/','#stores/'));
  await expect(setup.getByRole('region',{name:'啟動應用',exact:true})).toHaveCount(0);
  await expect(setup.getByRole('button',{name:'建立另一個商品庫',exact:true})).toHaveClass(/btn-ghost/);
  for(const width of [390,1440])await captureProgressEvidence(page,info,setup,'job-progress-store-resume',width);

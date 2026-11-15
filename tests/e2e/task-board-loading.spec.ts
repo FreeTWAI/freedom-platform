@@ -11,7 +11,7 @@ async function login(page:Page){
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
 }
 const workSection=(page:Page)=>page.getByRole('region',{name:'工坊工作列表',exact:true});
 const projectSection=(page:Page)=>page.getByRole('region',{name:'GitHub 共創專案',exact:true});
@@ -85,7 +85,9 @@ test('Esc-cancelled composition keeps older pages without re-reading page one',a
   await workSection(page).getByRole('button',{name:'載入較早的工坊工作',exact:true}).click();
   const older=workSection(page).getByRole('heading',{name:'分頁工作 older',exact:true});
   await expect(older).toBeVisible();
-  const baseline=[...cursors];expect(baseline).toEqual([null,'synthetic-next']);
+  // The visible guild tool opens execution before its discovery view; each
+  // mounts its own first page. IME cancellation must preserve this exact baseline.
+  const baseline=[...cursors];expect(baseline).toEqual([null,null,'synthetic-next']);
   await page.clock.install();
   const search=page.getByLabel('搜尋任務',{exact:true});
   await search.dispatchEvent('compositionstart');await search.fill('設');

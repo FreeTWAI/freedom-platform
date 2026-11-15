@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {test, expect, type Browser, type Locator, type Page} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {navigate, navigateAdmin} from './navigation.js';
 import {DEMO_COMMUNITY, DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 
@@ -408,7 +408,8 @@ test('admin category tools are reading-width cards and send the classification a
     return route.fulfill({json: {items: [], next_offset: null}});
   });
   await page.goto('/admin');
-  await page.getByRole('button', {name: '公會管理', exact: true}).click();
+  await navigateAdmin(page, '公會管理');
+  await page.getByText('公會設定', {exact: true}).click();
   const classifyToggle = page.getByRole('button', {name: '分類與能力標籤', exact: true});
   const switchToggle = page.getByRole('button', {name: '分類與主力切換', exact: true});
   await expect(classifyToggle).toHaveAttribute('aria-expanded', 'false');

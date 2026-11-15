@@ -42,6 +42,10 @@ const PUBLIC_JOINS = `FROM community_social_publications publication
 const PUBLIC_VISIBLE = `publication.enabled AND p.state='active' AND ${AUTHOR_VISIBLE} AND ${MEDIA_READY}
   AND publication.post_revision=p.edit_revision AND publication.media_version=p.media_version
   AND publication.thumbnail_sha256 IS NOT DISTINCT FROM (${THUMBNAIL_HASH})`;
+// Shared by the batched promotion-results query so both readers enforce the
+// same publication, author and media conditions in the same snapshot.
+export const promotionPublicSocialJoins=PUBLIC_JOINS;
+export const promotionPublicSocialVisible=PUBLIC_VISIBLE;
 
 type SharingRow = {
   post_id: string; community_id: string; author_user_id: string; state: string;
@@ -203,4 +207,16 @@ export async function readPublicSocialPostImage(pool: Pool, id: string, configur
     if (error instanceof Problem && error.status === 404) throw new Problem(404, 'not_found', '找不到這則貼文。');
     throw error;
   }
+}
+
+export async function publicSocialPostIds(pool: Pool | PoolClient, ids: readonly string[], configured?: string): Promise<Set<string>> {
+  const valid = [...new Set(ids.filter(id => z.uuid().safeParse(id).success).map(id => id.toLowerCase()))];
+  if (!valid.length) return new Set();
+  const community = await resolvePublicCommunity(pool, configured);
+  if (!community) return new Set();
+  const rows = (await pool.query(
+    `SELECT p.post_id::text AS id ${PUBLIC_JOINS} WHERE p.post_id=ANY($1::uuid[]) AND p.community_id=$2 AND ${PUBLIC_VISIBLE}`,
+    [valid, community],
+  )).rows as { id: string }[];
+  return new Set(rows.map(row => row.id.toLowerCase()));
 }

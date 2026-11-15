@@ -21,7 +21,7 @@ test('INGEST-PROCESS actual Chromium cross-site HTTPS setup stores an encrypted 
   const foreign=await f.member();await assert.rejects(results.readCurrent(foreign.actor,{workId:member.work.workId}));
   const main=await f.main.request('snapshot'),broker=await f.broker.request('snapshot');
   assert.notEqual(main.pid,broker.pid);assert.notEqual(main.pid,process.pid);
-  for(const forbidden of ['secret','kekBytes','cipherUrl','providerOrigin','responsePrivateJwk'])assert(!main.configKeys.includes(forbidden));
+  for(const forbidden of ['secret','kekBytes','cipherUrl','cipherPassword','executorPassword','providerOrigin','responsePrivateJwk'])assert(!main.configKeys.includes(forbidden));
   const entry=await readFile(new URL('./credential-ingest-fixtures/main-child.ts',import.meta.url),'utf8');assert(!entry.includes(f.secret));assert(!entry.includes('SYNTHETIC_DIRECT_INGEST_KEY'));assert(!entry.includes('/vault.js'));
   assert(!JSON.stringify(main).includes(f.secret));assert(!f.main.logs().includes(f.secret));
   assert(broker.requests.every((r:{cookie:string|null})=>!r.cookie?.includes('__Host-freedom_session')));

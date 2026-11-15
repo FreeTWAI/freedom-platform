@@ -26,7 +26,36 @@
     "packages/client-connections/**",
     "packages/sdk/member-workspace.mjs",
     "apps/portal-web/src/modules/ClientConnections.tsx",
-    "tests/e2e/onboarding-members.spec.ts"
+    "tests/e2e/onboarding-members.spec.ts",
+    "modules/client-connections/agent-authority.ts",
+    "modules/client-connections/agent-tokens.ts",
+    "apps/platform-api/src/agent-allowlist.ts",
+    "apps/platform-api/src/agent-boundary.ts",
+    "apps/platform-api/src/routes/agent-tokens.ts",
+    "migrations/205_agent_tokens.sql",
+    "tests/runtime/agent-door.test.ts",
+    "scripts/build-agent-contract.mjs",
+    "contracts/agent/v1/**",
+    "modules/client-connections/agent-guide.ts",
+    "modules/client-connections/agent-contract.ts",
+    "apps/portal-web/src/modules/agent-operations.ts",
+    "modules/client-connections/agent-feed.ts",
+    "apps/platform-api/src/routes/agent-feed.ts",
+    "apps/portal-web/src/modules/AgentHandoff.tsx",
+    "apps/portal-web/src/modules/AgentTokens.tsx",
+    "apps/portal-web/src/modules/AgentTokens.css",
+    "tests/e2e/agent-door.spec.ts",
+    "tests/runtime/security-review-agent.test.ts",
+    "apps/platform-api/src/agent-schemas.ts",
+    "tests/runtime/agent-contract.test.ts",
+    "apps/platform-api/src/agent-mcp.ts",
+    "tests/runtime/agent-mcp.test.ts",
+    "modules/client-connections/agent-discovery.ts",
+    "tests/runtime/agent-discovery.test.ts",
+    "packages/sdk/agent-operations.mjs",
+    "packages/sdk/agent-client.mjs",
+    "packages/sdk/agent-client.d.mts",
+    "tests/runtime/sdk-agent-client.test.ts"
   ],
   "public_exports": [
     "modules/client-connections/service.ts"
@@ -81,6 +110,41 @@
         "client-connections.requests.read"
       ],
       "auth_profile": "client-read-bearer"
+    },
+    {
+      "surface_id": "client-connections.agent-mcp",
+      "kind": "http",
+      "entry": "apps/platform-api/src/agent-mcp.ts",
+      "operations": [
+        "initialize",
+        "notifications/initialized",
+        "ping",
+        "tools/list",
+        "tools/call"
+      ],
+      "auth_profile": "member-agent-bearer"
+    },
+    {
+      "surface_id": "client-connections.agent-tokens",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/agent-tokens.ts",
+      "operations": [
+        "client-connections.agent-tokens.list",
+        "client-connections.agent-tokens.create",
+        "client-connections.agent-tokens.renew",
+        "client-connections.agent-tokens.revoke",
+        "client-connections.agent-tokens.confirm"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "client-connections.agent-feed",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/agent-feed.ts",
+      "operations": [
+        "client-connections.agent-events.read"
+      ],
+      "auth_profile": "member-session-or-agent-bearer"
     }
   ]
 }

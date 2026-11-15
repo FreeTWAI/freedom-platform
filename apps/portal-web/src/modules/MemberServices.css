@@ -21,6 +21,10 @@
 .service-contacts{display:grid;gap:.6rem}
 .service-contact-row{display:grid;grid-template-columns:minmax(0,9rem) minmax(0,1fr);gap:.5rem;align-items:end}
 .field-error{color:var(--danger);font-size:.8rem}
+.service-filters-disclosure>summary,.service-help>summary,.service-more>summary{display:list-item;min-height:44px;padding:.55rem 0;cursor:pointer;font-size:.9rem;font-weight:600;box-sizing:border-box}
+.service-more[open]{flex-basis:100%}
+.service-more-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-top:.35rem}
+.service-filters-disclosure[open]>.service-filters{margin-top:.5rem}
 .service-filters{display:flex;flex-wrap:wrap;gap:.5rem}
 .service-filters .btn,.service-actions .btn,.service-form .btn{width:auto}
 .service-filter,.service-actions .btn,.service-form .btn,.service-mine .btn{min-height:44px}

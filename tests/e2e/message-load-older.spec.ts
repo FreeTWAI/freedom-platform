@@ -1,3 +1,4 @@
+import {clearMemberAgentEvents} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
 import {test,expect,type Browser,type BrowserContext,type Page} from './fixtures.js';
@@ -24,10 +25,11 @@ test.afterEach(async()=>{
   try{
     await q.query('BEGIN');
     await q.query('DELETE FROM member_direct_messages WHERE sender_ref=ANY($1::uuid[]) OR recipient_ref=ANY($1::uuid[])',[ids]);
-    for(const table of ['positioning_profession_memberships','sessions','member_client_errors','command_receipts'])await q.query(`DELETE FROM ${table} WHERE user_id=ANY($1::uuid[])`,[ids]);
+    for(const table of ['community_social_reads','positioning_profession_memberships','sessions','member_client_errors','command_receipts'])await q.query(`DELETE FROM ${table} WHERE user_id=ANY($1::uuid[])`,[ids]);
     await q.query('DELETE FROM member_notifications WHERE recipient_ref=ANY($1::uuid[])',[ids]);
     await q.query('DELETE FROM outbox WHERE transition_id IN (SELECT transition_id FROM transition_journal WHERE actor_ref=ANY($1::uuid[]))',[ids]);
     await q.query('DELETE FROM transition_journal WHERE actor_ref=ANY($1::uuid[])',[ids]);
+    await clearMemberAgentEvents(q,ids);
     await q.query('DELETE FROM users WHERE user_id=ANY($1::uuid[])',[ids]);await q.query('COMMIT');
   }catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();await db.end();}
 });

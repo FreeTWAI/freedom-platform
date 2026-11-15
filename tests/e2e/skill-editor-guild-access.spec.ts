@@ -59,7 +59,8 @@ async function login(page: Page) {
 }
 async function openWorkspace(page: Page) {
   await page.goto('/#guild-workspace');
-  await expect(page.getByRole('heading', { level: 1, name: '公會管理' })).toBeVisible();
+  await expect(page).toHaveURL(/#guilds\/manage$/);
+  await expect(page.getByRole('heading', { level: 1, name: '公會' })).toBeVisible();
   await expect(page.getByText('正在載入管理權限…', { exact: true })).toHaveCount(0);
 }
 const fits = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
@@ -83,7 +84,7 @@ for (const [viewport, size] of viewports) {
 
     await link.click();
     await expect(page).toHaveURL(/#guilds$/);
-    await expect(page.getByRole('heading', { level: 1, name: '職業公會' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '公會' })).toBeVisible();
     expect(calls.joins).toEqual([]);
     expect(calls.editorGets).toBe(0);
 
@@ -243,20 +244,17 @@ test('admin nav group labels keep one line above their buttons in the sidebar an
   for (const [viewport, size] of viewports) {
     await page.setViewportSize(size);
     await page.goto('/admin');
-    await expect(page.getByRole('heading', { name: '會員管理', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '待處理', exact: true })).toBeVisible();
     const navigation=await openAdminNavigation(page);
-    for (const name of ['人員與權限', '公會與活動', '系統']) {
-      const group = navigation.getByRole('group', { name, exact: true });
-      const label = group.locator('.admin-nav-label'), buttons = group.getByRole('button');
-      const box = (await label.boundingBox())!, fontSize = await label.evaluate(el => parseFloat(getComputedStyle(el).fontSize)), lineHeight = await label.evaluate(el => parseFloat(getComputedStyle(el).lineHeight) || parseFloat(getComputedStyle(el).fontSize) * 1.6);
+    const closeBox = viewport === 'mobile' ? (await navigation.getByRole('button', { name: '關閉管理選單', exact: true }).boundingBox())! : null;
+    for (const name of ['待處理', '人員與公會', '系統']) {
+      const button = navigation.getByRole('button', { name, exact: true });
+      const target = (await button.boundingBox())!, fontSize = await button.evaluate(el => parseFloat(getComputedStyle(el).fontSize)), lineHeight = await button.evaluate(el => parseFloat(getComputedStyle(el).lineHeight) || parseFloat(getComputedStyle(el).fontSize) * 1.6), textHeight = await button.evaluate(el => { const range = document.createRange(); range.selectNodeContents(el); return range.getBoundingClientRect().height; });
       expect(fontSize, `${name} ${viewport}`).toBe(14);
-      expect(box.height, `${name} ${viewport} label stays on one line`).toBeLessThan(lineHeight * 1.5);
-      for (const button of await buttons.all()) {
-        const target = (await button.boundingBox())!;
-        expect(target.height, `${name} ${viewport} touch target`).toBeGreaterThanOrEqual(44);
-        expect(target.x + target.width).toBeLessThanOrEqual(size.width);
-        if (viewport === 'mobile') expect(target.y, `${name} buttons sit below the label`).toBeGreaterThanOrEqual(box.y + box.height - 1);
-      }
+      expect(textHeight, `${name} ${viewport} label stays on one line`).toBeLessThan(lineHeight * 1.5);
+      expect(target.height, `${name} ${viewport} touch target`).toBeGreaterThanOrEqual(44);
+      expect(target.x + target.width).toBeLessThanOrEqual(size.width);
+      if (closeBox) expect(target.y, `${name} buttons sit below the close control`).toBeGreaterThanOrEqual(closeBox.y + closeBox.height - 1);
     }
     expect(await fits(page)).toBe(true);
     await page.screenshot({ path: `${evidence}/after-admin-nav-groups-${viewport}.png`, fullPage: true });

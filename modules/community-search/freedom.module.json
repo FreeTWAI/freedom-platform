@@ -4,6 +4,7 @@
   "owner_role": "foundation",
   "owned_paths": [
     "modules/community/content-search.ts",
+    "apps/portal-web/src/modules/explore-feature-search.ts",
     "apps/portal-web/src/modules/CommunitySearch.tsx",
     "tests/runtime/community-search.test.ts",
     "migrations/137_community_content_topics.sql",

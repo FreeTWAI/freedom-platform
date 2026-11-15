@@ -61,7 +61,7 @@ test('opt-in public HTML allows only the fixed revalidation script and escapes m
     const html=await response.text();
     assert.equal(html.includes(malicious),false,path);
     assert.equal(html.includes(PUBLIC_REVALIDATION_MARKUP),true,path);
-    assert.equal(html.replace(PUBLIC_REVALIDATION_MARKUP,'').includes('<script'),false,path);
+    assert.equal(html.replace(PUBLIC_REVALIDATION_MARKUP,'').replace('<script src="/service-page.js" defer></script>','').includes('<script'),false,path);
   }
 });
 
@@ -153,4 +153,25 @@ test('verification and cross-community authors cannot enter discovery or anonymo
     const page=await app.request(origin+'/highlights');assert.equal((await page.text()).includes('secret-'),false);
     for(const id of [hidden,otherEvent])assert.equal((await app.request(origin+`/highlights/${id}`)).status,404);
   }finally{if(previous===undefined)delete process.env.FREEDOM_REGISTRATION_COMMUNITY_ID;else process.env.FREEDOM_REGISTRATION_COMMUNITY_ID=previous;}
+});
+
+test('unknown event pages return HTML 404 with private no-store for browsers and JSON 404 for other clients with discovery on or off',async()=>{
+  const unknownId=randomUUID();
+  const discoveryOff=createApp(pool,origin,'local',{communityDiscoveryEnabled:false});
+  for(const [label,target] of [['discovery on',app],['discovery off',discoveryOff]] as const){
+    const htmlRes=await target.request(`${origin}/events/${unknownId}`,{headers:{Accept:'text/html,application/xhtml+xml'}});
+    assert.equal(htmlRes.status,404,`${label} browser status`);
+    assert.match(htmlRes.headers.get('content-type')??'',/^text\/html\b/i,`${label} content-type`);
+    assert.equal(htmlRes.headers.get('cache-control'),'private, no-store',`${label} cache-control`);
+    assert.match(htmlRes.headers.get('vary')??'',/\bCookie\b/i,`${label} vary`);
+    assert.match(await htmlRes.text(),/<!doctype html>/i,`${label} html body`);
+
+    const jsonRes=await target.request(`${origin}/events/${unknownId}`,{headers:{Accept:'application/json'}});
+    assert.equal(jsonRes.status,404,`${label} json status`);
+    assert.match(jsonRes.headers.get('content-type')??'',/^application\/json\b/i,`${label} json content-type`);
+    assert.equal((await jsonRes.json() as {code?:string}).code,'not_found',`${label} json code`);
+  }
+  const appParamRes=await app.request(`${origin}/events/${unknownId}?app=1`,{headers:{Accept:'text/html'}});
+  assert.equal(appParamRes.status,404);
+  assert.match(appParamRes.headers.get('content-type')??'',/^application\/json\b/i);
 });

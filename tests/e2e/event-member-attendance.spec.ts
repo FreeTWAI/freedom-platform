@@ -36,7 +36,7 @@ async function login(page: Page, email = 'maker@local.test') {
   await page.getByLabel('密碼', {exact: true}).fill('freedom-local-demo'); await page.getByRole('button', {name: '登入', exact: true}).click();
   await expect(page.getByRole('button', {name: '設定', exact: true})).toBeVisible();
 }
-async function open(page: Page, id = eventA) {await login(page); await page.evaluate(id => {location.hash = `events/${id}`;}, id); await expect(panel(page)).toBeVisible();}
+async function open(page: Page, id = eventA) {await login(page); await page.evaluate(id => {location.hash = `events/${id}/manage/attendance`;}, id); await expect(panel(page)).toBeVisible();}
 const panel = (page: Page) => page.getByRole('region', {name: '會員到場紀錄', exact: true});
 const memberRow = (page: Page) => panel(page).getByRole('listitem').filter({has: page.getByText('合成會員小明', {exact: true})});
 async function confirm(page: Page) {
@@ -110,12 +110,12 @@ test('unknown survives GET and later definitive 403; exact retry ACK settles wit
   expect(await page.evaluate(() => {const event = new Event('beforeunload', {cancelable: true}); window.dispatchEvent(event); return event.defaultPrevented;})).toBe(true);
   await panel(page).getByRole('button', {name: '重新讀取到場紀錄'}).click(); await expect(memberRow(page)).toContainText('已撤回確認');
   await expect(panel(page).getByRole('button', {name: '確認 合成會員小明 到場'})).toBeDisabled();
-  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(new RegExp(`#events/${eventA}$`));
+  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(new RegExp(`#explore/events/${eventA}/manage/attendance$`));
   await retry.click(); await expect(retry).toBeVisible(); expect(writes[1]).toEqual(writes[0]);
   resolve = true; await retry.click(); await expect(retry).toHaveCount(0); expect(writes[2]).toEqual(writes[0]);
   await expect(memberRow(page)).toContainText('已撤回確認'); await expect(memberRow(page)).not.toContainText('主辦已確認到場');
   expect(await page.evaluate(() => {const event = new Event('beforeunload', {cancelable: true}); window.dispatchEvent(event); return event.defaultPrevented;})).toBe(false);
-  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(/#events$/);
+  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(/#explore\/events$/);
 });
 
 test('canonical ACK releases navigation before a failing refresh and never offers a duplicate command', async ({page}) => {
@@ -126,7 +126,7 @@ test('canonical ACK releases navigation before a failing refresh and never offer
   await page.route(`**/api/v1/events/${eventA}/attendance/${member}`, async route => {written = true; writes++; await route.fulfill({json: ack(tuple(route))});});
   await open(page); await confirm(page); await expect(panel(page)).toContainText('原操作已確認'); await expect(panel(page).getByRole('alert')).toBeVisible();
   await expect(panel(page).getByRole('button', {name: '重試原到場操作'})).toHaveCount(0);
-  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(/#events$/); expect(writes).toBe(1);
+  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(/#explore\/events$/); expect(writes).toBe(1);
 });
 
 for (const bad of ['member', 'event', 'key', 'version', 'reason'] as const) test(`a mismatched ${bad} ACK cannot release the frozen attempt`, async ({page}) => {
@@ -137,7 +137,7 @@ for (const bad of ['member', 'event', 'key', 'version', 'reason'] as const) test
     await route.fulfill({json: ack(command, valid ? {} : overrides)});
   });
   await open(page); await confirm(page); const retry = panel(page).getByRole('button', {name: '重試原到場操作'}); await expect(retry).toBeVisible();
-  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(new RegExp(`#events/${eventA}$`));
+  await page.getByRole('button', {name: '返回活動列表與行事曆'}).click(); await expect(page).toHaveURL(new RegExp(`#explore/events/${eventA}/manage/attendance$`));
   valid = true; await retry.click(); await expect(retry).toHaveCount(0); expect(writes[1]).toEqual(writes[0]);
   await expect(panel(page)).toContainText('讀到較舊的到場紀錄'); await expect(panel(page)).not.toContainText('主辦已確認到場');
 });
@@ -159,7 +159,7 @@ test('late event-A GET cannot replace event B or submit the previous member path
   await page.route('**/api/v1/events/*/attendance/*', async route => {if (route.request().method() !== 'POST') return route.continue(); const command = tuple(route); writes.push(command); await route.fulfill({json: ack(command)});});
   try {
     await open(page); await requested.promise;
-    await page.evaluate(id => {location.hash = `events/${id}`;}, eventB); await expect(panel(page)).toContainText('合成會員小花');
+    await page.evaluate(id => {location.hash = `events/${id}/manage/attendance`;}, eventB); await expect(panel(page)).toContainText('合成會員小花');
     gate.resolve(); await expect(panel(page)).not.toContainText('合成會員小明');
     await panel(page).getByRole('button', {name: '確認 合成會員小花 到場'}).click(); await panel(page).getByRole('button', {name: '確定記錄到場'}).click();
     await expect.poll(() => writes.length).toBe(1); expect(writes[0].path).toBe(`/api/v1/events/${eventB}/attendance/${peer}`);
@@ -193,7 +193,7 @@ test('real session replacement during a held command prevents its late ACK from 
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
     expect((await (await changedSession).json()).user.user_id).toBe(peer); await expect(panel(page)).toHaveCount(0);
     gate.resolve(); await expect(panel(page)).toHaveCount(0);
-    await page.reload(); await page.evaluate(id => {location.hash = `events/${id}`;}, eventB);
+    await page.reload(); await page.evaluate(id => {location.hash = `events/${id}/manage/attendance`;}, eventB);
     await expect(panel(page)).toBeVisible(); await expect(panel(page)).not.toContainText('原操作已確認'); await expect(panel(page).getByRole('button', {name: '重試原到場操作'})).toHaveCount(0); expect(writes).toHaveLength(1);
   } finally {gate.resolve(); await page.unrouteAll({behavior: 'wait'});}
 });

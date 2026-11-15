@@ -15,16 +15,24 @@ import { getEventShareCode } from './events.js';
 import { highlightShareImage, readHighlightEvent } from './event-highlights.js';
 import { avatarUrl } from '../identity-membership/avatars.js';
 import { readPublicCards } from '../identity-membership/member-sharing.js';
+import { readPublicWork, PUBLIC_WORK_VISIBLE } from '../opportunity-project-work/public-sharing.js';
+import { publicSocialPostIds } from './public-social-posts.js';
 import type { Actor } from '../identity-membership/service.js';
+import type { ShareKind } from '../shares/types.js';
+
+const SHARE_TARGET_JOIN = `LEFT JOIN showcases s ON sh.kind='work' AND s.showcase_id=sh.ref_id AND s.community_id=sh.community_id
+  LEFT JOIN users u ON sh.kind='work' AND u.user_id=s.owner_ref
+  LEFT JOIN work_public_publications publication ON sh.kind='work' AND publication.showcase_id=sh.ref_id`;
+const SHARE_TARGET_VISIBLE = `(sh.kind IN ('repository','link') OR (sh.kind='work' AND ${PUBLIC_WORK_VISIBLE}))`;
 
 // Click totals are a display board, like the GitHub author boards.
 // They are never written into XP, contributions, rewards or work records.
-export const PROMOTION_KINDS = ['member_card', 'platform', 'skill_book', 'social_post', 'member_service', 'event'] as const;
+export const PROMOTION_KINDS = ['member_card', 'platform', 'skill_book', 'social_post', 'member_service', 'event', 'share'] as const;
 export type PromotionKind = typeof PROMOTION_KINDS[number];
 export type PromotionPeriod = 'week' | 'month' | 'all';
 const VISITOR_CAP = 20;
 const NETWORK_CAP = 60;
-const LINK_CAP = 200;
+export const PROMOTION_LINK_CAP = 200;
 const TAIPEI = 8 * 60 * 60 * 1000;
 
 const PLATFORM_DESCRIPTION = '加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。';
@@ -76,9 +84,8 @@ function sha256(parts: Buffer[]) {
 }
 
 async function clickSalt(pool: Pool, day: string) {
-  await pool.query('INSERT INTO promotion_click_salts(click_day, salt) VALUES($1,$2) ON CONFLICT DO NOTHING', [day, randomBytes(32)]);
-  await pool.query('DELETE FROM promotion_click_salts WHERE click_day < $1::date - 3', [day]);
-  return (await pool.query('SELECT salt FROM promotion_click_salts WHERE click_day=$1', [day])).rows[0].salt as Buffer;
+  return (await pool.query(`INSERT INTO promotion_click_salts(click_day,salt) VALUES($1,$2)
+    ON CONFLICT(click_day) DO UPDATE SET salt=promotion_click_salts.salt RETURNING salt`,[day,randomBytes(32)])).rows[0].salt as Buffer;
 }
 
 type LinkRow = { link_id: string; community_id: string; user_id: string; kind: PromotionKind; target_key: string; code: string; revoked_at: Date | null; owner_active: boolean };
@@ -130,7 +137,12 @@ async function memberCardTarget(pool: Pool | PoolClient, actor: Actor, target: s
   return { title: card.title, key: `${uid}:${card.generation}` };
 }
 
-async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: PromotionKind, target: string) {
+async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: PromotionKind, target: string, publicCommunity?: string | null) {
+  if (kind === 'share') {
+    requireCondition(z.uuid().safeParse(target).success,422,'validation_failed','分享目標不正確。');
+    const row=(await pool.query(`SELECT sh.title FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE}`,[target,actor.community_id])).rows[0];
+    requireCondition(row,404,'not_found','找不到分享。');return {title:row.title as string,key:target};
+  }
   if (kind === 'platform') {
     const page = platformTarget(target);
     requireCondition(page, 422, 'validation_failed', '平台分享目標不正確。');
@@ -145,9 +157,12 @@ async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: Promoti
   }
   if (kind === 'social_post') {
     requireCondition(z.uuid().safeParse(target).success, 422, 'validation_failed', '貼文目標不正確。');
-    const row = (await pool.query(`SELECT title FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active' AND kind='link'`, [target, actor.community_id])).rows[0];
+    const row = (await pool.query(`SELECT kind, title FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active'`, [target, actor.community_id])).rows[0] as { kind: string; title: string } | undefined;
     requireCondition(row, 404, 'not_found', '找不到可分享的貼文。');
-    return { title: row.title as string, key: target };
+    if (row.kind !== 'link') {
+      requireCondition((await publicSocialPostIds(pool, [target], publicCommunity ?? undefined)).has(target.toLowerCase()), 404, 'not_found', '這則貼文沒有公開頁，只能分享站內連結。');
+    }
+    return { title: (row.kind === 'link' ? row.title : row.title || '自由工坊貼文'), key: target };
   }
   if (kind === 'member_service') {
     requireCondition(z.uuid().safeParse(target).success, 422, 'validation_failed', '服務目標不正確。');
@@ -157,6 +172,7 @@ async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: Promoti
   }
   return memberCardTarget(pool, actor, target);
 }
+export { assertTarget as assertPromotionTarget };
 
 async function pointsFor(q: Pool | PoolClient, linkId: string, now: Date): Promise<PromotionPoints> {
   const week = periodStart('week', now), month = periodStart('month', now);
@@ -170,29 +186,38 @@ function linkView(row: { kind: PromotionKind; target_key: string; code: string }
   return { kind: row.kind, target: row.target_key, code: row.code, path: `/go/${row.code}`, title, points };
 }
 
-export async function createPromotionLink(pool: Pool, actor: Actor, raw: unknown, now = new Date()): Promise<PromotionLinkView> {
+/** All promotion link producers serialize on the same member/day budget. */
+export async function createPromotionLinkRow(q: PoolClient, input: {community_id:string;user_id:string;kind:PromotionKind;target_key:string;now?:Date;allowOverCap?:boolean}) {
+  const now=input.now??new Date();
+  await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`promo-link:${input.user_id}:${taipeiDate(now)}`]);
+  const existing=async()=> (await q.query(`SELECT link_id,kind,target_key,code FROM promotion_links
+    WHERE community_id=$1 AND user_id=$2 AND kind=$3 AND target_key=$4 AND revoked_at IS NULL`,[input.community_id,input.user_id,input.kind,input.target_key])).rows[0];
+  const prior=await existing();if(prior)return {row:prior,created:false};
+  if(!input.allowOverCap){
+    const used=(await q.query('SELECT count(*)::int AS n FROM promotion_links WHERE user_id=$1 AND created_at>=$2',[input.user_id,taipeiDayStart(now)])).rows[0].n;
+    requireCondition(used<PROMOTION_LINK_CAP,429,'promotion_link_limit','今天建立的分享連結已達上限。');
+  }
+  for(let attempt=0;attempt<5;attempt++){
+    const row=(await q.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code,created_at)
+      VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING link_id,kind,target_key,code`,
+      [input.community_id,input.user_id,input.kind,input.target_key,randomBytes(7).toString('base64url'),now])).rows[0];
+    if(row)return {row,created:true};
+    const other=await existing();if(other)return {row:other,created:false};
+  }
+  throw new Problem(503,'promotion_link_unavailable','分享連結暫時無法建立，請稍後再試。');
+}
+
+export async function createPromotionLink(pool: Pool, actor: Actor, raw: unknown, now = new Date(), publicCommunity?: string | null): Promise<PromotionLinkView> {
   const body = linkInput.parse(raw);
-  const day = taipeiDayStart(now);
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       return await transaction(pool, async q => {
         await lockMemberSession(q, actor);
-        await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`promo-link:${actor.user_id}:${taipeiDate(now)}`]);
-        const { title, key } = await assertTarget(q, actor, body.kind, body.target);
-        const existing = (await q.query(`SELECT link_id,kind,target_key,code FROM promotion_links
-          WHERE community_id=$1 AND user_id=$2 AND kind=$3 AND target_key=$4 AND revoked_at IS NULL`, [actor.community_id, actor.user_id, body.kind, key])).rows[0];
-        if (existing) {
-          const points = await pointsFor(q, existing.link_id, now);
-          await assertCurrentSessionClock(q, actor);
-          return linkView(existing, title, points);
-        }
-        const used = (await q.query('SELECT count(*)::int AS n FROM promotion_links WHERE user_id=$1 AND created_at>=$2', [actor.user_id, day])).rows[0].n as number;
-        requireCondition(used < LINK_CAP, 429, 'promotion_link_limit', '今天建立的分享連結已達上限。');
-        const code = randomBytes(7).toString('base64url');
-        const inserted = (await q.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code,created_at)
-          VALUES($1,$2,$3,$4,$5,$6) RETURNING link_id,kind,target_key,code`, [actor.community_id, actor.user_id, body.kind, key, code, now])).rows[0];
+        const { title, key } = await assertTarget(q, actor, body.kind, body.target, publicCommunity);
+        const link=await createPromotionLinkRow(q,{community_id:actor.community_id,user_id:actor.user_id,kind:body.kind,target_key:key,now});
+        const points=link.created?{week:0,month:0,all:0}:await pointsFor(q,link.row.link_id,now);
         await assertCurrentSessionClock(q, actor);
-        return linkView(inserted, title, { week: 0, month: 0, all: 0 });
+        return linkView(link.row,title,points);
       });
     } catch (error) {
       const pg = error as { code?: string; constraint?: string };
@@ -212,13 +237,18 @@ function catalogBook(target: string) {
 }
 
 // Titles are read-only and batched: one query per kind that actually appears. Catalog books need none.
-async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) {
+export async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: Pick<MineRow, 'kind' | 'target_key'>[], publicCommunity?: string | null) {
+  const shareIds=rows.filter(row=>row.kind==='share'&&z.uuid().safeParse(row.target_key).success).map(row=>row.target_key);
+  const shareRows=shareIds.length?(await pool.query("SELECT share_id::text AS id,title,state='published' AS available FROM shares WHERE community_id=$1 AND share_id=ANY($2::uuid[])",[actor.community_id,shareIds])).rows:[];
+  const shareById=new Map(shareRows.map(row=>[row.id,row]));
   const events = rows.filter(row => row.kind === 'event' && z.uuid().safeParse(row.target_key).success).map(row => row.target_key);
   const posts = rows.filter(row => row.kind === 'social_post' && z.uuid().safeParse(row.target_key).success).map(row => row.target_key);
   const submissions = rows.filter(row => row.kind === 'skill_book' && /^submission:[0-9a-f-]{36}$/i.test(row.target_key)).map(row => row.target_key.slice(11).toLowerCase());
   const services = rows.filter(row => row.kind === 'member_service' && z.uuid().safeParse(row.target_key).success).map(row => row.target_key);
   const eventRows = events.length ? (await pool.query(`SELECT event_id::text AS id,title,state='published' AS available FROM community_events WHERE community_id=$1 AND event_id=ANY($2::uuid[])`, [actor.community_id, events])).rows as { id: string; title: string; available: boolean }[] : [];
-  const postRows = posts.length ? (await pool.query(`SELECT post_id::text AS id,title,state='active' AS available FROM community_social_posts WHERE community_id=$1 AND post_id=ANY($2::uuid[])`, [actor.community_id, posts])).rows as { id: string; title: string; available: boolean }[] : [];
+  const postRows = posts.length ? (await pool.query(`SELECT post_id::text AS id,kind,title,state='active' AS active FROM community_social_posts WHERE community_id=$1 AND post_id=ANY($2::uuid[])`, [actor.community_id, posts])).rows as { id: string; kind: string; title: string; active: boolean }[] : [];
+  const notePostIds = postRows.filter(row => row.active && row.kind !== 'link').map(row => row.id);
+  const publicNotes = notePostIds.length ? await publicSocialPostIds(pool, notePostIds, publicCommunity ?? undefined) : new Set<string>();
   const submissionById = await readPublishedSkillTitles(pool, actor.community_id, submissions);
   const serviceById = await readMemberServiceTitles(pool, actor.community_id, services);
   const cardOwners = [...new Set(rows.flatMap(row => {
@@ -228,8 +258,9 @@ async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) 
   }))];
   const cardByOwner = cardOwners.length ? await readPublicCards(pool, actor.community_id, cardOwners) : new Map();
   const eventById = new Map(eventRows.map(row => [row.id, row]));
-  const postById = new Map(postRows.map(row => [row.id, row]));
-  return (row: MineRow) => {
+  const postById = new Map(postRows.map(row => [row.id, { title: row.kind === 'link' ? row.title : row.title || '自由工坊貼文', available: row.active && (row.kind === 'link' || publicNotes.has(row.id.toLowerCase())) }]));
+  return (row: Pick<MineRow, 'kind' | 'target_key'>) => {
+    if(row.kind==='share'){const found=shareById.get(row.target_key);return found?{title:found.title,available:found.available}:{title:'已無法開啟',available:false};}
     if (row.kind === 'platform') {
       const page = platformTarget(row.target_key);
       return { title: page?.title ?? '自由工坊', available: Boolean(page) };
@@ -261,7 +292,7 @@ async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) 
   };
 }
 
-export async function listMyPromotionLinks(pool: Pool|PoolClient, actor: Actor, periodRaw: string | undefined, now = new Date()) {
+export async function listMyPromotionLinks(pool: Pool|PoolClient, actor: Actor, periodRaw: string | undefined, now = new Date(), publicCommunity?: string | null) {
   const period = periodSchema.parse(periodRaw ?? 'week');
   const since = periodStart(period, now);
   const week = periodStart('week', now);
@@ -274,7 +305,7 @@ export async function listMyPromotionLinks(pool: Pool|PoolClient, actor: Actor, 
     FROM promotion_links l LEFT JOIN promotion_clicks c ON c.link_id=l.link_id
     WHERE l.community_id=$1 AND l.user_id=$2 AND l.revoked_at IS NULL
     GROUP BY l.link_id ORDER BY points DESC,l.created_at DESC LIMIT 100`, [actor.community_id, actor.user_id, since, week, month])).rows as MineRow[];
-  const resolve = await mineTitles(pool, actor, rows);
+  const resolve = await mineTitles(pool, actor, rows, publicCommunity);
   const items = rows.map(row => {
     const resolved = resolve(row);
     return { ...linkView(row, resolved.title, { week: row.week_points, month: row.month_points, all: row.all_points }), period_points: row.points, available: resolved.available };
@@ -283,12 +314,18 @@ export async function listMyPromotionLinks(pool: Pool|PoolClient, actor: Actor, 
 }
 
 type Scored = { user_id: string; display_name: string; points: number; rank: number; avatar_url: string | null };
+type LeaderboardRow = { kind: ShareKind; user_id: string; display_name: string; points: number; aggregate_version: string | null; has_avatar: boolean };
+const SHARE_BOARD_KINDS = ['repository', 'link', 'event', 'work', 'post', 'service'] as const satisfies readonly ShareKind[];
+export type LeaderboardKind = 'all' | ShareKind;
 
-// Clicks are scored first so the avatar bytea is never a GROUP BY key.
+// Ledger units are summed first so the avatar bytea is never a GROUP BY key.
 export const promotionLeaderboardSql = `WITH scored AS (
-  SELECT kind,user_id,count(*)::int AS points FROM promotion_clicks
-  WHERE community_id=$1 AND ($2::timestamptz IS NULL OR created_at>=$2)
-  GROUP BY kind,user_id)
+  SELECT sh.kind,e.user_id,sum(e.units)::int AS points
+  FROM share_credit_events e
+  JOIN shares sh USING (share_id,community_id)
+  WHERE e.community_id=$1 AND ($2::timestamptz IS NULL OR e.created_at>=$2)
+  GROUP BY sh.kind,e.user_id
+  HAVING sum(e.units)<>0)
 SELECT s.kind,s.user_id,u.display_name,s.points,a.aggregate_version,a.present AS has_avatar
 FROM scored s
 JOIN users u ON u.user_id=s.user_id AND u.community_id=$1
@@ -296,19 +333,35 @@ LEFT JOIN member_avatar_presence a ON a.user_id=u.user_id AND a.community_id=u.c
 WHERE u.active AND (NOT u.onboarding_required OR u.onboarding_completed_at IS NOT NULL)
   AND (u.user_id=$3 OR NOT is_verification_test_account(u.user_id))`;
 
+function rankLeaderboard(kind: LeaderboardKind, entries: Omit<Scored, 'rank'>[], actorUserId: string) {
+  const scored: Scored[] = entries
+    .filter(entry => entry.points > 0)
+    .map(entry => ({ ...entry, rank: 0 }))
+    .sort((a, b) => b.points - a.points || a.display_name.localeCompare(b.display_name, 'zh-Hant') || a.user_id.localeCompare(b.user_id));
+  scored.forEach((row, index) => { row.rank = index === 0 || row.points !== scored[index - 1].points ? index + 1 : scored[index - 1].rank; });
+  const mine = scored.find(row => row.user_id === actorUserId);
+  return { kind, items: scored.slice(0, 10).map(({ user_id, display_name, avatar_url, rank, points }) => ({ rank, user_id, display_name, avatar_url, points })), me: mine ? { rank: mine.rank, points: mine.points } : null };
+}
+
 export async function promotionLeaderboards(pool: Pool|PoolClient, actor: Actor, periodRaw: string | undefined, now = new Date()) {
   const period = periodSchema.parse(periodRaw ?? 'week');
   const since = periodStart(period, now);
-  const rows = (await pool.query(promotionLeaderboardSql, [actor.community_id, since, actor.user_id])).rows as { kind: PromotionKind; user_id: string; display_name: string; points: number; aggregate_version: string | null; has_avatar: boolean }[];
-  const boards = PROMOTION_KINDS.map(kind => {
-    const scored: Scored[] = rows.filter(row => row.kind === kind).map(row => ({
-      user_id: row.user_id, display_name: row.display_name, points: row.points, rank: 0,
-      avatar_url: avatarUrl(row.user_id, row.aggregate_version ?? 1, row.has_avatar),
-    })).sort((a, b) => b.points - a.points || a.display_name.localeCompare(b.display_name, 'zh-Hant') || a.user_id.localeCompare(b.user_id));
-    scored.forEach((row, index) => { row.rank = index === 0 || row.points !== scored[index - 1].points ? index + 1 : scored[index - 1].rank; });
-    const mine = scored.find(row => row.user_id === actor.user_id);
-    return { kind, items: scored.slice(0, 10).map(({ user_id, display_name, avatar_url, rank, points }) => ({ rank, user_id, display_name, avatar_url, points })), me: mine && mine.points > 0 ? { rank: mine.rank, points: mine.points } : null };
-  });
+  const rows = (await pool.query(promotionLeaderboardSql, [actor.community_id, since, actor.user_id])).rows as LeaderboardRow[];
+  const byUser = new Map<string, Omit<Scored, 'rank'>>();
+  const byKind = new Map<ShareKind, Omit<Scored, 'rank'>[]>();
+  for (const row of rows) {
+    const avatar_url = avatarUrl(row.user_id, row.aggregate_version ?? 1, row.has_avatar);
+    const kindList = byKind.get(row.kind) ?? [];
+    kindList.push({ user_id: row.user_id, display_name: row.display_name, avatar_url, points: row.points });
+    byKind.set(row.kind, kindList);
+    const total = byUser.get(row.user_id);
+    if (total) total.points += row.points;
+    else byUser.set(row.user_id, { user_id: row.user_id, display_name: row.display_name, avatar_url, points: row.points });
+  }
+  const boards = [
+    rankLeaderboard('all', [...byUser.values()], actor.user_id),
+    ...SHARE_BOARD_KINDS.map(kind => rankLeaderboard(kind, byKind.get(kind) ?? [], actor.user_id)),
+  ];
   return { period, since: since?.toISOString() ?? null, boards };
 }
 
@@ -329,8 +382,9 @@ function absoluteUrl(origin: string, url: string) {
   return url.startsWith('https://') || url.startsWith('http://') ? url : origin + url;
 }
 
-async function shareable(pool: Pool, link: LinkRow) {
+async function shareable(pool: Pool, link: LinkRow, publicCommunity?: string | null) {
   if (link.revoked_at || !link.owner_active) return false;
+  if (link.kind === 'share') return Boolean((await pool.query(`SELECT 1 FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE} AND (sh.first_sharer_user_id IS NULL OR NOT is_verification_test_account(sh.first_sharer_user_id))`,[link.target_key,link.community_id])).rowCount);
   if (link.kind === 'platform') return Boolean(platformTarget(link.target_key));
   if (link.kind === 'skill_book') {
     if (link.target_key.startsWith('book:')) return communityCatalog.skill_books.some(item => item.id === link.target_key.slice(5));
@@ -339,8 +393,9 @@ async function shareable(pool: Pool, link: LinkRow) {
   }
   if (link.kind === 'event') return Boolean(await eventStillShared(pool, link.target_key));
   if (link.kind === 'social_post') {
-    const row = (await pool.query(`SELECT 1 FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active'`, [link.target_key, link.community_id])).rows[0];
-    return Boolean(row);
+    const row = (await pool.query(`SELECT kind FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active'`, [link.target_key, link.community_id])).rows[0] as { kind: string } | undefined;
+    if (!row) return false;
+    return row.kind === 'link' || (await publicSocialPostIds(pool, [link.target_key], publicCommunity ?? undefined)).has(link.target_key.toLowerCase());
   }
   if (link.kind === 'member_service') return Boolean(await readMemberServiceShare(pool, link.community_id, link.target_key));
   if (link.kind === 'member_card') return Boolean(await memberCardForLink(pool, link));
@@ -356,9 +411,21 @@ function introNumber(raw: string | undefined) {
 type OpenTarget = { href: string; title: string; description: string; image?: { url: string; width: number; height: number } } &
   ({ navigation: 'internal' } | { navigation: 'external'; destination: string; action: string });
 
-async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefined, origin: string, now: Date): Promise<OpenTarget | null> {
+async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefined, origin: string, now: Date, publicCommunity?: string | null): Promise<OpenTarget | null> {
+  if (link.revoked_at || !link.owner_active) return null;
+  // These branches obtain the same current audience/owner snapshot below.
+  if (!['share','member_card','event','member_service','platform'].includes(link.kind) && !await shareable(pool, link, publicCommunity)) return null;
+  if(link.kind==='share'){
+    const row=(await pool.query(`SELECT sh.kind, sh.ref_id, sh.title FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE} AND (sh.first_sharer_user_id IS NULL OR NOT is_verification_test_account(sh.first_sharer_user_id))`,[link.target_key,link.community_id])).rows[0];
+    if(!row)return null;
+    if (row.kind === 'work') {
+      const work = await readPublicWork(pool, row.ref_id, link.community_id);
+      if (!work) return null;
+      return { navigation: 'internal', href: `/works/${work.showcase_id}?via=${link.code}`, title: work.title, description: work.description };
+    }
+    return {navigation:'internal',href:`/s/${link.target_key}?via=${link.code}`,title:row.title,description:'自由工坊分享'};
+  }
   if (link.kind === 'member_card') {
-    if (link.revoked_at || !link.owner_active) return null;
     const card = await memberCardForLink(pool, link);
     if (!card) return null;
     return {
@@ -368,9 +435,9 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
       image: { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height },
     };
   }
-  if (!await shareable(pool, link)) return null;
   if (link.kind === 'platform') {
-    const page = platformTarget(link.target_key)!;
+    const page = platformTarget(link.target_key);
+    if (!page) return null;
     return { navigation: 'internal', href: page.href, title: page.title, description: page.description, image: { url: origin + page.image, width: page.width, height: page.height } };
   }
   if (link.kind === 'skill_book') {
@@ -395,7 +462,8 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
   if (link.kind === 'event') {
     const event = await eventStillShared(pool, link.target_key);
     if (!event) return null;
-    const preview = { title: event.title, description: event.description.slice(0, 160) };
+    const readable=event.visibility==='open'||event.visibility==='referral';
+    const preview = readable&&!event.test_host ? { title: event.title, description: event.description.slice(0, 160) } : {title:'自由工坊活動',description:'登入後依活動權限查看。'};
     // Same gate as /highlights/:id: published, already ended in the database, and not a test-account host.
     if (new Date(event.ends_at).getTime() <= now.getTime()) {
       const highlight = await publicHighlight(pool, link.target_key);
@@ -421,8 +489,12 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
       : { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height };
     return { navigation: 'internal', href: `/services/${link.target_key}`, title: service.title, description: service.summary, image };
   }
-  const post = (await pool.query(`SELECT post_id,url,title,platform FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active' AND kind='link'`, [link.target_key, link.community_id])).rows[0] as { post_id: string; url: string; title: string; platform: SocialPlatform } | undefined;
+  const post = (await pool.query(`SELECT post_id,kind,url,title,platform FROM community_social_posts WHERE post_id=$1 AND community_id=$2 AND state='active'`, [link.target_key, link.community_id])).rows[0] as { post_id: string; kind: string; url: string | null; title: string; platform: SocialPlatform } | undefined;
   if (!post) return null;
+  if (post.kind !== 'link') {
+    return { navigation: 'internal', href: `/posts/${post.post_id}`, title: post.title || '自由工坊貼文', description: '自由工坊貼文' };
+  }
+  if (!post.url) return null;
   const destination = normalizeShareUrl(post.url);
   if (!destination.ok || destination.url !== post.url || isOwnWorkshopHost(destination.host, origin)) return null;
   const thumb = (await pool.query('SELECT 1 FROM community_social_post_thumbnails WHERE post_id=$1', [post.post_id])).rowCount;
@@ -443,7 +515,7 @@ function goHtml(code: string, target: OpenTarget, ogUrl: string) {
   const external = target.navigation === 'external';
   const image = target.image ? `<meta property="og:image" content="${escapeHtml(target.image.url)}"><meta property="og:image:width" content="${target.image.width}"><meta property="og:image:height" content="${target.image.height}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${escapeHtml(target.image.url)}">` : '<meta name="twitter:card" content="summary">';
   const body = external
-    ? `<p class="go-kind">社群分享 · 外部網站</p><h1>${title}</h1><p>${description}</p><dl><dt>目的地</dt><dd><bdi>${escapeHtml(target.destination)}</bdi></dd></dl><p>這是外部網站。帳號、費用與資料處理，請依目的地網站說明核對。</p><div class="go-actions"><a class="go-primary" data-go-destination href="${href}" rel="noopener noreferrer">${escapeHtml(target.action)} ↗</a><a href="/#social">返回自由工坊</a></div>`
+    ? `<p class="go-kind">社群分享 · 外部網站</p><h1>${title}</h1><p>${description}</p><dl><dt>目的地</dt><dd><bdi>${escapeHtml(target.destination)}</bdi></dd></dl><p>這是外部網站。帳號、費用與資料處理，請依目的地網站說明核對。</p><div class="go-actions"><a class="go-primary" data-go-destination href="${href}" rel="noopener noreferrer">${escapeHtml(target.action)} ↗</a><a href="/#home">返回自由工坊</a></div>`
     : `<p class="go-kind">自由工坊站內內容</p><h1>${title}</h1><p>${description}</p><p>正在開啟站內內容，也可直接使用以下連結。</p><a class="go-primary" data-go-destination href="${href}">開啟站內內容</a>`;
   // Preserve the personal link as og:url: previews must not collapse attribution onto the destination.
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${external ? '準備前往' : '正在開啟'}：${title}｜自由工坊</title><meta name="robots" content="noindex,nofollow"><meta property="og:type" content="website"><meta property="og:url" content="${escapeHtml(ogUrl)}"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:site_name" content="自由工坊"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${description}">${image}<link rel="stylesheet" href="/go.css"></head><body><main data-code="${escapeHtml(code)}" data-target="${href}" data-navigation="${target.navigation}">${goBrand}${body}</main><script src="/go.js" defer></script></body></html>`;
@@ -454,19 +526,20 @@ export function promotionUnavailableHtml() {
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>分享連結目前無法開啟｜自由工坊</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/go.css"></head><body><main>${goBrand}<h1>分享連結目前無法開啟</h1><p>連結可能已撤回、內容已停止分享，或網址不完整。</p><a class="go-primary" href="/">返回自由工坊</a></main></body></html>`;
 }
 
-export async function promotionGo(pool: Pool, code: string, intro: string | undefined, origin: string, now = new Date()) {
+export async function promotionGo(pool: Pool, code: string, intro: string | undefined, origin: string, now = new Date(), publicCommunity?: string | null) {
   const link = await readLink(pool, code);
   if (!link) return null;
-  const target = await openTarget(pool, link, intro, origin, now);
+  const target = await openTarget(pool, link, intro, origin, now, publicCommunity);
   if (!target) return null;
   const chosen = link.kind === 'skill_book' ? introNumber(intro) : null;
   return goHtml(link.code, target, `${origin}/go/${link.code}${chosen ? `?intro=${chosen}` : ''}`);
 }
 
-export async function creditPromotionClick(pool: Pool, input: { code: string; userAgent: string; network: string; sessionUserId: string | null; now: Date }) {
+export async function creditPromotionClick(pool: Pool, input: { code: string; userAgent: string; network: string; sessionUserId: string | null; now: Date; publicCommunity?: string | null }) {
   const link = await readLink(pool, input.code);
-  if (!link || !await shareable(pool, link)) return;
+  if (!link || !await shareable(pool, link, input.publicCommunity)) return;
   if (isPreviewBot(input.userAgent)) return;
+  if (input.sessionUserId && (await pool.query('SELECT is_verification_test_account($1) AS test',[input.sessionUserId])).rows[0].test) return;
   if (input.sessionUserId && input.sessionUserId === link.user_id) return;
   const day = taipeiDate(input.now);
   const salt = await clickSalt(pool, day);

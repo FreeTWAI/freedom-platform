@@ -7,7 +7,7 @@ import type { Actor } from '../identity-membership/service.js';
 import { lockMemberGuilds } from '../positioning/onboarding.js';
 import { readFollowUpdates } from '../community/content-relations.js';
 import { CHANNEL_KEY_MAX, GUILD_CHANNEL_KEY_PATTERN, SQUAD_CHANNEL_KEY_PATTERN, type ChannelKind } from './channel-types.js';
-import {notificationVisibilitySQL} from './notifications.js';
+import {notificationVisibilitySQL,eventAccessSql,eventNoticeAccessSql} from './notifications.js';
 import { isOrderNotificationAction, type Notification, type NotificationList } from './types.js';
 
 export type NotificationCategory = 'friends' | 'squads' | 'events' | 'following';
@@ -156,7 +156,7 @@ export function isNotificationQuietHours(prefs: Pick<NotificationPreferences, 'q
 function category(kind: string): NotificationCategory | null {
   if (kind === 'friend_request' || kind === 'friend_accepted' || kind === 'friend_declined') return 'friends';
   if (kind === 'squad_invitation' || kind === 'squad_join_requested' || kind === 'squad_join_accepted') return 'squads';
-  if (kind === 'event_submitted' || kind === 'event_review_needed' || kind === 'event_approved' || kind === 'event_rejected' || kind === 'event_start_reminder') return 'events';
+  if (kind === 'event_submitted' || kind === 'event_review_needed' || kind === 'event_approved' || kind === 'event_rejected' || kind === 'event_start_reminder' || kind === 'event_schedule_changed' || kind === 'event_cancelled' || kind === 'event_announcement') return 'events';
   return null; // Guild authority, security/transaction and unknown future kinds are never muted.
 }
 interface NoticeRow { notification_id: string; kind: Notification['kind']; title: string; created_at: Date | string; action_tab: NonNullable<Notification['action']>['tab'] | null; action_resource_id: string | null }
@@ -165,24 +165,8 @@ async function unreadNotices(q: PoolClient, actor: Actor, kinds: string[], only:
     WHERE n.community_id=$1 AND n.recipient_ref=$2 AND n.read_at IS NULL AND (n.kind=ANY($3::text[]))=$4
     AND ${eventNoticeAccessSql} AND ${notificationVisibilitySQL(orderNotificationsEnabled,'n')} ORDER BY n.created_at DESC,n.notification_id DESC LIMIT 40`, [actor.community_id, actor.user_id, kinds, only])).rows;
 }
-const eventAccessSql = `e.community_id=$1 AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref)) AND (
-  e.organizer_ref=$2 OR (e.state='published' AND (e.visibility<>'guild' OR EXISTS(
-    SELECT 1 FROM positioning_profession_memberships m WHERE m.community_id=e.community_id AND m.user_id=$2 AND m.guild_key=e.guild_key AND m.state='active')))
-  OR (e.state='pending' AND EXISTS(SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
-    ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
-    WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)))`;
-const eventNoticeAccessSql = `(n.kind NOT IN ('event_submitted','event_review_needed','event_approved','event_rejected','event_start_reminder','event_waitlist_invited','event_schedule_changed','event_cancelled')
-  OR n.action_resource_id IS NULL OR EXISTS(SELECT 1 FROM community_events e
-    WHERE e.event_id::text=n.action_resource_id::text AND (${eventAccessSql} OR (
-      n.kind='event_cancelled' AND e.state='cancelled' AND e.community_id=$1
-      AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref))
-      AND (e.visibility<>'guild' OR EXISTS(SELECT 1 FROM positioning_profession_memberships m
-        WHERE m.community_id=e.community_id AND m.user_id=$2 AND m.guild_key=e.guild_key AND m.state='active'))
-      AND (EXISTS(SELECT 1 FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.user_id=$2 AND r.confirmed_at IS NOT NULL)
-        OR EXISTS(SELECT 1 FROM community_event_waitlist w WHERE w.event_id=e.event_id AND w.member_ref=$2))
-    ))))`;
 const socialNotificationKinds = ['friend_request', 'friend_accepted', 'friend_declined', 'squad_invitation', 'squad_join_requested', 'squad_join_accepted',
-  'event_submitted', 'event_review_needed', 'event_approved', 'event_rejected', 'event_start_reminder'];
+  'event_submitted', 'event_review_needed', 'event_approved', 'event_rejected', 'event_start_reminder', 'event_schedule_changed', 'event_cancelled', 'event_announcement'];
 interface EventBulletinReminder { bulletin_id: string; event_id: string; kind: string; message: string; title: string; created_at: string }
 async function readableEventBulletins(q: PoolClient, actor: Actor): Promise<EventBulletinReminder[]> {
   return (await q.query(`SELECT b.bulletin_id,b.event_id,b.kind,b.message,e.title,b.created_at
@@ -234,12 +218,12 @@ export async function readNotificationSummary(pool: Pool, actor: Actor, followin
     const selected = socialNotificationKinds.filter(kind => prefs.categories[category(kind)!] === 'summary');
     for (const row of await unreadNotices(q, actor, selected, true)) {
       const group = category(row.kind)!;
-      let path: string | null = group === 'friends' ? '#members' : group === 'squads' ? '#squads' : null;
-      if (group === 'events' && row.action_resource_id) path = `#events/${row.action_resource_id}`;
+      let path: string | null = group === 'friends' ? '#explore/people' : group === 'squads' ? '#me/teams' : null;
+      if (group === 'events' && row.action_resource_id) path = `#explore/events/${row.action_resource_id}`;
       items.push({ id: row.notification_id, source: 'notification', title: group === 'friends' ? '好友通知' : group === 'squads' ? '小隊通知' : '活動通知', path });
     }
     if (prefs.categories.events === 'summary') {
-      for (const item of await readableEventBulletins(q, actor)) items.push({ id: item.bulletin_id, source: 'event_bulletin', title: item.title, path: `#events/${item.event_id}` });
+      for (const item of await readableEventBulletins(q, actor)) items.push({ id: item.bulletin_id, source: 'event_bulletin', title: item.title, path: `#explore/events/${item.event_id}` });
     }
     if (followingEnabled && prefs.categories.following === 'summary') {
       const updates = await readFollowUpdates(q, actor, {});

@@ -2,6 +2,8 @@
 
 先找到功能的模組，再修改它的實作與測試。平台使用同一套 `freedom.module.json` 記錄模組歸屬、公開入口、依賴與驗證要求；不需要另建一份功能清單，也不需要為每個功能開一個 repository。
 
+要在自己的 Repo 做公會工具、遊戲或串接 Agent（不改平台原始碼），先看[在自己的 Repo 基於自由工坊開發](./build-on-freedom.md)。
+
 從自己的 fork 或工作分支提交 PR 到 `FreeTWAI/freedom-platform:main`。先看 [目前 PR](https://github.com/FreeTWAI/freedom-platform/pulls) 與 [Issues](https://github.com/FreeTWAI/freedom-platform/issues)，協調重疊範圍；已獲維護者直接派工時沿用該授權。完整協作規則見 [CONTRIBUTING](../../CONTRIBUTING.md)；Agent 開工前仍須讀 [AGENTS](../../AGENTS.md) 與受影響模組的 context。
 
 ## 1. 找到要修改的模組
@@ -100,14 +102,14 @@ v2 的每個 chunk 會列出它同時代表的 baseline/candidate `source_bindin
 | --- | --- | --- |
 | 業務規則、狀態、權限與資料寫入 | `modules/<domain>/` | 優先使用該模組的公開入口，保留原本權威來源與重試契約 |
 | 可共用的低階能力 | `packages/<capability>/` | 不依賴頁面或應用程式組合層 |
-| 已登入的前端頁面 | `apps/portal-web/src/modules/` 等既有功能目錄 | 在 `src/features/` 的對應功能群提供具型別的 renderer |
-| 分頁標題與說明 | `apps/portal-web/src/features/metadata.ts` | 同步 `Tab` 型別與實際導覽；註冊表拒絕缺漏、重複或未知項目 |
-| HTTP 路由 | `apps/platform-api/src/routes/` | 用既有 route factory，或在 `src/features/` 對應 registrar 接入 |
+| 已登入的前端頁面 | `apps/portal-web/src/modules/`、`apps/portal-web/src/share/` 等既有功能目錄 | 在 `src/features/` 的對應功能群提供具型別的 renderer；空間分群、檢視切換與路由對應定義在 `apps/portal-web/src/portal-route.ts`（`PORTAL_PLACES`、`LEGACY_ROUTES`）與 `apps/portal-web/src/features/PlaceView.tsx` |
+| 分頁標題與說明 | `apps/portal-web/src/features/metadata.ts` | 同步 `apps/portal-web/src/types.ts` 的 `TabId` 型別與實際導覽；註冊表拒絕缺漏、重複或未知項目 |
+| HTTP 路由 | `apps/platform-api/src/routes/` | 用既有 route factory，或在 `src/features/` 對應 registrar 接入；若納入會員 Agent 通道（`agent-allowlist.ts`），同步執行 `npm run contracts:agent`（或 `npm run check:agent-contract` 驗證） |
 | API 共通邊界 | `apps/platform-api/src/platform-app.ts` | 明確放在公開或會員邊界的正確位置，由 host 保持順序 |
 | runtime / Worker 安裝與依賴 | `apps/platform-api/src/app.ts`、`runtime.ts`、`worker.ts` | 沿用既有 host adapter 與有效旗標，不由 descriptor 自動安裝 |
 | 測試 | `tests/runtime/`、`tests/e2e/`、模組自己的測試目錄 | 驗證行為、權限拒絕、失敗及重試，不只測檔名或文字存在 |
 
-前端目前分為 `identity`、`guilds`、`community`、`work`、`commerce` 五個功能群。`registry.tsx` 靜態組合它們；`types.ts` 定義 App 提供的 session、資料及 callbacks。`App.tsx` 保留登入、onboarding、生命週期與錯誤邊界；訊息仍使用既有 overlay。未完成入會的結帳入口共用相同訂單元件。新增頁面需要同步導覽與測試，不會因為新增 JSON 就自動出現在公開網站。
+前端主導覽分為「動態」「探索」「公會」「自動化」「我的」五個空間（`PORTAL_PLACES`），由 `apps/portal-web/src/features/PlaceView.tsx` 協調空間檢視切換、功能搜尋與各頁入口，並在 `src/features/` 保持 `identity`、`guilds`、`community`、`work`、`commerce` 五個功能群由 `registry.tsx` 靜態組合；`types.ts` 定義 `TabId` 及 App 提供的 session、資料與 callbacks。`App.tsx` 保留登入、onboarding、生命週期與錯誤邊界，頂欄工具列提供統一的 `ShareBoxLauncher`（`apps/portal-web/src/share/ShareBox.tsx`）；訊息仍使用既有 overlay。外部獨立公會工具範本位於 `templates/guild-tool/`，平台端登錄、隔離模式與 token 交換由 `modules/guild-tools/` 負責，並在 `#guilds/<guild_key>/tools/<tool_id>` 呈現。未完成入會的結帳入口共用相同訂單元件。新增頁面需要同步導覽與測試，不會因為新增 JSON 就自動出現在公開網站。
 
 後端的 `features/` 把原本內嵌的登入、會員帳號、搜尋關係、個人內容、通知偏好、工作、公開活動、名片、媒體與商務組合抽成註冊函式。公開與會員路由仍在 host 的原順序呼叫。新會員路由應放在 `memberBoundary` 後；交易功能須保留原本 checkout、onboarding、quarantine 與 private-cache 規則。不要移動共通邊界來讓新功能通過。
 
@@ -118,6 +120,10 @@ v2 的每個 chunk 會列出它同時代表的 baseline/candidate `source_bindin
 ```sh
 # 全部產品來源的歸屬、descriptor references 與 dependency graph
 npm run module:check
+
+# 檢查或重建會員 Agent 契約（修改 agent-allowlist / agent schema 時執行）
+npm run check:agent-contract
+npm run contracts:agent
 
 # 單一新模組的行為測試（請換成實際 ID）
 node --import tsx --test tests/runtime/community-calendar.test.ts

@@ -9,7 +9,7 @@ async function open(page:Page,organizer=other){
   await page.route('**/api/v1/events',route=>route.request().method()==='GET'?route.fulfill({json:{items:[value]}}):route.continue());
   await page.route(`**/api/v1/events/${id}`,route=>route.fulfill({json:value}));
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
-  await navigate(page,'社群活動');await page.getByRole('link',{name:'活動專頁',exact:true}).click();
+  await navigate(page,'社群活動');await page.evaluate(id=>{window.location.hash=`events/${id}`;},id);
 }
 
 const templateIds=['read_intro','think_question','notice_interest'];
@@ -37,7 +37,7 @@ test('uncertain command preserves exact tuple through read and later refusal',as
   await route.fulfill({json:{acknowledged:true,event_id:id,action:req.postDataJSON().action,command_key:req.headers()['idempotency-key']}});
  });
  await open(page);const panel=page.getByRole('region',{name:'我的活動小任務',exact:true});await panel.getByRole('button',{name:'略過',exact:true}).first().click();await expect(panel.getByRole('button',{name:'重試原操作'})).toBeVisible();await panel.getByRole('button',{name:'重新讀取'}).click();await expect(panel.getByRole('button',{name:'換一個',exact:true}).first()).toBeDisabled();
- await page.getByRole('button',{name:'返回活動列表與行事曆'}).click();await expect(page).toHaveURL(new RegExp(`#events/${id}$`));await panel.getByRole('button',{name:'重試原操作'}).click();await expect(panel.getByRole('button',{name:'重試原操作'})).toBeVisible();expect(writes[1]).toEqual(writes[0]);
+ await page.getByRole('button',{name:'返回活動列表與行事曆'}).click();await expect(page).toHaveURL(new RegExp(`#explore/events/${id}$`));await panel.getByRole('button',{name:'重試原操作'}).click();await expect(panel.getByRole('button',{name:'重試原操作'})).toBeVisible();expect(writes[1]).toEqual(writes[0]);
  resolve=true;await panel.getByRole('button',{name:'重試原操作'}).click();await expect(panel.getByRole('button',{name:'重試原操作'})).toHaveCount(0);expect(writes[2]).toEqual(writes[0]);
 });
 test('inaccessible source shows no tasks but retains private clear control',async({page})=>{

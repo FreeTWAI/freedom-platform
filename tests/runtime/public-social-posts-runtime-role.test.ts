@@ -1,3 +1,4 @@
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -30,6 +31,7 @@ before(async()=>{
     CREATE ROLE ${runtimeRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator};
     GRANT USAGE ON SCHEMA ${schema} TO ${runtimeRole}`);
+  await setFixtureRolePasswords(admin, [migrator, runtimeRole]);
   created=true;
   await migrate(owner);
   // Use the real runtime-grants source, scoped to this disposable schema.

@@ -21,6 +21,8 @@ before(async()=>{
       b.onResolve({filter:/^pg$/},()=>({path:'pg',namespace:'forbidden-sql'}));
       b.onLoad({filter:/.*/,namespace:'forbidden-sql'},()=>({contents:"export class Pool {constructor(){throw new Error('SQL is unavailable in composition fixture');}}"}));
       b.onResolve({filter:/model-step-node-transport\.js$/},()=>({path:resolve('modules/agent-execution/model-step-worker-transport-unavailable.ts')}));
+      // The Worker build aliases sharp the same way: native libvips is unavailable in workerd.
+      b.onResolve({filter:/^sharp$/},()=>({path:resolve('packages/shared/sharp-unavailable.ts')}));
     }}]});
 });
 after(async()=>{if(directory)await rm(directory,{recursive:true,force:true});});

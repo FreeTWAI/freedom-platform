@@ -31,7 +31,8 @@ export async function enhanceSkillSocial(node:HTMLElement,signal:AbortSignal):Pr
   const canRender=()=>!signal.aborted&&node.isConnected&&!node.contains(document.activeElement);
   if(!canRender())return false;
   const client=new PortalClient();
-  const widget=<GitHubBookSocial bookId={bookId} repositoryUrl={repositoryUrl} compact={node.hasAttribute('data-skill-social-compact')} returnTo={'/development/skills/'+bookId}/>;
+  const originalCache=node.dataset.originalCache?JSON.parse(node.dataset.originalCache):undefined;
+  const widget=<GitHubBookSocial originalCache={originalCache} bookId={bookId} repositoryUrl={repositoryUrl} compact={node.hasAttribute('data-skill-social-compact')} returnTo={'/development/skills/'+bookId}/>;
   try{
     const session=await client.get<SessionPayload>('/session',{skipAuthHandler:true,signal});
     if(!canRender())return false;

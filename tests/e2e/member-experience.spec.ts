@@ -1,3 +1,5 @@
+import {openEventOptions} from './navigation.js';
+import {clearMemberAgentEvents} from './navigation.js';
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -11,6 +13,7 @@ test.afterEach(async ({ e2eAuthPool }) => {
   if (!leaderboardFixtureUsers.length) return;
   const ids = leaderboardFixtureUsers.splice(0);
   await e2eAuthPool.query('DELETE FROM github_social_connections WHERE user_id = ANY($1::uuid[])', [ids]);
+  await clearMemberAgentEvents(e2eAuthPool,ids);
   await e2eAuthPool.query('DELETE FROM users WHERE user_id = ANY($1::uuid[])', [ids]);
 });
 
@@ -30,16 +33,13 @@ test('new member explores, submits an event and selects each theme',async({page}
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-theme','light');
   await page.screenshot({path:'test-results/member-login-light.png',fullPage:true});
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill('共創新夥伴');
   await page.getByLabel('電子郵件',{exact:true}).fill(`experience-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-member-experience-2026');
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   await expect(page.getByRole('heading',{name:'共創新夥伴，歡迎來到自由工坊。'})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'近期活動'})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'可參與的工作'})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'免費技能書'})).toBeVisible();
-  await expect(page.locator('.welcome-preview-grid').getByRole('link',{name:'開啟原作 ↗'}).first()).toHaveAttribute('href','https://github.com/arumwu/local-workspace-mcp');
+  await expect(page.locator('.welcome-preview .notification-bell')).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'你喜歡怎麼做事？'})).toHaveCount(0);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:'test-results/member-preview-light.png',fullPage:true});
@@ -48,13 +48,15 @@ test('new member explores, submits an event and selects each theme',async({page}
   await page.screenshot({path:'test-results/member-preview-light-320.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});
   await page.locator('.welcome-optional > summary').click();
-  await page.getByRole('button',{name:'提交公開活動'}).click();
+  await page.getByRole('button',{name:'提交公開活動'}).click();await openEventOptions(page);
   await page.getByLabel('活動名稱').fill('新會員一起畫工坊');
   await page.getByLabel('活動說明').fill('一起畫出下一次活動的原創小插圖。');
-  await page.getByLabel('線上場地').fill('Discord 讀書會場地');
-  await page.getByRole('button',{name:'送出審核'}).click();
-  await expect(page.getByText('活動已送出審核；核准後才會開放報名。')).toBeVisible();
-  await expect(page.getByText('新會員一起畫工坊')).toBeVisible();
+  await page.getByRole('combobox',{name:'形式',exact:true}).selectOption('online');
+  await page.getByLabel('地點').fill('Discord 讀書會場地');
+  const publishing=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/api/v1/events');
+  await page.getByRole('button',{name:'發布',exact:true}).click();
+  const published=await publishing;expect(published.status()).toBe(201);expect((await published.json()).state).toBe('published');
+  await expect(page.getByText('活動已發布。',{exact:true})).toBeVisible();
   await page.locator('.preview-profile-menu > summary').click();
   await expect(page.locator('.preview-profile-menu').getByRole('radio')).toHaveCount(5);
   await page.getByRole('radio',{name:'新手導覽－龍娘',exact:true}).check();
@@ -92,7 +94,7 @@ test('completed member submits an event and sees accepted-work facts without pro
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await expect(page.locator('.community-header').getByRole('button',{name:/^通知/})).toBeVisible();
   await page.locator('.page-tools-menu > summary').click();
   for(const name of ['提出想法','頁面說明','參與編修'])await expect(page.locator('.topbar').getByRole('button',{name,exact:true})).toBeVisible();
@@ -102,9 +104,9 @@ test('completed member submits an event and sees accepted-work facts without pro
   await expect(page.locator('.floating-messages')).toHaveCSS('background-color','color(srgb 1 1 1 / 0.75)');
   await page.screenshot({path:'test-results/member-home-light.png',fullPage:true});
   await navigate(page,'社群活動');
-  await expect(page.getByRole('heading',{name:'社群活動',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'探索',level:1})).toBeVisible();
   await expect(page.getByRole('heading',{name:'活動行事曆'})).toBeVisible();
-  await page.getByRole('button',{name:'辦活動'}).click();
+  await page.getByRole('button',{name:'辦活動'}).click();await openEventOptions(page);
   const title=`共創活動 ${randomUUID().slice(0,8)}`;
   await page.getByLabel('活動名稱').fill(title);
   await page.getByLabel('活動說明').fill('一起分享一個可以完成的小作品。');
@@ -112,17 +114,17 @@ test('completed member submits an event and sees accepted-work facts without pro
   const local=(date:Date)=>new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
   await page.getByLabel('開始時間').fill(local(start));
   await page.getByLabel('結束時間').fill(local(end));
-  await page.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+  await openEventOptions(page);
   await page.getByLabel('活動類型').selectOption('reading_group');
   await page.getByLabel('讀書會主題').fill('共同創作入門');
-  await page.getByLabel('線上場地').fill('Discord 讀書會場地');
+  await page.getByLabel('地點').fill('Discord 讀書會場地');
   await page.getByLabel('線上參與連結').fill('https://example.org/meeting');
   const banner=await sharp({create:{width:120,height:63,channels:3,background:'#366177'}}).png().toBuffer();
   await page.getByText('加上海報或影片（選填）',{exact:true}).click();
   await page.getByLabel('活動海報（選填）').setInputFiles({name:'event-banner.png',mimeType:'image/png',buffer:banner});
-  await page.getByRole('button',{name:'送出審核'}).click();
+  await page.getByRole('button',{name:'發布',exact:true}).click();
   await expect(page.getByRole('heading',{name:title})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'待審核活動'})).toBeVisible();
+  await expect(page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title})})).toContainText('開放報名');
   await expect(page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title})}).locator('.experience-banner-image')).toBeVisible();
   await page.screenshot({path:'test-results/member-events-light.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});
@@ -136,7 +138,7 @@ test('completed member submits an event and sees accepted-work facts without pro
   await page.screenshot({path:'test-results/member-events-light-desktop.png',fullPage:true});
   await page.setViewportSize({width:1280,height:720});
   await navigate(page,'社群任務');
-  await expect(page.getByRole('heading',{name:'社群任務',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'工作',level:1})).toBeVisible();
   await expect(page.getByText('每件工作只算一次。',{exact:false})).toBeVisible();
   await expect(page.getByRole('heading',{name:'GitHub 活動與歷史紀錄'})).toBeVisible();
   await page.locator('.community-source-scope > summary').click();
@@ -189,6 +191,8 @@ test('completed member submits an event and sees accepted-work facts without pro
   await expect(points).toContainText('每個 Issue 5 分，每個 PR 20 分（Issue × 5 + PR × 20）');
   await expect(points).toContainText('40 分');
   await expect(points).toContainText('30 分');
+  await expect(points.locator('li').filter({hasText:'40 分'}).locator('.community-rank')).toHaveText('第 1 名');
+  await expect(points.locator('li').filter({hasText:'30 分'}).locator('.community-rank')).toHaveText('第 2 名');
   await expect(points).not.toContainText('dependabot');
   await expect(edits).not.toContainText('outsider-demo');
   await expect(points).not.toContainText('outsider-demo');
@@ -299,8 +303,8 @@ test('story theme keeps the workshop controls and cute artwork usable on a narro
   // 頁面說明 uses the theme's soft green, the same tint family as the filled 提出想法.
   await expect.poll(()=>page.evaluate(()=>{const tool=document.querySelector('.page-tool-button--help')!,probe=document.createElement('span');probe.style.background=getComputedStyle(document.documentElement).getPropertyValue('--green-soft').trim();document.body.append(probe);const soft=getComputedStyle(probe).backgroundColor;probe.remove();return getComputedStyle(tool).backgroundColor===soft})).toBe(true);
   await openHomeGuide(page);
-  await expect(page.locator('.home-destinations')).toBeVisible();
-  await expect(page.locator('.home-destinations').getByRole('heading')).toHaveText(['商品與供貨','作品與活動']);
+  await expect(page.locator('.home-destinations')).toHaveCount(0);
+  await expect(page.locator('.home-personal').getByRole('link',{name:'編輯個人頁'})).toBeVisible();
   await page.locator('.page-tools-menu > summary').click();
   for(const name of ['提出想法','頁面說明','參與編修'])await expect(page.locator('.topbar').getByRole('button',{name:new RegExp(name)})).toBeVisible();
   await page.locator('.page-tools-menu > summary').click();

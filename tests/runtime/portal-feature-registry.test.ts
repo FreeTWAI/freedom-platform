@@ -91,7 +91,8 @@ test('store entry does not turn missing capability data into enabled features', 
   }
   assert.equal(store.props.providerEnvironment, 'sandbox');
   assert.equal(store.props.registerLeave, context.registerPageLeave);
-  assert.equal(element(commerceFeatures.business.render(context)).props.enabled, null);
+  assert.equal(element(commerceFeatures.business.render(context)).props.enabled, true);
+  assert.equal(element(commerceFeatures.business.render(fixture({site: {guild_launchpad_enabled: false} as any}))).props.enabled, true);
 });
 
 test('store entry forwards independent flags and the existing production environment distinction', () => {
@@ -171,14 +172,16 @@ test('home and member-card consumers do not statically download account editors'
   }
 });
 
-test('account lazy boundary retains all original editors and the negative eager edge is detected',()=>{
+test('account editors retain their lazy boundary and tool connections move to lazy automation',()=>{
   const identity=readFileSync(new URL('../../apps/portal-web/src/features/identity.tsx',import.meta.url),'utf8');
   assert.match(identity,/const AccountPanel = lazy\(\(\) => import\('\.\.\/modules\/AccountSettingsPanel'\)\.then\(m => \(\{default: m\.AccountPanel\}\)\)\)/);
   const account=staticModuleInputs('modules/AccountSettingsPanel.tsx');
   // The entry itself is <stdin>; its actual subcomponent graph remains complete.
-  for(const name of accountOnlyModules.filter(name=>name!=='AccountSettingsPanel'))assert.equal(hasModule(account,name),true,name);
+  for(const name of accountOnlyModules.filter(name=>name!=='AccountSettingsPanel'&&name!=='ClientConnections'))assert.equal(hasModule(account,name),true,name);
+  assert.equal(hasModule(account,'ClientConnections'),false);
+  assert.match(readFileSync(new URL('../../apps/portal-web/src/features/PlaceView.tsx',import.meta.url),'utf8'),/ClientConnections=lazy/);
   const eager=staticModuleInputs('modules/MemberHome.tsx',"\nimport './AccountSettingsPanel';");
-  for(const name of accountOnlyModules)assert.equal(hasModule(eager,name),true,`negative control must detect ${name}`);
+  for(const name of accountOnlyModules.filter(name=>name!=='ClientConnections'))assert.equal(hasModule(eager,name),true,`negative control must detect ${name}`);
 });
 
 test('account composition preserves the state owner, leave guard and explicit query flags',()=>{
@@ -194,4 +197,15 @@ test('account composition preserves the state owner, leave guard and explicit qu
   assert.equal(second.type,first.type,'query changes retain the same lazy component identity');
   assert.equal(second.props.focusConnections,false);
   assert.equal(second.props.focusProfileExtras,true);
+  assert.equal(second.props.focusPublicPage,false);
+  for(const hash of ['#me/settings?view=page','#me?view=settings','#account?view=page','#me/settings?view=page&from=share']){
+    const pageView=element(identityFeatures.account.render({...context,locationHash:hash}));
+    assert.equal(pageView.props.focusPublicPage,true,hash);
+  }
+  assert.equal(element(identityFeatures.account.render({...context,locationHash:'#me/settings'})).props.focusPublicPage,false);
+  const visited:string[]=[];
+  const visitor=element(identityFeatures.profile.render({...context,locationHash:'#me?member=30000000-0000-4000-8000-000000000001',selectTab:(tab,hash)=>visited.push(`${tab}:${hash??''}`)}));
+  assert.equal(visitor.props.id,'30000000-0000-4000-8000-000000000001');
+  visitor.props.onEdit();
+  assert.deepEqual(visited,['account:#me/settings?view=page']);
 });

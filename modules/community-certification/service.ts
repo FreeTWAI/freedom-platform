@@ -89,10 +89,10 @@ export async function certificationQueue(pool:Pool,admin:AdminActor,query:Record
  const input=z.object({state:z.enum(['pending','active','rejected','revoked','withdrawn','all']).default('pending'),limit:z.coerce.number().int().min(1).max(50).default(25),offset:z.coerce.number().int().min(0).max(100000).default(0)}).strict().parse(query);
  return transaction(pool,async q=>{
   requireCondition((await q.query('SELECT 1 FROM platform_admins WHERE admin_id=$1 AND community_id=$2 AND active FOR SHARE',[admin.admin_id,admin.community_id])).rowCount===1,403,'admin_required','管理權限已變更。');
-  const rows=(await q.query(`SELECT c.user_id,u.display_name,c.${columns.replaceAll(',',',c.')} FROM member_community_certifications c
+  const rows=(await q.query(`SELECT c.user_id,u.display_name,c.updated_at AS submitted_at,c.${columns.replaceAll(',',',c.')} FROM member_community_certifications c
    JOIN users u ON u.user_id=c.user_id AND u.community_id=c.community_id WHERE c.community_id=$1
    AND ($2='all' OR c.state=$2) AND c.state<>'unrequested' AND NOT is_verification_test_account(u.user_id)
    ORDER BY c.updated_at,c.user_id LIMIT $3 OFFSET $4`,[admin.community_id,input.state,input.limit+1,input.offset])).rows;
-  await revalidate();return {items:rows.slice(0,input.limit).map(row=>({user_id:row.user_id,display_name:row.display_name,...settings(row)})),next_offset:rows.length>input.limit?input.offset+input.limit:null};
+  await revalidate();return {items:rows.slice(0,input.limit).map(row=>({user_id:row.user_id,display_name:row.display_name,submitted_at:row.submitted_at?.toISOString()??null,...settings(row)})),next_offset:rows.length>input.limit?input.offset+input.limit:null};
  });
 }

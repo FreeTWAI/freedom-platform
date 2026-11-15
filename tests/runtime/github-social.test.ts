@@ -723,3 +723,13 @@ for(const operation of dispatchWrites)for(const gate of ['refresh','queue'] as c
     }finally{releasePreflight();releaseBlockers();await Promise.allSettled(blockers);if(pending)await pending;}
   });
 }
+
+test('OAuth return validation follows the shared portal address cases',async()=>{
+  const {acceptedPortalReturns,refusedPortalReturns}=await import('../fixtures/portal-return-cases');
+  for(const target of acceptedPortalReturns){
+    const started=await social.start(actor,target);
+    assert.ok(started.authorization_url,target);
+    await pool.query("DELETE FROM github_social_rate_limits WHERE user_id=$1 AND operation='oauth-start'",[actor.user_id]);
+  }
+  for(const target of refusedPortalReturns)await assert.rejects(()=>social.start(actor,target),errorCode('github_return_to_invalid'),target);
+});

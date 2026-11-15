@@ -1,3 +1,4 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route';
 import {test as memberTest} from './member-feature-fixture.js';
 import {setupCartFixtureStore} from './storefront-cart-fixture.js';
 import {apiLogin,fixtureStore,enableStore} from './hosted-order-fixture.js';
@@ -124,8 +125,11 @@ test('a commerce member opens, stocks, publishes and re-enters their own store',
   await flow(page).getByRole('button', {name: '確認啟動', exact: true}).click();
   await expect(flow(page)).toContainText('已啟用');
   await flow(page).getByRole('button', {name: '設定我的商店', exact: true}).click();
-  await expect(page).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
   const hash = new URL(page.url()).hash;
+  const legacyHash = hash.replace('#guilds/guild_commerce_sales/tools/store/', '#stores/');
+  await open(page, legacyHash);
+  await expect(page).toHaveURL(new RegExp(hash + '$'));
   const setup = page.getByRole('form', {name: '建立商店', exact: true});
   await setup.getByLabel('商店名稱', {exact: true}).fill('小島選物');
   await setup.getByLabel('品牌（選填）', {exact: true}).fill('Island Picks');
@@ -198,7 +202,7 @@ test('a commerce member opens, stocks, publishes and re-enters their own store',
   await expect(storePage(page).locator('.hosted-store-product')).toHaveCount(2);
   await navigate(page, '我的商店');
   await expect(storePage(page).locator('article.card')).toHaveCount(1);
-  await expect(storePage(page).getByRole('link', {name: '進入我的商店', exact: true})).toHaveAttribute('href', hash);
+  await expect(storePage(page).getByRole('link', {name: '進入我的商店', exact: true})).toHaveAttribute('href', legacyHash);
   const otherMember = await person(e2eAuthPool), other = await browser.newContext({baseURL});
   try {
     const otherPage = await other.newPage(); await login(otherPage, otherMember.email); await open(otherPage, 'stores');
@@ -290,7 +294,7 @@ test('store pages stay readable in every theme and width', async ({page, browser
       await pub.goto(`/shops/${slug}`);
       const link = pub.getByRole('link', {name, exact: true});
       await expect(link).toHaveAttribute('href', '/' + hash); await link.click();
-      await expect(pub).toHaveURL(new URL('/' + hash, baseURL).href);
+      await expect(pub).toHaveURL(new URL('/' + canonicalHash(hash), baseURL).href);
       await expect(pub.getByLabel('電子郵件', {exact: true})).toBeVisible();
       await expect(pub.getByRole('button', {name: '登入', exact: true})).toBeVisible();
       expect((await pub.request.get('/api/v1/session')).status()).toBe(401);
@@ -378,18 +382,18 @@ test('store drafts ask before main navigation and retain edits when leaving is d
   let prompts = 0, allowLeave = false;
   page.on('dialog', async dialog => {prompts++; expect(dialog.message()).toBe('還有尚未儲存的內容，要離開嗎？'); if (allowLeave) await dialog.accept(); else await dialog.dismiss();});
   await navigate(page, '職業公會');
-  await expect(page).toHaveURL(new RegExp('#' + ready.hash + '$'));
+  await expect(page).toHaveURL(new RegExp(canonicalHash('#' + ready.hash) + '$'));
   await expect(settings.getByLabel('商店名稱', {exact: true})).toHaveValue('留下這份草稿');
   expect(prompts).toBe(1);
   const closeMenu = page.getByRole('button', {name: '關閉選單', exact: true});
   if (await closeMenu.isVisible()) await closeMenu.click();
   await page.locator('.brand-home').click();
-  await expect(page).toHaveURL(new RegExp('#' + ready.hash + '$'));
+  await expect(page).toHaveURL(new RegExp(canonicalHash('#' + ready.hash) + '$'));
   await expect(settings.getByLabel('商店名稱', {exact: true})).toHaveValue('留下這份草稿');
   expect(prompts).toBe(2);
   await page.evaluate(() => {window.location.hash = 'home';});
   await expect.poll(() => prompts).toBe(3);
-  await expect(page).toHaveURL(new RegExp('#' + ready.hash + '$'));
+  await expect(page).toHaveURL(new RegExp(canonicalHash('#' + ready.hash) + '$'));
   await expect(settings.getByLabel('商店名稱', {exact: true})).toHaveValue('留下這份草稿');
   allowLeave = true;
   await navigate(page, '職業公會');
@@ -435,7 +439,7 @@ for (const width of [1280, 360]) test(`pending and unknown store writes keep the
     WHERE p.instance_id=$1 AND i.title=$2`, [ready.hash.split('/')[2], title])).rows;
   const stays = async (message: string) => {
     await expect(status).toContainText(message);
-    await expect(page).toHaveURL(new RegExp('#' + ready.hash + '$'));
+    await expect(page).toHaveURL(new RegExp(canonicalHash('#' + ready.hash) + '$'));
     await expect(form.getByLabel('商品名稱', {exact: true})).toHaveValue(title);
     expect(prompts).toBe(0);
   };
@@ -565,7 +569,7 @@ test('unknown appearance response retains the original key and selection until c
   const retry = page.getByRole('button', {name: '重試', exact: true}); await expect(retry).toBeEnabled();
   await expect(list).toBeChecked(); await expect(list).toBeDisabled();
   let prompts = 0; page.on('dialog', async d => {prompts++; await d.accept();});
-  await page.evaluate(() => {location.hash = 'home';}); await expect(page).toHaveURL(new RegExp('#' + ready.hash + '$'));
+  await page.evaluate(() => {location.hash = 'home';}); await expect(page).toHaveURL(new RegExp(canonicalHash('#' + ready.hash) + '$'));
   expect(prompts).toBe(0); expect(requests).toHaveLength(1);
   await retry.click(); await expect(storePage(page).getByRole('status')).toContainText('已儲存版型');
   await expect(list).toBeEnabled(); await expect(list).toBeChecked();

@@ -5,6 +5,10 @@ import {publicPostCatalogResources,publicSocialPostHtml,unavailableSocialPostHtm
 import {communityCatalog} from '../../modules/community/catalog.js';
 import type {PublicSocialPostPage} from '../../modules/community/public-social-posts.js';
 import {anonymousSharedPost,memberPostReturn,publicPostReturn} from '../../apps/portal-web/src/modules/public-post-return.js';
+// Text outside tags, read one character at a time (a test reading of trusted markup, not a sanitizer).
+const textOutsideTags=(html:string)=>{let text='',inTag=false;for(const char of html){if(char==='<')inTag=true;else if(char==='>')inTag=false;else if(!inTag)text+=char;}return text;};
+// Markup without its script elements, found by position (case-insensitive), not by a pattern.
+const withoutScripts=(html:string)=>{const lower=html.toLowerCase();let text='',at=0;for(;;){const start=lower.indexOf('<script',at);if(start<0)return text+html.slice(at);text+=html.slice(at,start);const end=lower.indexOf('</script',start);const close=end<0?-1:lower.indexOf('>',end);if(close<0)return text;at=close+1;}};
 
 const id='17c80987-1d06-4eb3-9cc4-5cc03a4987ec';
 const other='4c80966b-af02-4173-93d3-943fda1c9242';
@@ -14,6 +18,8 @@ test('post return accepts one UUID and keeps public reading, legacy member inten
   assert.equal(publicPostReturn('?post_return='+id.toUpperCase()+'&join=1'),'/posts/'+id);
   assert.equal(memberPostReturn('?social-post='+id,'#account'),'/?social-post='+id+'#social');
   assert.equal(anonymousSharedPost('?social-post='+id,'#social'),'/posts/'+id);
+  assert.equal(anonymousSharedPost('?social-post='+id,'#home'),'/posts/'+id);
+  assert.equal(memberPostReturn('?social-post='+id,'#me/settings'),'/?social-post='+id+'#social');
   assert.equal(anonymousSharedPost('?social-post='+id,'#account'),null);
   assert.equal(memberPostReturn('?social-post='+id,'#social'),null);
   for(const value of ['',id+'\n',id+'\r',id+' ',id+'/../other','//elsewhere.test','https://elsewhere.test/',id+'?x=1',id+'#social','00000000-0000-0000-0000-000000000000']){
@@ -151,14 +157,14 @@ test('reopen journey waits for its exact POST and complete ACK before public nav
   h.response.resolve({status:()=>200,json:()=>h.body.promise});await flushReopen();
   assert.deepEqual(h.events,['response-listener','consent-details','click']);
   h.body.resolve(h.ack);await h.complete;
-  assert.deepEqual(h.events,['response-listener','consent-details','click','ack','public-link','visible','visitor-navigation']);
+  assert.deepEqual(h.events,['response-listener','consent-details','click','ack','visible','visitor-navigation']);
 });
 
 test('reopen journey rejects incomplete or unavailable ACKs before visiting public content',async()=>{
   for(const ack of [{},{enabled:true,available:false,post_revision:2,public_path:null},{enabled:true,available:true,post_revision:1,public_path:'/posts/'+id},{enabled:true,available:true,post_revision:2,public_path:'/posts/'+other}]){
     const h=reopenHarness(),rejected=assert.rejects(h.complete);
     h.response.resolve({status:()=>200,json:async()=>ack});await rejected;assert.ok(h.events.includes('click'));
-    assert.ok(!h.events.includes('public-link'));assert.ok(!h.events.includes('visitor-navigation'));
+    assert.ok(!h.events.includes('visible'));assert.ok(!h.events.includes('visitor-navigation'));
   }
 });
 
@@ -173,4 +179,37 @@ test('reopen journey negative control rejects publication when disclosure expans
   assert.notEqual(changed,reopenTransition);
   const h=reopenHarness(changed);await assert.rejects(h.complete,/publication stays behind the explicit disclosure/);
   assert.ok(!h.events.includes('click'));assert.ok(!h.events.includes('visitor-navigation'));
+});
+
+test('UX-V-15: public post and unavailable HTML have one btn-primary, unique destinations, no inline style, and short pre-action and static copy',()=>{
+  const source=page(),book=communityCatalog.skill_books.find(item=>item.id===skillIds[0])!;
+  source.post.author.display_name='測試作者';
+  source.post.note=`測試分享\n${skillPath(book.id)}`;
+  source.related=[0,1,2].map(i=>({post_id:`00000000-0000-4000-8000-00000000000${i+1}`,title:`相關標題${i}`,summary:`相關摘要${i}`,author:{display_name:`相關作者${i}`},path:`/posts/00000000-0000-4000-8000-00000000000${i+1}`}));
+  const html=publicSocialPostHtml(source,origin,true);
+  assert.equal((html.match(/\bbtn-primary\b/g)??[]).length,1);
+  assert.doesNotMatch(html,/\sstyle=/i);
+  const hrefs=[...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m=>m[1]);
+  assert.equal(new Set(hrefs).size,hrefs.length,`duplicate hrefs: ${hrefs.join(', ')}`);
+  const mainHtml=html.slice(html.indexOf('<main'),html.indexOf('</main>'));
+  const beforePrimary=textOutsideTags(mainHtml.slice(0,mainHtml.search(/<a\b[^>]*btn-primary/)))
+    .replace(source.post.author.display_name,'').replace(source.post.note,'').replace(/\d{4}年\d+月\d+日/,'').trim();
+  assert.ok(beforePrimary.length<=20,`expected <=20 static chars before btn-primary, got ${beforePrimary.length}: ${beforePrimary}`);
+  let staticOnly=textOutsideTags(withoutScripts(html.slice(html.indexOf('<body'),html.indexOf('</body>'))));
+  for(const dyn of [source.post.author.display_name,source.post.note,book.title,...source.related.flatMap(r=>[r.author.display_name,r.title,r.summary])]){
+    staticOnly=staticOnly.replaceAll(dyn,'');
+  }
+  staticOnly=staticOnly.replace(/\d{4}年\d+月\d+日/g,'').replace(/\s+/g,'');
+  assert.ok(staticOnly.length<=120,`expected <=120 static chars, got ${staticOnly.length}: ${staticOnly}`);
+  for(const probe of [id,'<script>alert(1)</script>']){
+    const miss=unavailableSocialPostHtml(probe);
+    assert.equal((miss.match(/\bbtn-primary\b/g)??[]).length,1,probe);
+    assert.doesNotMatch(miss,/\sstyle=/i);
+    assert.ok(!miss.includes('<script>alert(1)</script>'));
+    const missHrefs=[...miss.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m=>m[1]);
+    assert.equal(new Set(missHrefs).size,missHrefs.length,`duplicate 404 hrefs: ${missHrefs.join(', ')}`);
+    const missMain=miss.slice(miss.indexOf('<main'),miss.indexOf('</main>'));
+    const missPre=textOutsideTags(missMain.slice(0,missMain.search(/<a\b[^>]*btn-primary/))).trim();
+    assert.ok(missPre.length<=20,`expected <=20 chars before 404 primary, got ${missPre.length}: ${missPre}`);
+  }
 });

@@ -1,3 +1,4 @@
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 import {chromium,type Browser,type BrowserContext,type Page} from '@playwright/test';
 import {serveStatic} from '@hono/node-server/serve-static';
 import {X509Certificate} from 'node:crypto';
@@ -53,6 +54,7 @@ before(async () => {
   await admin.query(`CREATE ROLE ${migrator} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE ROLE ${runtime} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator}; GRANT USAGE ON SCHEMA ${schema} TO ${runtime}`);
+  await setFixtureRolePasswords(admin, [migrator, runtime]);
   created=true; await migrate(owner);
   const template = await readFile(new URL('../../deploy/cloudflare/sql/20-runtime-grants.psql',import.meta.url),'utf8');
   const prefix = template.slice(template.indexOf('BEGIN;'),template.indexOf('-- BEGIN PRIVATE POLICY GRANTS'))
@@ -196,7 +198,7 @@ async function uiPair() {
   await panel.getByLabel('裝置配對代碼',{exact:true}).fill(f.authorization.userCode);
   const read=page.waitForResponse(response=>response.url()===origin+paths.inspect&&response.request().method()==='POST');
   await panel.getByRole('button',{name:'讀取配對請求',exact:true}).click();assert.equal((await read).status(),200);
-  await panel.getByRole('checkbox',{name:'我確認這是我正在配對的裝置，並核准讀取 bootstrap 狀態。',exact:true}).check();
+  await panel.getByRole('checkbox',{name:'我確認這是我正在配對的裝置，並核准讀取初始連線狀態。',exact:true}).check();
   const approve=page.waitForResponse(response=>response.url()===origin+paths.decide&&response.request().method()==='POST');
   await panel.getByRole('button',{name:'核准裝置',exact:true}).click();assert.equal((await approve).status(),200);
   const first=DeviceAuthorizationPollResultSchema.parse(await(await poll(f)).json());

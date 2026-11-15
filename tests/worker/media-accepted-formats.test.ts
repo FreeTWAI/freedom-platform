@@ -255,6 +255,8 @@ test('native Worker accepts a decodable MP4, rejects mismatched MIME and content
   assert.equal(head.headers.get('content-length'), String(size));
   assert.equal((await head.arrayBuffer()).byteLength, 0);
   const publicPath = '/api/v1/public/events/' + id + '/video';
+  // Historical pending fixtures retain the private media ACL check.
+  await owner.query("UPDATE community_events SET state='pending' WHERE event_id=$1", [id]);
   assert.equal((await call(installed, path, { headers: headers(peer) })).status, 404);
   assert.equal((await call(installed, publicPath)).status, 404);
 
@@ -271,6 +273,8 @@ test('native Worker accepts a decodable MP4, rejects mismatched MIME and content
   assert.equal(publicRange.headers.get('cache-control'), 'public, max-age=300');
   assert.deepEqual(Buffer.from(await publicRange.arrayBuffer()), fixtures.video.subarray(32, 64));
   assert.equal((await call(installed, path, { headers: headers(peer) })).status, 200);
+  // Published events accept media; cancelled events remain closed.
+  await owner.query("UPDATE community_events SET state='cancelled' WHERE event_id=$1", [id]);
   await expectProblem(await uploadVideo(installed, organizer, id, fixtures.video, 'video/mp4', '2'), 409, 'event_closed');
   await owner.query("UPDATE community_events SET state='pending' WHERE event_id=$1", [id]);
   assert.equal((await call(installed, publicPath)).status, 404);

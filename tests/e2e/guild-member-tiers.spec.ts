@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {test,expect,type Browser,type BrowserContext,type Page,type TestInfo} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {openEventOptions,navigate,openGuildCardMore} from './navigation.js';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 
@@ -168,10 +168,10 @@ test('an intern sees the calm notice and a disabled guild-exchange submit at pho
   await session.page.setViewportSize(widths[0]);
   await navigate(session.page,'社群活動');
   await session.page.getByRole('button',{name:'辦活動'}).click();
-  await session.page.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+  await openEventOptions(session.page);
   await session.page.getByLabel('活動類型').selectOption('guild_skill_exchange');
   await session.page.getByRole('combobox',{name:/^主辦公會/}).selectOption({label:fixture.guildName});
-  const submit=session.page.getByRole('button',{name:'送出審核',exact:true});
+  const submit=session.page.getByRole('button',{name:'發布',exact:true});
   for(const viewport of widths){
    await session.page.setViewportSize(viewport);
    await expect(submit).toBeDisabled();
@@ -186,6 +186,7 @@ test('the guild master promotes an intern, appoints an expert, and sees the 3/3 
  await withFixture(e2eAuthPool,browser,baseURL!,'master',async(fixture,session)=>{
   await navigate(session.page,'職業公會');
   const card=session.page.getByRole('article',{name:fixture.guildName,exact:true});
+  await openGuildCardMore(card);
   await card.getByRole('button',{name:'查看成員',exact:true}).click();
   const dialog=session.page.getByRole('dialog');
   await expect(dialog.locator('.guild-expert-count')).toHaveText('專家 2/3');

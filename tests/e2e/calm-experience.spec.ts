@@ -3,12 +3,12 @@ import {openChat,closeChat} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
 import {DEMO_USERS,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
-import {navigate,openFeatureSearch,openHomeGuide,openHomeLearning} from './navigation.js';
+import {navigate,openHomeGuide,openHomeLearning} from './navigation.js';
 import {quickJoin} from './quick-join.js';
 import {chatPollClock} from './chat-poll-clock.js';
 
 async function login(page:Page,email='maker@local.test'){
-  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 
 test('a resumed private conversation keeps older history and pages through every new-message gap in order',async({page})=>{
@@ -28,20 +28,20 @@ test('a resumed private conversation keeps older history and pages through every
   expect(offsets).toEqual([0,0,20,40,60]);expect(await thread.locator('.messages-body').allTextContents()).toEqual(Array.from({length:70},(_,index)=>item(index+1).body));
 });
 test('anonymous visitors can preview a real free resource before creating an account',async({page})=>{
-  await page.setViewportSize({width:390,height:844});await page.goto('/');const resources=page.locator('.entry-resources > details > summary');
+  await page.setViewportSize({width:390,height:844});await page.goto('/');await page.locator('details.login-more > summary').click();const resources=page.locator('.entry-resources > details > summary');
   await expect(resources).toHaveText('先看免費資源，不用註冊 · 搜尋社群內容');await resources.click();
   await expect(page.locator('.entry-resource-list article')).toHaveCount(3);await page.locator('.entry-resource-list').getByRole('button',{name:'免費預覽',exact:true}).first().click();await expect(page.getByRole('dialog')).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('synthetic entry budget: two required fields and one guild choice reach useful next steps in under 30 seconds',async({page})=>{
-  await page.setViewportSize({width:320,height:720});await page.goto('/');const start=Date.now();await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.setViewportSize({width:320,height:720});await page.goto('/');const start=Date.now();await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await expect(page.locator('.login-card input[required]')).toHaveCount(2);await expect(page.getByLabel('社群顯示名稱',{exact:true})).not.toHaveAttribute('required','');
   const email=`ux-${randomUUID().slice(0,8)}@example.test`;
   await page.getByLabel('電子郵件',{exact:true}).pressSequentially(email,{delay:100});await page.getByLabel('密碼',{exact:true}).pressSequentially('freedom-entry-2026',{delay:100});
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();await expect(page.locator('.welcome-optional')).not.toHaveAttribute('open','');
   await page.getByLabel('找感興趣的公會').fill('AI 開發公會');await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
-  await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open',false);
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
+  await expect(page.locator('.home-personal')).toHaveJSProperty('open',false);
   await openHomeGuide(page);
   await openHomeLearning(page);
   const next=page.getByRole('region',{name:'公會與技能書建議',exact:true});
@@ -54,15 +54,16 @@ test('synthetic entry budget: two required fields and one guild choice reach use
   await expect(next.getByRole('button',{name:/^(查看社群任務|分享作品與需求)$/})).toBeVisible();
   await page.screenshot({path:'test-results/calm-home-320.png',fullPage:true});
   await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'test-results/calm-home-1440.png',fullPage:true});await page.setViewportSize({width:320,height:720});
-  // Wait for the responsive disclosure state before opening it through the UI.
-  await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open',false);
+  // Resizing keeps the member's explicitly opened personal disclosure.
+  await expect(page.locator('.home-personal')).toHaveJSProperty('open',true);
   await openHomeGuide(page);
   await openHomeLearning(page);
   await next.getByRole('button',{name:'進入AI 開發公會聊天室',exact:true}).click();await expect(page.getByRole('heading',{name:'AI 開發公會・公會閒聊',exact:true})).toBeVisible();await expect(page.getByRole('textbox',{name:'在 AI 開發公會 發言'})).toBeVisible();
 });
 test('feature search finds chat and selling functions, and all themes work at 320 pixels',async({page})=>{
-  await login(page);await openFeatureSearch(page);const search=page.getByLabel('搜尋功能');await search.fill('聊天室');await page.locator('.nav-search-results').getByRole('button',{name:'我的訊息',exact:true}).click();await expect(page.getByRole('heading',{name:'我的訊息',level:2})).toBeVisible();
-  await openFeatureSearch(page);await search.fill('電商');await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'AI 製作銷售網站',exact:true}).click();await expect(page.getByRole('heading',{name:'我可以賣東西',level:1})).toBeVisible();
+  // The five-place menu replaces feature search; keep both task destinations reachable.
+  await login(page);await navigate(page,'我的訊息');await expect(page.getByRole('heading',{name:'我的訊息',level:2})).toBeVisible();
+  await navigate(page,'我可以賣東西');await expect(page.getByRole('heading',{name:'零售工具',level:1,exact:true})).toBeVisible();
   await navigate(page,'會員首頁');await page.setViewportSize({width:320,height:720});
   for(const [label,theme] of [['自由工坊－明亮','light'],['自由工坊－夜航','dark'],['自由工坊－敘生','versefolk']]){
     const settings=page.getByRole('button',{name:'設定',exact:true});if(await settings.getAttribute('aria-expanded')!=='true')await settings.click();await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:label,exact:true}).click();await expect(page.locator('html')).toHaveAttribute('data-theme',theme);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

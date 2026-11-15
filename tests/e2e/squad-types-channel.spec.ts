@@ -142,8 +142,8 @@ test('a lost squad creation response freezes input and retries the original comm
   await page.getByRole('button',{name:'成立小隊',exact:true}).click();
   const retry=page.getByRole('button',{name:'確認原操作結果',exact:true});await expect(retry).toBeVisible();
   await expect(page.getByLabel('小隊名稱',{exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'返回小隊列表',exact:true})).toBeDisabled();
-  await page.goBack();await expect(page).toHaveURL(/#squads$/);await expect(retry).toBeVisible();
-  await page.evaluate(()=>{window.location.hash='#skills';});await expect(page).toHaveURL(/#squads$/);await expect(retry).toBeVisible();
+  await page.goBack();await expect(page).toHaveURL(/#me\/teams$/);await expect(retry).toBeVisible();
+  await page.evaluate(()=>{window.location.hash='#skills';});await expect(page).toHaveURL(/#me\/teams$/);await expect(retry).toBeVisible();
   expect(writes).toHaveLength(1);await retry.click();await expect(page.getByRole('region',{name:'小隊詳情'})).toBeVisible();
   expect(writes).toHaveLength(2);expect(writes[1]).toEqual(writes[0]);
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM member_squads WHERE name=$1',[name])).rows[0].n).toBe(1);
@@ -169,14 +169,14 @@ test.describe('squad authored outcomes retain the original intent',()=>{
     const retry=page.getByRole('button',{name:'確認原操作結果',exact:true});await expect(retry).toBeVisible();
     await outcomes.locator('.squad-outcome-editor > summary').click();await expect(retry).toBeVisible();
     await detail.getByRole('button',{name:'返回小隊列表',exact:true}).click();await expect(retry).toBeVisible();
-    await page.evaluate(()=>{window.location.hash='#squad-outcomes/00000000-0000-4000-8000-000000000000';});await expect(page).toHaveURL(/#squads$/);
+    await page.evaluate(()=>{window.location.hash='#squad-outcomes/00000000-0000-4000-8000-000000000000';});await expect(page).toHaveURL(/#me\/teams$/);
     await retry.click();await expect(retry).toHaveCount(0);expect(writes).toHaveLength(2);expect(writes[1]).toEqual(writes[0]);
     const saved=(await e2eAuthPool.query('SELECT outcome_id,state FROM member_squad_outcomes WHERE title=$1',[title])).rows;expect(saved).toHaveLength(1);expect(saved[0].state).toBe('draft');
     await page.getByRole('button',{name:`查看小隊：${name}`,exact:true}).click();await expect(outcomes.getByLabel('成果標題')).toHaveValue(title);
     await expect(outcomes.getByRole('button',{name:'依所選範圍發布已儲存草稿'})).toBeDisabled();
     expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(false);
     await outcomes.getByLabel('成果標題').fill(title+'未儲存');await outcomes.getByRole('link',{name:title,exact:true}).click();
-    await expect(page).toHaveURL(new RegExp(`#squad-outcomes/${saved[0].outcome_id}$`));await expect(page.getByRole('heading',{name:title,exact:true})).toBeFocused();
+    await expect(page).toHaveURL(new RegExp(`#me/teams/outcomes/${saved[0].outcome_id}$`));await expect(page.getByRole('heading',{name:title,exact:true})).toBeFocused();
     await page.getByRole('link',{name:'返回小隊',exact:true}).click();await expect(detail).toBeVisible();await expect(outcomes.getByLabel('成果標題')).toHaveValue(title+'未儲存');
     expect((await e2eAuthPool.query('SELECT state FROM member_squad_outcomes WHERE outcome_id=$1',[saved[0].outcome_id])).rows[0].state).toBe('draft');
   });

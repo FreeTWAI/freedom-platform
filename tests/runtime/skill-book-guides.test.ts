@@ -6,6 +6,16 @@ import {skillBookGuides} from '../../modules/community/skill-book-guides.js';
 import {developmentMap,skillMarkdown,pageHtml} from '../../modules/development/service.js';
 import {skillBookCoverUrl,skillBookStarUrl} from '../../apps/portal-web/src/modules/SkillBookCover.js';
 import {escapeHtml} from '../../packages/shared/html.js';
+import {buildBookOriginalCache} from '../../modules/shares/repository-cache.js';
+import {distinctCopyUrl,bookRepositoryUrls} from '../../modules/community/book-urls.js';
+
+test('skill page prefers the cached original licence and falls back to the catalog',()=>{
+  const book=communityCatalog.skill_books[0],markdown=skillMarkdown(book.id)!;
+  const cache={...buildBookOriginalCache({id:book.id,repository_url:book.repository_url}),full_name:'fixture/book',license_spdx:'Apache-2.0'};
+  const render=(license_spdx:string|null)=>pageHtml(book.title,markdown,`/development/skills/${book.id}.md`,undefined,undefined,undefined,undefined,undefined,undefined,false,'',{...cache,license_spdx});
+  assert.ok(render('Apache-2.0').includes('<dt>記錄的授權</dt><dd>Apache-2.0</dd>'));
+  assert.ok(render(null).includes(`<dt>記錄的授權</dt><dd>${escapeHtml(book.license_status)}</dd>`));
+});
 
 test('every catalog and featured skill book carries a complete, specific guide with pinned primary evidence',()=>{
   assert.deepEqual(Object.keys(skillBookGuides).sort(),communityCatalog.skill_books.map(book=>book.id).sort());
@@ -18,7 +28,8 @@ test('every catalog and featured skill book carries a complete, specific guide w
     const upstream=new URL(book.upstream_url);
     for(const evidence of guide.source_evidence){const url=new URL(evidence.url);assert.equal(url.protocol,'https:');assert.equal(url.hostname,'github.com');assert.equal(url.username,'');assert.equal(url.pathname,`${upstream.pathname}/blob/${guide.source_commit}/${encodeURI(evidence.path)}`);}
     assert.ok(guide.source_evidence.some(evidence=>evidence.url===guide.reading_url),book.id);
-    assert.equal(new URL(guide.contribution_url).pathname,`${new URL(book.repository_url).pathname}/issues`);
+    const copyUrl=distinctCopyUrl(book.fork_url,book.repository_url)??book.repository_url;
+    assert.equal(new URL(guide.contribution_url).pathname,`${new URL(copyUrl).pathname}/issues`);
     if(guide.website_url){const url=new URL(guide.website_url);assert.equal(url.protocol,'https:');assert.equal(url.username,'');}
     if(guide.quickstart){assert.ok(guide.quickstart.commands.trim());assert.match(guide.quickstart.context,/在自己.*執行/);assert.doesNotMatch(guide.quickstart.commands,/curl.*\|\s*(sh|bash)|wrangler deploy|sudo|--remote/);}
     summaries.add(guide.summary);deliverables.add(guide.first_result);
@@ -54,12 +65,13 @@ test('all 55 books expose distinct covers, original-author stars and the same be
     for(const value of [book.cover_url!,book.star_url!,book.repository_url,book.upstream_url+'/fork',guide.first_result,guide.status,guide.source_commit])assert.ok(markdown.includes(value),`${book.id}/${value}`);
     const html=pageHtml(book.title,markdown,book.markdown_url);
     assert.ok(html.includes(`src="${book.cover_url}"`),book.id);
-    assert.ok(html.includes('href="#skill-start">開始使用'),book.id);
+    assert.ok(html.includes('href="#skill-start">開始用'),book.id);
     assert.ok(html.includes(`href="${book.upstream_url}/fork"`),book.id);
   }
   assert.equal(covers.size,55);
   const external=communityCatalog.skill_books.find(book=>book.id==='social-post')!;
-  assert.notEqual(external.star_url,external.repository_url);
+  assert.equal(external.repository_url,external.star_url);
+  assert.ok(distinctCopyUrl(external.fork_url,external.star_url));
   assert.equal(external.star_url,'https://github.com/Hao0321/claude-skill-social-post');
   for(const book of skillBooksForGuild('guild_marketing'))assert.ok(book.cover_url&&book.star_url&&book.guide?.beginner);
 });
@@ -107,4 +119,31 @@ test('content uses are explicit, multi-valued and independent of business catego
     assert.equal(matchesSkillBookUse(id,''),true);
     for(const use of skillBookUses)assert.equal(matchesSkillBookUse(id,use),false);
   }
+});
+
+test('book Star widgets use bound metadata and fall back to upstream live data when full_name is absent',async()=>{
+ const {createElement}=await import('react');
+ const {renderToStaticMarkup}=await import('react-dom/server');
+ const {SkillBookStar}=await import('../../apps/portal-web/src/modules/SkillBookCover.js');
+ const book={id:'synthetic-book',repository_url:'https://github.com/Workshop/copy',upstream_url:'https://github.com/Original/old'};
+ const unknown=renderToStaticMarkup(createElement(SkillBookStar,{book,compact:true}));
+ assert.match(unknown,/Follow|更多 GitHub 數據/);
+ assert.match(unknown,/href="https:\/\/github.com\/Original"/);
+ const emptyCache=renderToStaticMarkup(createElement(SkillBookStar,{book:{...book,original_cache:{url:book.upstream_url,full_name:null,original_author:null,stars:99}},compact:true}));
+ assert.match(emptyCache,/href="https:\/\/github.com\/Original\/old"/);
+ assert.doesNotMatch(emptyCache,/>99<\/span>/);
+ const bound={...book,original_cache:{full_name:'Original/new',url:'https://github.com/Original/new',original_author:'Original',stars:12}};
+ const html=renderToStaticMarkup(createElement(SkillBookStar,{book:bound,compact:true}));
+ assert.match(html,/href="https:\/\/github.com\/Original\/new"/);
+ assert.match(html,/>12<\/span>/);
+ assert.doesNotMatch(html,/github-book-metrics/);
+});
+
+test('distinctCopyUrl and bookRepositoryUrls order original before distinct copy without nulls or duplicates',()=>{
+ assert.equal(distinctCopyUrl('https://github.com/FreeTWAI/claude-skill-social-post/fork','https://github.com/Hao0321/claude-skill-social-post'),'https://github.com/FreeTWAI/claude-skill-social-post');
+ assert.equal(distinctCopyUrl('https://github.com/FreeTWAI/freedom-agent-kit/fork','https://github.com/FreeTWAI/freedom-agent-kit'),null);
+ assert.equal(distinctCopyUrl(null,'https://github.com/FreeTWAI/freedom-agent-kit'),null);
+ assert.deepEqual(bookRepositoryUrls({repository_url:'https://github.com/Hao0321/claude-skill-social-post',upstream_url:'https://github.com/Hao0321/claude-skill-social-post',fork_url:'https://github.com/FreeTWAI/claude-skill-social-post/fork'}),['https://github.com/Hao0321/claude-skill-social-post','https://github.com/FreeTWAI/claude-skill-social-post']);
+ assert.deepEqual(bookRepositoryUrls({repository_url:'https://github.com/FreeTWAI/freedom-agent-kit',upstream_url:'https://github.com/FreeTWAI/freedom-agent-kit',fork_url:'https://github.com/FreeTWAI/freedom-agent-kit/fork'}),['https://github.com/FreeTWAI/freedom-agent-kit']);
+ assert.deepEqual(bookRepositoryUrls({repository_url:null,upstream_url:'https://github.com/Original/repo',fork_url:'https://github.com/Copy/repo/fork'}),['https://github.com/Original/repo','https://github.com/Copy/repo']);
 });

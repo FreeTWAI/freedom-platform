@@ -29,6 +29,19 @@ async function member(index:number){
   return {headers,request:(path:string,body?:unknown,version?:string,key=randomUUID(),method='POST')=>app.request(origin+'/api/v1/'+path,body===undefined?{headers}:{method,headers:{...headers,'Idempotency-Key':key,...(version?{'If-Match':`"${version}"`}:{})},body:JSON.stringify(body)})};
 }
 
+test('each member inventory excludes the other member private and published items',async()=>{
+ const a=await member(0),b=await member(1);
+ const create=async(owner:Awaited<ReturnType<typeof member>>,title:string)=>{
+  const response=await owner.request('me/showcases',{title,description:'合成私人介紹'});assert.equal(response.status,201);return await response.json() as any;
+ };
+ const first=await create(a,'合成甲草稿'),second=await create(b,'合成乙草稿');
+ const read=async(owner:Awaited<ReturnType<typeof member>>)=>(await (await owner.request('me/content')).json() as any).items.map((item:any)=>item.id);
+ assert.ok((await read(a)).includes(first.showcase_id));assert.ok(!(await read(a)).includes(second.showcase_id));
+ assert.ok((await read(b)).includes(second.showcase_id));assert.ok(!(await read(b)).includes(first.showcase_id));
+ assert.equal((await b.request('me/showcases/'+second.showcase_id+'/publish',{consent_to_share:true},second.aggregate_version)).status,200);
+ assert.ok(!(await read(a)).includes(second.showcase_id));
+});
+
 test('private showcase survives re-login and requires explicit versioned publication without duplicate effects',async()=>{
   const owner=await member(0),other=await member(1);
   const body={title:'私人作品續寫254',description:'草稿摘要不可洩漏',public_url:'https://example.com/not-a-public-platform-page'};
@@ -137,7 +150,7 @@ test('inventory preserves native pending and ready states without exposing other
   const own=await (await owner.request('me/content')).json() as any;
   assert.equal(own.items.find((item:any)=>item.id===skill).status,'ready_for_review');
   const eventItem=own.items.find((item:any)=>item.id===eventSource.event_id);
-  assert.equal(eventItem.status,'pending');assert.equal(eventItem.visibility,'private');
+  assert.equal(eventItem.status,'published');assert.equal(eventItem.visibility,'open');
   assert.equal(eventItem.actions.includes('publish'),false);
   assert.equal(JSON.stringify(own).includes('跨社群私人標題254'),false);
   const strangers=await (await other.request('me/content')).json();
@@ -145,7 +158,7 @@ test('inventory preserves native pending and ready states without exposing other
   assert.equal(JSON.stringify(strangers).includes('尚未審核活動254'),false);
   assert.equal((await owner.request('me/showcases/'+foreign)).status,404);
   assert.equal((await other.request('events/'+eventSource.event_id+'/review',{decision:'approve',reason:'不能繞過審核'},eventSource.aggregate_version)).status,403);
-  assert.equal((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[eventSource.event_id])).rows[0].state,'pending');
+  assert.equal((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[eventSource.event_id])).rows[0].state,'published');
 });
 
 test('owner inventory and showcase reads reject revoked sessions even when called without HTTP middleware',async()=>{

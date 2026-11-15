@@ -4,7 +4,7 @@ import type {TestInfo} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {test, expect, type Page} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {openFeatureSearch,navigate} from './navigation.js';
 import {DEMO_COMMUNITY, DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 import type {InstallationView, RegistryOperation, LaunchPlan} from '../../contracts/guild-launchpad/v1/module-registry.js';
@@ -184,13 +184,18 @@ test('leader configuration cannot remove a committed pending tenant creation or 
   const ownsOnePair=async()=>expect((await e2eAuthPool.query(`SELECT t.tenant_id,w.workspace_id,w.is_default
     FROM tenants t JOIN principals p ON p.principal_id=t.created_by_principal_id
     JOIN workspaces w ON w.tenant_id=t.tenant_id WHERE p.user_ref=$1`,[userId])).rows).toEqual([{...results[0],is_default:true}]);
-  const preserved=async(message:string)=>{
+  const leaveDirtyEditor = async (section: string) => {
+    page.once('dialog', dialog => {expect(dialog.message()).toBe('有尚未儲存的修改，確定要離開嗎？'); void dialog.accept();});
+    await openGuildSection(page, section);
+  };
+  const preserved=async(message:string, dirty=false)=>{
     await openGuildSection(page, '管理啟動台');
-    await expect(enabled).toBeChecked(); await openGuildSection(page, '工具目錄'); await expect(input).toBeDisabled(); await expect(input).toHaveValue(name);
+    await expect(enabled).toBeChecked(); await (dirty ? leaveDirtyEditor('工具目錄') : openGuildSection(page, '工具目錄')); await expect(input).toBeDisabled(); await expect(input).toHaveValue(name);
     await expect(flow(page).locator('#launch-space-error')).toHaveText(message);
   };
   try {
     await openGuildSection(page, '管理啟動台');
+    await appBlock.getByRole('button',{name:'編輯',exact:true}).click();
     await enabled.uncheck(); await expect(cards(page)).toHaveCount(0);
     await editor.getByRole('button',{name:'儲存草稿',exact:true}).click(); await expect.poll(()=>saved).toBe(true);
     await enabled.check(); await openGuildSection(page, '工具目錄'); await begin(page); await input.fill(name);
@@ -203,20 +208,20 @@ test('leader configuration cannot remove a committed pending tenant creation or 
     await editor.getByLabel('公會使命補充').fill('保留的版面草稿');
     releaseConfig();
     await expect(page.getByRole('alert').filter({hasText:'最新配置尚未套用'})).toBeVisible();
-    await preserved('正在確認原操作，請等候完成後再離開。');
+    await preserved('正在確認原操作，請等候完成後再離開。', true);
     await openGuildSection(page, '管理啟動台');
     await expect(editor.getByLabel('公會使命補充')).toHaveValue('保留的版面草稿');
     releaseTenant();
-    const retry=flow(page).getByRole('button',{name:'重試',exact:true}); await openGuildSection(page, '工具目錄'); await expect(retry).toBeEnabled();
+    const retry=flow(page).getByRole('button',{name:'重試',exact:true}); await leaveDirtyEditor('工具目錄'); await expect(retry).toBeEnabled();
     await openGuildSection(page, '管理啟動台');
-    await enabled.click(); await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。');
+    await enabled.click(); await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。', true);
     await page.getByRole('button',{name:'重新載入最新版本',exact:true}).click();
     await expect(page.getByRole('alert').filter({hasText:'最新配置尚未套用'})).toBeVisible();
-    await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。');
+    await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。', true);
     await openGuildSection(page, '管理啟動台');
     await expect(editor.getByLabel('公會使命補充')).toHaveValue('保留的版面草稿');
     await editor.getByRole('button',{name:'上移應用',exact:true}).click();
-    await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。');
+    await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。', true);
     await ownsOnePair(); await capture(page,testInfo,'leader-config-unknown');
     await retry.click(); await expect(flow(page)).toContainText(`目前業務空間：${name}`);
     expect(attempts).toHaveLength(2); expect(attempts[0].key).toBeTruthy();
@@ -226,7 +231,7 @@ test('leader configuration cannot remove a committed pending tenant creation or 
     await page.getByRole('button',{name:'重新載入最新版本',exact:true}).click();
     await openGuildSection(page, '管理啟動台');
     await expect(enabled).not.toBeChecked(); await expect(cards(page)).toHaveCount(0);
-    await enabled.check(); await openGuildSection(page, '工具目錄'); await expect(manualCard(page)).toBeVisible();
+    await enabled.check(); await leaveDirtyEditor('工具目錄'); await expect(manualCard(page)).toBeVisible();
     await openGuildSection(page, '管理啟動台');
     await page.unroute(`**/api/v1/guilds/${GUILD}/launchpad-config/drafts`);
     await editor.getByLabel('公會使命補充').fill('確認後正常編輯');
@@ -280,7 +285,9 @@ test('unreadable committed tenant creation retains its name and key across two r
     if (!await cards(page).locator('.application-catalog').evaluate(element => (element as HTMLDetailsElement).open)) await cards(page).locator('.application-catalog > summary').click();
     await cards(page).locator('.application-card').filter({has:page.getByRole('heading',{name:'線上商店',exact:true})}).getByRole('button',{name:'啟動應用',exact:true}).click(); await stays(message);
     await page.getByRole('button',{name:'返回公會列表',exact:true}).click(); await stays(message);
-    await navigate(page,'技能書架'); await stays(message);
+    // The guard blocks the first place change, before any resource-view selector can mount.
+    await openFeatureSearch(page);
+    await page.getByRole('navigation',{name:'主要工作區',exact:true}).getByRole('button',{name:'探索',exact:true}).click(); await stays(message);
     const closeMenu=page.getByRole('button',{name:'關閉選單',exact:true}); if(await closeMenu.isVisible()) await closeMenu.click();
     await page.evaluate(()=>{window.location.hash='guilds/guild_commerce_sales';}); await stays(message);
     await page.evaluate(key=>{history.replaceState(null,'','#home');history.pushState(null,'',`#guilds/${key}`);},GUILD);
@@ -324,7 +331,7 @@ test('unreadable committed tenant creation retains its name and key across two r
     expect(workspaces.next_cursor).toBeNull();
     expect(await ownedRows()).toEqual([{...results[0],is_default:true}]);
     await flow(page).getByRole('button',{name:'取消',exact:true}).click(); await expect(flow(page)).toHaveCount(0);
-    await navigate(page,'技能書架'); await expect(page).toHaveURL(/#skills$/); expect(prompts).toBe(0);
+    await navigate(page,'技能書架'); await expect(page).toHaveURL(/#explore\/resources$/); expect(prompts).toBe(0);
   } finally {releaseResponse();}
 });
 
@@ -834,5 +841,5 @@ test('business link from an empty workspace preserves unsaved My Work when leavi
   page.once('dialog',dialog=>{expect(dialog.message()).toBe('有尚未儲存的內容，確定要離開嗎？'); void dialog.dismiss();});
   await link.click(); await expect(page).toHaveURL(new RegExp(`#guilds/${GUILD}$`));
   await expect(flow(page)).toBeVisible(); await expect(title).toHaveValue('離開前仍需保留的工作');
-  page.once('dialog',dialog=>void dialog.accept()); await link.click(); await expect(page).toHaveURL(/#business$/);
+  page.once('dialog',dialog=>void dialog.accept()); await link.click(); await expect(page).toHaveURL(/#me\/workspaces$/);
 });

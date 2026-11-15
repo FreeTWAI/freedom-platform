@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import {retainedHostedOrder} from '../helpers/hosted-inventory-history.js';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -39,6 +40,7 @@ before(async () => {
   await h.admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     GRANT USAGE ON SCHEMA ${h.schema} TO ${role}; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${h.schema} TO ${role};
     GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ${h.schema} TO ${role}; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ${h.schema} TO ${role}`);
+  await setFixtureRolePasswords(h.admin, [role]);
   const url = new URL(process.env.TEST_DATABASE_URL!); url.username=role; url.password='';
   runtime = new Pool({connectionString:url.toString(),options:`-c search_path=${h.schema} -c statement_timeout=15000`,max:6});
   app = createApp(runtime,h.origin,'local',{guildLaunchpadEnabled:true,hostedReservationsEnabled:true,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY});

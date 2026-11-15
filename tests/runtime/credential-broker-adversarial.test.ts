@@ -1,3 +1,4 @@
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { readFile,writeFile,mkdtemp,rm,link } from 'node:fs/promises';
@@ -48,6 +49,7 @@ before(async () => {
     CREATE ROLE ${runtime} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE ROLE ${brokerRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator}; GRANT USAGE ON SCHEMA ${schema} TO ${runtime},${brokerRole}`);
+  await setFixtureRolePasswords(admin, [migrator, runtime, brokerRole]);
   created = true; await migrate(owner);
   await applyRuntimeGrants(); await applyBrokerGrants();
 });

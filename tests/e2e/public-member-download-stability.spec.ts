@@ -10,7 +10,7 @@ import {quickJoin} from './quick-join.js';
 // No direct API/DB writes, clipboard writes or OS sharing stand in for UI actions.
 async function signup(page:Page,name:string){
   await page.goto('/');
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill(name);
   await page.getByLabel('電子郵件',{exact:true}).fill(`download-stability-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-download-stability-password');

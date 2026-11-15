@@ -114,7 +114,8 @@ test('suggested price never gates either seller price; minimum and lead referenc
   assert.equal(order.items[0].quantity,1);assert.equal(order.state,'reserved');
   for(const key of keys)assert.equal(JSON.stringify(order).includes(key),false);
   for(const endpoint of [`/api/v1/public/stores/${s.slug}`,`/shops/${s.slug}`,`/shops/${s.slug}/products/${accepted.sku}`]){
-   const response=await app.request(x.h.origin+endpoint);assert.equal(response.status,200);const text=await response.text();for(const value of [...keys,...Object.values(references).map(String)])assert.equal(text.includes(value),false,endpoint+' leaked advisory data');
+   // The store slug (random hex) and ISO times differ on every run. Drop them first, so a short reference such as 321 cannot match inside them by chance.
+   const response=await app.request(x.h.origin+endpoint);assert.equal(response.status,200);const text=(await response.text()).replaceAll(s.slug,'').replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z/g,'');for(const value of [...keys,...Object.values(references).map(String)])assert.equal(text.includes(value),false,endpoint+' leaked advisory data');
   }
  }
  const report=ok(await get(supplier,'/supplier-console/report?from=2026-01-01&to=2026-12-31'));assert.equal(report.products.outdated,0);

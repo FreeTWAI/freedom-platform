@@ -1,3 +1,4 @@
+import {currentLegacyHash} from '../portal-route';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PortalClient } from '../api';
 import { ApiError } from '../api';
@@ -38,7 +39,7 @@ function when(starts: string, ends: string) {
     : `${dayFormat.format(start)} ${timeFormat.format(start)} – ${dayFormat.format(end)} ${timeFormat.format(end)}`;
 }
 function eventIdFromHash() {
-  const match = /^#highlights\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(window.location.hash);
+  const match = /^#highlights\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(currentLegacyHash());
   return match?.[1] ?? null;
 }
 function message(error: unknown) { return error instanceof ApiError ? error.message : '這次沒有完成，請再試一次。'; }

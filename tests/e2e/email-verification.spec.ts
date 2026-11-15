@@ -1,10 +1,11 @@
 import {openAccountSettings} from './navigation.js';
-import { test,expect } from './fixtures.js';
+import { test,expect } from './member-feature-fixture.js';
 import { tokenHash } from '../../modules/identity-membership/service.js';
 
 test('account send error and one-use confirmation work on desktop and phone',async({page,e2eAuthPool})=>{
   await page.goto('/');
-  await page.getByRole('button',{name:'作者示範帳號 maker@local.test',exact:true}).click();
+  await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
+  await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();
   const user=(await e2eAuthPool.query('SELECT user_id FROM users WHERE email=$1',['maker@local.test'])).rows[0];

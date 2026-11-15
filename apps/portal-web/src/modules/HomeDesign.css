@@ -32,12 +32,6 @@
 .freedom-home .home-next-actions > .btn,
 .freedom-home .home-next-actions > .skill-intro-entry { flex: 0 0 auto; width: fit-content; max-width: 100%; }
 .freedom-home .home-next-actions .skill-intro-trigger { width: fit-content; max-width: 100%; }
-.freedom-home .home-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; }
-.freedom-home .home-shortcut { display: flex; flex-direction: column; align-items: flex-start; gap: .65rem; min-width: 0; min-height: 64px; padding: .85rem; border: 1px solid #3b4350; border-radius: 12px; background: #1b1f27; color: #f4f6ef; font-size: 1rem; font-weight: 650; text-align: left; cursor: pointer; }
-.freedom-home .home-shortcut .workshop-icon { flex: 0 0 20px; color: #c4ff20; }
-.freedom-home .home-shortcut > span { overflow-wrap: anywhere; }
-.freedom-home .home-shortcut:hover,
-.freedom-home .home-shortcut:focus-visible { background: #252b21; border-color: #91ae3d; }
 .freedom-home .home-module-section { display: grid; gap: .75rem; min-width: 0; }
 .freedom-home .home-section-heading,
 .freedom-community .home-section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; }
@@ -117,8 +111,6 @@
   .freedom-home .home-member-identity { width: 100%; }
   .freedom-home .home-member-actions { margin-left: 0; width: 100%; justify-content: flex-start; }
   .freedom-home .home-member-skills { flex-basis: 100%; }
-  .freedom-home .home-shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
-  .freedom-home .home-shortcut { padding: .75rem .6rem; gap: .45rem; min-height: 56px; font-size: .875rem; }
   .freedom-home .home-module-grid { grid-template-columns: minmax(0, 1fr); gap: .65rem; }
   .freedom-home .home-module-card { grid-template-columns: 48px minmax(0, 1fr); gap: .65rem; }
   .freedom-home .home-module-cover { width: 48px; height: 48px; align-self: start; }
@@ -144,7 +136,6 @@
 .freedom-home .home-member-summary { order: 0; }
 .freedom-home .home-load-error { order: 1; }
 .freedom-home .home-next-step { order: 2; }
-.freedom-home .home-shortcuts { order: 3; }
 .freedom-home .home-partner { order: 4; }
 .freedom-home .home-module-section { order: 5; }
 .freedom-home .home-next-copy { flex: 1; min-width: 0; }
@@ -152,8 +143,6 @@
 .freedom-home #home-next-step-description { margin-bottom: 18px; font-size: 1.4rem; line-height: 1.4; font-weight: 700; color: var(--ink); }
 .freedom-home .home-next-copy > .guild-intern-notice { margin-bottom: 12px; }
 .freedom-home .home-next-art { flex: none; width: 124px; height: 108px; object-fit: cover; border-radius: 12px; box-shadow: 0 10px 24px #1b293b2e; }
-.freedom-home .home-shortcut-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--bg-elev); }
-.freedom-home .home-shortcut-icon .workshop-icon { width: 18px; height: 18px; }
 .freedom-home .home-member-name > .positioning-title { border: 0; border-radius: 99px; padding: 3px 10px; font-size: .875rem; white-space: nowrap; }
 .freedom-home .home-module-button::after { content: ''; position: absolute; inset: 0; }
 .freedom-home .home-partner { min-width: 0; margin: 0; padding: 18px 20px; border-radius: 14px; gap: 12px; }
@@ -190,13 +179,7 @@
 .freedom-home .home-disclosure > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .freedom-home .home-module-section > .home-section-heading { padding: 0 16px; }
 .freedom-home .home-module-section > .home-module-grid { padding: 0 16px 16px; }
-.freedom-home .home-shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .freedom-home #home-next-step-description { font-size: 1.125rem; line-height: 1.6; margin-bottom: 12px; }
-@media (max-width: 440px) {
-  .freedom-home .home-shortcuts { grid-template-columns: minmax(0, 1fr); }
-  .freedom-home .home-shortcut { min-height: 48px; justify-content: flex-start; }
-  .freedom-home .home-shortcut { flex-direction: row; align-items: center; padding: 8px 12px; }
-}
 
 :is(.community-library,.community-skill-library) .skill-library-filters { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: end; gap: 16px; }
 :is(.community-library,.community-skill-library) .skill-library-filters .field { min-width: 0; font-size: .85rem; }
@@ -213,3 +196,9 @@
 .freedom-home .home-discovery-links { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
 .app-frame.social-layout .home-discovery-links .home-journal-entry { display: block; padding: 0; border: 0; border-radius: 0; }
 .freedom-home .home-discovery-links .btn { min-height: 44px; max-width: 100%; white-space: normal; }
+.freedom-home .home-discovery-links > .skill-share,
+.freedom-home .home-discovery-links > .skill-share > .btn { width: fit-content; max-width: 100%; border-radius: 10px; }
+.freedom-home .home-published-share { display: grid; gap: 10px; justify-items: start; margin-bottom: 16px; padding: 16px; }
+.freedom-home .home-published-share:focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+.freedom-home .home-published-share-title { margin: 0; font-size: 1rem; line-height: 1.5; overflow-wrap: anywhere; }
+.freedom-home .home-published-share .btn-small { min-height: 44px; display: inline-flex; align-items: center; }

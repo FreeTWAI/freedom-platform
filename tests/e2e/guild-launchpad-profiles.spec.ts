@@ -1,3 +1,4 @@
+import {canonicalHash,legacyHash} from '../../apps/portal-web/src/portal-route.js';
 import {openGuildSection} from './navigation.js';
 import {launchStore} from './hosted-store-fixture.js';
 import {randomUUID} from 'node:crypto';
@@ -124,13 +125,13 @@ test('supplier starts the hosted flow and reuses the same commerce store and sup
   await open(page, supplier);
   await expect(primary(page)).toContainText('已有商店可直接沿用');
   await primary(page).getByRole('button', {name: '開始供貨設定', exact: true}).click();
-  await expect(page).toHaveURL(/#stores\/supply\/setup$/);
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog\/setup$/);
   await expect(flow(page).getByRole('heading', {name: '設定供貨空間', exact: true})).toBeFocused();
   await open(page, supplier);
   await primary(page).getByRole('button', {name: '開始供貨設定', exact: true}).click();
   await expect(flow(page).getByRole('heading', {name: '設定供貨空間', exact: true})).toBeFocused();
   await flow(page).getByRole('button', {name: '取消', exact: true}).click();
-  await expect(page).toHaveURL(/#stores\/supply$/);
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
   await expect(page.getByRole('heading', {name: '我的供貨商品庫', level: 2, exact: true})).toBeVisible();
   // Start through commerce, then prove the supplier entry reuses this exact instance.
   await open(page, commerce);
@@ -140,7 +141,7 @@ test('supplier starts the hosted flow and reuses the same commerce store and sup
   await flow(page).getByRole('button', {name: '產生啟動方案', exact: true}).click();
   await flow(page).getByRole('button', {name: '確認啟動', exact: true}).click();
   await flow(page).getByRole('button', {name: '設定我的商店', exact: true}).click();
-  await expect(page).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
   const storeHash = new URL(page.url()).hash;
   const setup = page.getByRole('form', {name: '建立商店', exact: true});
   await setup.getByLabel('商店名稱', {exact: true}).fill('共用供貨商店');
@@ -156,7 +157,7 @@ test('supplier starts the hosted flow and reuses the same commerce store and sup
   await open(page, supplier);
   await expect(primary(page).getByRole('button', {name: '開始供貨設定', exact: true})).toBeEnabled();
   await primary(page).getByRole('button', {name: '查看商品與供貨', exact: true}).click();
-  await expect(page).toHaveURL(new RegExp(storeHash + '/supply$'));
+  await expect(page).toHaveURL(new RegExp(canonicalHash(legacyHash(storeHash)+'/supply')+'$'));
   await page.getByRole('button', {name: '供貨條件', exact: true}).click();
   await expect(page.getByRole('button', {name: '公開供貨版本', exact: true})).toBeVisible();
   expect(await (await page.request.get('/api/v1/me/stores?pagination=cursor')).json()).toEqual(before);
@@ -257,13 +258,13 @@ test('supplier-only member publishes supply without a slug, retail page or comme
     await page.getByRole('link', {name: '供貨訂單', exact: true}).click();
     await expect(page.getByText('這一頁沒有供貨預留。', {exact: true})).toBeVisible();
     await page.getByRole('link', {name: '返回供貨商品庫', exact: true}).click();
-    await expect(page).toHaveURL(new RegExp(storeHash + '$'));
+    await expect(page).toHaveURL(new RegExp(canonicalHash(storeHash)+'$'));
     await page.getByRole('button', {name: '設定', exact: true}).click();
     await page.getByRole('menu', {name: '個人檔案'}).getByRole('menuitem', {name: '登出', exact: true}).click();
     await expect.poll(async () => (await page.request.get('/api/v1/session')).status()).toBe(401);
     await login(page, member.email); await open(page, supplier);
     await primary(page).getByRole('button', {name: '查看商品與供貨', exact: true}).click();
-    await expect(page).toHaveURL(new RegExp(storeHash + '$'));
+    await expect(page).toHaveURL(new RegExp(canonicalHash(storeHash)+'$'));
     await page.getByRole('navigation', {name: '供貨工作區'}).getByRole('button', {name: '預留與訂單', exact: true}).click();
     await expect(page.getByRole('button', {name: '停止接受新預留', exact: true})).toBeEnabled();
     await page.getByRole('button', {name: '停止接受新預留', exact: true}).click();
@@ -396,11 +397,13 @@ test('a leader publishes recommendations and the member primary action opens the
     await editor.getByRole('button', {name: '加入推薦', exact: true}).click();
     await editor.getByRole('button', {name: `上移${displayName}`, exact: true}).click();
     await editor.getByRole('button', {name: `上移${displayName}`, exact: true}).click();
+    page.once('dialog', dialog => {expect(dialog.message()).toBe('有尚未儲存的修改，確定要離開嗎？'); void dialog.accept();});
     await openGuildSection(page, displayName);
     await expect(primary(page).getByRole('heading')).toHaveText(displayName);
     await openGuildSection(page, '工具目錄');
     await expect(recommendations(page).locator('.application-card').first()).toContainText(displayName);
     await openGuildSection(page, '管理啟動台');
+    await editor.locator('.guild-launchpad-preview-menu > summary').click();
     await editor.getByRole('button', {name: '預覽會員', exact: true}).click();
     await expect(page.getByRole('dialog')).toContainText('合成資料');
     await page.getByRole('dialog').getByRole('button', {name: '關閉', exact: true}).click();
@@ -444,6 +447,7 @@ test('a leader publishes recommendations and the member primary action opens the
     // Disabled application blocks suppress non-manual primary actions in the unsaved reading view.
     await editor.getByRole('button', {name: '版面與使命', exact: true}).click();
     const applicationsBlock = editor.getByRole('group', {name: '版面區塊'}).locator('.guild-launchpad-block').filter({has: page.locator('p', {hasText: /^應用$/})});
+    await applicationsBlock.getByRole('button', {name: '編輯', exact: true}).click();
     await applicationsBlock.getByLabel('顯示這個區塊').uncheck();
     await expect(primary(page)).toHaveCount(0);
     await expect(editor).toContainText('應用區塊關閉時，會員看不到推薦應用；主要動作只保留我的工作。');

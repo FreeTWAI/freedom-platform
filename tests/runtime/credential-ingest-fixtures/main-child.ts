@@ -1,3 +1,4 @@
+import { fixtureRoleConnection } from '../fixture-role-password.js';
 // Independent fixture entry: imports only main composition and neutral helpers.
 // No provider key literal, cipher role, KEK, vault or broker custody import.
 import assert from 'node:assert/strict';
@@ -14,8 +15,8 @@ const received:{path:string;method:string;secretReaderInstalled:boolean}[]=[];
 process.on('message',async(message:any)=>{try{let value:any=null;
  if(message.kind==='init'){
   config=message.value;
-  for(const denied of ['secret','kekBytes','cipherUrl','providerOrigin','responsePrivateJwk'])assert(!(denied in config));
-  pool=new Pool({connectionString:config.appUrl,options:`-c search_path=${config.schema} -c statement_timeout=10000`,max:12});
+  for(const denied of ['secret','kekBytes','cipherUrl','cipherPassword','executorPassword','providerOrigin','responsePrivateJwk'])assert(!(denied in config));
+  pool=new Pool({...fixtureRoleConnection(config.appUrl,config.appPassword),options:`-c search_path=${config.schema} -c statement_timeout=10000`,max:12});
   const {createSignedRecoverySource}=await import('../../../apps/credential-broker/src/recovery.js');
   const verifiedRecover=createSignedRecoverySource({authority:'synthetic-external-recovery',environment:'local',pinnedKeys:[{keyId:'recovery-1',key:await importJWK(config.recoveryPublicJwk,'EdDSA') as CryptoKey}],readSignedState:async()=>{const r=await fetch(config.recoveryOrigin+'/signed');if(!r.ok)throw Error('unavailable');return (await r.json() as any).signed;},readMonotonicFloor:async()=>{const r=await fetch(config.recoveryOrigin+'/floor');if(!r.ok)throw Error('unavailable');return await r.json();}}).recover;
   const recover=async()=>{const actual=await verifiedRecover();return {...actual,expiresAt:new Date(Math.min(Date.parse(actual.expiresAt),issuerDeadline)).toISOString()};};

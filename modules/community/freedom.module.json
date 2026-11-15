@@ -9,6 +9,10 @@
     "modules/community/event-highlights-page.ts",
     "modules/community/event-highlights.ts",
     "modules/community/events.ts",
+    "modules/community/event-changes.ts",
+    "migrations/209_event_management.sql",
+    "tests/runtime/event-manage.test.ts",
+    "tests/e2e/event-manage.spec.ts",
     "modules/community/github-history.ts",
     "modules/community/github-sync.ts",
     "modules/community/repository-set.ts",
@@ -24,6 +28,7 @@
     "modules/community/public-discovery.ts",
     "modules/community/repo-author-claims.ts",
     "modules/community/skill-book-guides.ts",
+    "modules/community/book-urls.ts",
     "modules/community/skill-collaboration.ts",
     "modules/community/skill-share-content.ts",
     "modules/community/skill-page-content.ts",
@@ -35,13 +40,13 @@
     "apps/platform-api/src/routes/member-services.ts",
     "apps/platform-api/src/routes/promotion.ts",
     "apps/platform-api/src/routes/repo-author-claims.ts",
+    "apps/portal-web/src/modules/CommunityBrand.tsx",
     "apps/portal-web/src/modules/Community.tsx",
     "apps/portal-web/src/modules/EventsPanel.tsx",
     "apps/portal-web/src/modules/EventCalendar.tsx",
     "apps/portal-web/src/modules/EventHighlights.tsx",
     "apps/portal-web/src/modules/MemberServices.tsx",
     "apps/portal-web/src/modules/PromotionBoards.tsx",
-    "apps/portal-web/src/modules/PromotionShare.tsx",
     "apps/portal-web/src/modules/CommunityHistory.tsx",
     "apps/portal-web/src/modules/PublicDiscovery.tsx",
     "apps/portal-web/src/modules/PublicEventPage.tsx",
@@ -130,7 +135,22 @@
     "tests/runtime/event-date-input.test.ts",
     "tests/runtime/event-clipboard-recovery.test.ts",
     "tests/runtime/event-detail-retry.test.ts",
-    "tests/e2e/event-detail-retry.spec.ts"
+    "tests/e2e/event-detail-retry.spec.ts",
+    "modules/community/publish-pending-events.ts",
+    "scripts/publish-pending-events.ts",
+    "migrations/208_event_publication.sql",
+    "tests/runtime/event-publication.test.ts",
+    "modules/community/event-page.ts",
+    "apps/platform-api/src/routes/event-pages.ts",
+    "apps/portal-web/public/service-page.js",
+    "apps/portal-web/public/event-page.js",
+    "apps/portal-web/public/event-page.css",
+    "modules/community/event-sharing.ts",
+    "modules/community/event-exposure.ts",
+    "modules/community/event-claims.ts",
+    "modules/community/event-interest.ts",
+    "tests/e2e/event-sharing.spec.ts",
+    "tests/e2e/event-page-readiness.spec.ts"
   ],
   "public_exports": [
     "modules/community/catalog.ts",
@@ -139,6 +159,7 @@
     "modules/community/event-highlights-page.ts",
     "modules/community/event-highlights.ts",
     "modules/community/events.ts",
+    "modules/community/event-changes.ts",
     "modules/community/github-history.ts",
     "modules/community/github-sync.ts",
     "modules/community/guild-discovery.ts",
@@ -151,6 +172,7 @@
     "modules/community/public-discovery.ts",
     "modules/community/repo-author-claims.ts",
     "modules/community/skill-book-guides.ts",
+    "modules/community/book-urls.ts",
     "modules/community/skill-collaboration.ts",
     "modules/community/skill-share-content.ts",
     "modules/community/social-posts.ts",
@@ -381,15 +403,6 @@
       "auth_profile": "member-session"
     },
     {
-      "surface_id": "community.promotion-share-page",
-      "kind": "page",
-      "entry": "apps/portal-web/src/modules/PromotionShare.tsx",
-      "operations": [
-        "community.promotion-share-page.view"
-      ],
-      "auth_profile": "member-session"
-    },
-    {
       "surface_id": "community.github-history-page",
       "kind": "page",
       "entry": "apps/portal-web/src/modules/CommunityHistory.tsx",
@@ -424,6 +437,18 @@
         "community.author-claim-page.view"
       ],
       "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "community.event-pages.public-api",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/event-pages.ts",
+      "operations": [
+        "community.public-event.list",
+        "community.public-event-calendar.read",
+        "community.event-page.read",
+        "community.event-calendar.read"
+      ],
+      "auth_profile": "public-anonymous-read"
     }
   ]
 }

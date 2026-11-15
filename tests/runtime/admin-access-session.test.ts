@@ -5,6 +5,17 @@ import {stripTypeScriptTypes} from 'node:module';
 import {runInNewContext} from 'node:vm';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {createRequire} from 'node:module';
+import {transformSync as transformPlace} from 'esbuild';
+import {runInNewContext as runPlace} from 'node:vm';
+import {readFileSync as readPlace} from 'node:fs';
+const placeUrl=new URL('../../apps/portal-web/src/features/PlaceView.tsx',import.meta.url);
+const placeRequire=createRequire(placeUrl),placeModule={exports:{} as any};
+runPlace(transformPlace(readPlace(placeUrl,'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{
+ module:placeModule,exports:placeModule.exports,require:(id:string)=>id==='../frame-tools/RegisteredTools'?{RegisteredTools:()=>null}:placeRequire(id),
+});
+const PlaceView=placeModule.exports.PlaceView;
+import type {PortalFeatureContext} from '../../apps/portal-web/src/features/types.js';
 import {Navigation} from '../../apps/portal-web/src/Navigation.js';
 import {MEMBER_ACCESS_EXPIRED_MESSAGE} from '../../apps/portal-web/src/access-fetch.js';
 import {ApiError,PortalClient} from '../../apps/portal-web/src/api.js';
@@ -233,5 +244,9 @@ test('admin navigation cannot survive another user, another session, a changed c
 test('rendered member navigation exposes the admin link only with its explicit visibility hint',()=>{
  const base={current:'home' as const,onSelect:()=>{},canManageGuild:false,guildLaunchpadEnabled:false,communitySearchEnabled:false,personalContentEnabled:false,mobileOpen:false};
  for(const extra of [{},{canManagePlatform:false},{canManageGuild:true},{guildLaunchpadEnabled:true}])assert.doesNotMatch(renderToStaticMarkup(createElement(Navigation,{...base,...extra})),/href="\/admin"/);
- assert.match(renderToStaticMarkup(createElement(Navigation,{...base,canManagePlatform:true})),/href="\/admin"/);
+ const context={locationHash:'#me',site:null,selectTab(){}} as unknown as PortalFeatureContext;
+ const markup=(extra:Partial<PortalFeatureContext>)=>renderToStaticMarkup(createElement(PlaceView,{context:{...context,...extra},defaultTab:'profile',render:()=>null}));
+ for(const extra of [{},{canManagePlatform:false},{canManageGuild:true}])assert.doesNotMatch(markup(extra),/href="\/admin"/);
+ assert.match(markup({canManagePlatform:true}),/href="\/admin"/);
+ assert.doesNotMatch(markup({canManagePlatform:true,locationHash:'#explore'}),/href="\/admin"/);
 });

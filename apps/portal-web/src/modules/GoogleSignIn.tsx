@@ -1,9 +1,10 @@
+import {safePortalReturn} from '../portal-route';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import type {SessionPayload} from '../types';
 import {publicSkillPath} from '../../../../packages/shared/skill-acquisition';
 import {storefrontReturnPath} from '../../../../modules/agent-commerce/storefront-return';
-import {publicDiscoveryPath} from './PublicDiscovery';
+import {publicDiscoveryPath, publicShareReturnPath} from './PublicDiscovery';
 import {GOOGLE_ENTRY_KEY,saveGoogleEntry,clearGoogleEntry,navigateToGoogle} from './GoogleAccount';
 
 type GoogleEntry={intent:'login'|'link';entry:string;startedAt:number};
@@ -40,26 +41,25 @@ export async function activateGoogleLogin(client:Pick<PortalClient,'post'|'getSe
 
 /** Presentation continuity only. Never persist code, state, challenge or a session. */
 export function safeGoogleEntry(value:unknown):string|null{
-  if(typeof value!=='string'||value.length>2000||!value.startsWith('/')||value.startsWith('//')||/[\\\u0000-\u0020]/.test(value))return null;
+  if(typeof value!=='string'||value.length>512||!value.startsWith('/')||value.startsWith('//')||/[\\\u0000-\u0020]/.test(value))return null;
   let url:URL;try{url=new URL(value,window.location.origin)}catch{return null;}
   if(url.origin!==window.location.origin||url.pathname+url.search+url.hash!==value)return null;
   const eventPath=/^\/events\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/.test(url.pathname);
-  const eventHash=/^#events\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\?(.*))?$/.exec(url.hash);
-  if(eventPath||eventHash){
-    if(eventPath?Boolean(url.hash):url.pathname!=='/'||Boolean(url.search))return null;
-    const parameters=new URLSearchParams(eventHash?eventHash[1]??'':url.search);
+  if(eventPath){
+    if(url.hash)return null;
+    const parameters=new URLSearchParams(url.search);
     for(const [key,item] of parameters)if(key!=='ref'||parameters.getAll(key).length!==1||!/^[A-Za-z0-9_-]{16,32}$/.test(item))return null;
     return value;
   }
   if(!/^(?:\/|\/device|\/member-cards\/[A-Za-z0-9_-]{43}\/?)$/.test(url.pathname))return null;
-  if(url.hash&&!/^#(?:[a-z][a-z0-9-]*|join\/(?:supplier|showcase|tasks)|guilds\/[a-z0-9_-]+)$/.test(url.hash))return null;
+  if(url.hash&&(url.pathname!=='/'||!safePortalReturn(url.hash)))return null;
   const allowed=new Set(['join','return_to','skill_acquisition','skill_intro','post_return','social-post']);
   for(const [key,item] of url.searchParams){
     if(!allowed.has(key)||url.searchParams.getAll(key).length!==1)return null;
     if((key==='join'||key==='skill_acquisition')&&item!=='1')return null;
     if(key==='skill_intro'&&!/^(?:[1-9][0-9]?|100)$/.test(item))return null;
     if((key==='post_return'||key==='social-post')&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item))return null;
-    if(key==='return_to'&&!publicDiscoveryPath(item)&&!storefrontReturnPath(item)&&!publicSkillPath(item))return null;
+    if(key==='return_to'&&!publicShareReturnPath(item)&&!publicDiscoveryPath(item)&&!storefrontReturnPath(item)&&!publicSkillPath(item))return null;
   }
   return value;
 }

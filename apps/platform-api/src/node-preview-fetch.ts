@@ -61,7 +61,7 @@ export function createNodePreviewFetch(resolveHost: PreviewLookup = hostname => 
         }, incoming => {
           try {
             const headers = new Headers();
-            for (const name of ['content-type', 'content-length', 'content-encoding', 'location']) {
+            for (const name of ['content-type', 'content-length', 'content-encoding', 'location', 'x-frame-options', 'content-security-policy']) {
               const value = incoming.headers[name];
               if (typeof value === 'string') headers.set(name, value);
             }

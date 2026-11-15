@@ -97,6 +97,8 @@ async function inspect(page:Page){
     return {box,paper,effectiveFov:camera.fov,canvas};
 }
 for(const light of [false,true])for(const viewport of sizes)for(const scale of [1,2])test(`STAMP world ${light?'light':'native'} ${viewport.width} ${scale*100}%: paper contacts, floating controls, safe text and interruption`,async({page},testInfo)=>{
+    // Native 667 took 19.3-33.5 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+    if(!light&&viewport.width===667)test.setTimeout(75_000);
     await page.setViewportSize(viewport);await openStamp(page,light,true);const owner=page.locator('.fullscreen-game'),board=page.locator('.fw-arcade-board');await scaleText(owner,scale);
     await expect(page.locator('[data-stamp-time]')).toHaveText('不計時');await contact(page,0);await expect(page.locator('.fw-arcade-counter')).toHaveText('0/12');await page.clock.runFor(220);await contact(page,0);await page.clock.runFor(220);
     await expect(page.locator('.fw-arcade-counter')).toHaveText('1/12');await expect(page.locator('[data-stamp-misses]')).toHaveText('歪0');

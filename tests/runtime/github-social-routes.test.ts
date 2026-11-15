@@ -60,6 +60,15 @@ beforeEach(async()=>{
  calls=[];starred=false;issueWrites=0;issueStatus=201;issueBody='';commentWrites=0;commentStatus=201;commentBody='';app=createApp(pool,origin,'local',{githubSocial:{config,fetcher}});member=await login();
 });
 
+test('GitHub HTTP round trip preserves portal returns up to the 512-character address limit',async()=>{
+ const prefix='#explore/resources?via=',target=prefix+'a'.repeat(511-prefix.length);
+ const begin=await request('/me/github/connect',{return_to:target});assert.equal(begin.status,200,await begin.clone().text());
+ const state=new URL((await begin.json() as any).authorization_url).searchParams.get('state');
+ const finish=await request('/me/github/complete',{state,code:'synthetic-code'});assert.equal(finish.status,200,await finish.clone().text());
+ assert.equal((await finish.json() as any).return_to,target);
+ const tooLong=await request('/me/github/connect',{return_to:target+'a'});assert.equal(tooLong.status,422);
+});
+
 test('author follow routes enforce session, CSRF, origin and explicit confirmed desired state',async()=>{
  const path='/me/github/authors/source-author/follow',body={following:true,confirmed:true};
  assert.equal((await app.request(origin+'/api/v1'+path)).status,401);
@@ -138,8 +147,9 @@ test('public metrics read the stored catalog snapshot and appear in no-JavaScrip
  const html=await (await app.request(origin+'/development/skills/security-scanner')).text();
  const support=html.match(/<section class="public-github-social"[^>]*>[\s\S]*?<\/section>/)?.[0];
  assert.ok(support,'GitHub actions and cached counts are present before JavaScript loads');
- assert.equal(support.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),'☆ Star 7 Fork 3');
- assert.ok(support.includes('href="https://github.com/teddashh/ai-security-scanner/fork"'));
+ assert.equal(support.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),'☆ 加星 7');
+ assert.ok(support.includes('href="https://github.com/teddashh/ai-security-scanner"'));
+ assert.ok(html.includes('href="https://github.com/teddashh/ai-security-scanner/fork"'));
  assert.ok(html.includes('登入工坊 Star'));assert.equal(calls.length,0);
  assert.equal((await app.request(origin+'/api/v1/github/books/not-a-real-book/metrics')).status,404);
  assert.equal((await app.request(origin+'/api/v1/me/github')).status,401);

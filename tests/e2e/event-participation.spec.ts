@@ -200,7 +200,7 @@ async function openWaitlistMember(page:Page,routes:WaitlistNavigationRoutes){
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  const home=page.getByRole('heading',{name:'會員首頁',exact:true});
+  const home=page.getByRole('heading',{name:'動態',exact:true});
   const join=page.getByRole('region',{name:'快速加入公會',exact:true});
   await expect(home.or(join)).toBeVisible();if(await join.isVisible())await quickJoin(page);
   await expect(home).toBeVisible();
@@ -219,7 +219,7 @@ async function clickWaitlistNotice(page:Page,routes:WaitlistNavigationRoutes,eve
 }
 async function expectWaitlistRetained(page:Page,routes:WaitlistNavigationRoutes,event:CommunityEvent,timeOrigin:number){
   await waitlistFrames(page);
-  await expect(page).toHaveURL(routes.url(`/#events/${event.event_id}`));
+  await expect(page).toHaveURL(routes.url(`/#explore/events/${event.event_id}`));
   await expect(waitlistDetail(page).getByRole('heading',{name:event.title,exact:true})).toBeVisible();
   await expect(waitlistPanel(page)).toBeVisible();
   expect(await page.evaluate(()=>performance.timeOrigin)).toBe(timeOrigin);
@@ -271,7 +271,7 @@ test.describe('member waitlist navigation lifetime',()=>{
         routes.fresh.resolve();
         await expect(waitlistPanel(page)).toContainText('已接受邀請');
         await waitlistDetail(page).getByRole('button',{name:'返回活動列表與行事曆',exact:true}).click();
-        await expect(page).toHaveURL(routes.url('/#events'));
+        await expect(page).toHaveURL(routes.url('/#explore/events'));
         expect(routes.writes).toHaveLength(3);expect(routes.notificationWrites).toBe(0);
       }finally{await routes.cleanup();}
     });
@@ -286,9 +286,9 @@ test.describe('member waitlist navigation lifetime',()=>{
       await expect(waitlistPanel(page).getByRole('button',{name:'接受邀請並報名',exact:true})).toBeDisabled();
       await expect(waitlistPanel(page).getByRole('button',{name:'重試原操作（保留原內容）',exact:true})).toHaveCount(0);
       await waitlistDetail(page).getByRole('button',{name:'返回活動列表與行事曆',exact:true}).click();
-      await expect(page).toHaveURL(routes.url('/#events'));
+      await expect(page).toHaveURL(routes.url('/#explore/events'));
       await clickWaitlistNotice(page,routes,routes.b);
-      await expect(page).toHaveURL(routes.url(`/#events/${routes.b.event_id}`));
+      await expect(page).toHaveURL(routes.url(`/#explore/events/${routes.b.event_id}`));
       await expect(waitlistPanel(page).getByRole('button',{name:'接受邀請並報名',exact:true})).toBeEnabled();
       expect(routes.writes).toHaveLength(1);expect(routes.notificationWrites).toBe(0);
     }finally{await routes.cleanup();}

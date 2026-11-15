@@ -54,7 +54,7 @@ for(const filter of ['note','tag'] as const)test(`a comment notification opens a
     await item.getByRole('button',{name:'查看貼文',exact:true}).click();
     await expect(card).toBeFocused({timeout:15000});
     // Ordinary navigation back must not consume this old notification again.
-    await navigate(page,'會員首頁');await navigate(page,'社群分享');
+    await navigate(page,'技能書架');await navigate(page,'社群分享');
     await expect(page.locator('.social-zone')).toHaveAttribute('aria-busy','false');
     await expect(card).toHaveCount(0);
   }finally{

@@ -1,3 +1,4 @@
+import {navigate} from './navigation.js';
 import { test, expect, type Page } from './fixtures.js';
 import { installVisualApi, startVisualPortal, visualCredential, visualHandoff, visualIds, visualModel, visualOverview } from './model-settings-visual.js';
 
@@ -7,8 +8,10 @@ let portal:Awaited<ReturnType<typeof startVisualPortal>>,clientPortal:Awaited<Re
 test.beforeAll(async()=>{portal=await startVisualPortal();clientPortal=await startVisualPortal(true);});
 test.afterAll(async()=>{await portal?.close();await clientPortal?.close();});
 test.use({ignoreHTTPSErrors:true});
-async function open(page:Page,overview=visualOverview()) {
+async function open(page:Page,overview=visualOverview(),beforeSettings?:()=>Promise<void>) {
   await installVisualApi(page,()=>overview);await page.goto(portal.origin+'/#private-ai');
+  if(beforeSettings)await beforeSettings();
+  await navigate(page,'模型設定');
   await expect(page.getByRole('heading',{name:'模型與憑證設定',exact:true})).toBeVisible();
   await expect(page.getByRole('combobox',{name:'管理的模型設定',exact:true})).toBeVisible();
   return page.getByRole('region',{name:'模型與憑證設定',exact:true});
@@ -19,7 +22,10 @@ async function captureConsent(page:Page) {
 }
 test('owner settings remain separate from unavailable work and retain the brand at three widths',async({page},info)=>{
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
-  const overview=visualOverview();overview.credentials=[visualCredential()];const region=await open(page,overview);
+  const overview=visualOverview();overview.credentials=[visualCredential()];
+  const region=await open(page,overview,async()=>{
+    await expect(page.getByText('模型執行服務目前無法使用。尚未確認供應商登入、模型可用性或費用。',{exact:true})).toBeVisible();
+  });
   await region.getByText('新增模型設定',{exact:true}).click();
   await region.getByRole('combobox',{name:'設定的執行連線',exact:true}).selectOption(visualIds.connection);
   await region.getByRole('combobox',{name:'設定的供應商與模型',exact:true}).selectOption('0');
@@ -27,7 +33,6 @@ test('owner settings remain separate from unavailable work and retain the brand 
   await region.getByRole('combobox',{name:'原憑證紀錄',exact:true}).selectOption(visualIds.credential);
   await expect(region).toContainText('已保管 · 尚未驗證');
   await expect(region.locator('input[type=password],input[type=file],textarea')).toHaveCount(0);
-  await expect(page.getByText('模型執行服務目前無法使用。尚未確認供應商登入、模型可用性或費用。',{exact:true})).toBeVisible();
   for(const [width,height] of [[390,844],[768,1024],[1440,900]]){
     await page.setViewportSize({width,height});await page.evaluate(()=>scrollTo(0,0));
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

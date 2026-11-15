@@ -104,8 +104,8 @@ test('an intern can chat and RSVP, and gains post and development rights only af
  const sent=await sendChannelMessage(pool,cmd(actors[1],'chat',{body:'實習成員可以在公會聊天室聊天。'}),'guild',guild);
  assert.equal(sent.body,'實習成員可以在公會聊天室聊天。');
  const created=await createEvent(pool,cmd(actors[2],'exchange',exchange(guild)));
- const published=await reviewEventAsGuildMaster(pool,cmd(actors[0],'review',{decision:'approve',reason:'符合公會活動安排。'},String(created.aggregate_version)),created.event_id);
- assert.equal(published.state,'published');
+ assert.equal(created.state,'published');
+ await assert.rejects(reviewEventAsGuildMaster(pool,cmd(actors[0],'review',{decision:'approve',reason:'已發布活動不再走會長審核。'},String(created.aggregate_version)),created.event_id),code(409,'event_reviewed'));
  assert.equal((await setRsvp(pool,cmd(actors[1],'rsvp',{going:true}),created.event_id)).my_rsvp,'going');
  const reading=await createEvent(pool,cmd(actors[1],'reading',{title:'實習讀書會',description:'閱讀並討論一章。',starts_at:soon(30),ends_at:soon(32),mode:'online',location:'線上教室',capacity:5,event_kind:'reading_group',topic:'協作',online_url:null,visibility:'workshop',guild_key:null}));
  assert.equal(reading.event_kind,'reading_group');

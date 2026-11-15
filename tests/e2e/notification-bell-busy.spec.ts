@@ -9,7 +9,7 @@ async function login(page:Page,email:string){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
 }
 const frameBarrier=(page:Page)=>page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
 
@@ -41,7 +41,7 @@ for(const width of [390,1440])for(const recovery of [false,true])test(`preview r
     await expect(rowA).toBeDisabled();await expect(rowA.locator('small')).toContainText('標記中…');
     await expect(rowB).toBeDisabled();await expect(rowB.locator('small')).toContainText('未讀');
     await expect(panel.getByRole('button',{name:'全部標為已讀',exact:true})).toBeDisabled();
-    await frameBarrier(page);expect(writes.map(item=>item.id)).toEqual([a]);await expect(page).not.toHaveURL(/#squads$/);
+    await frameBarrier(page);expect(writes.map(item=>item.id)).toEqual([a]);await expect(page).not.toHaveURL(/#me\/teams$/);
     const firstRead=(await e2eAuthPool.query('SELECT notification_id,read_at FROM member_notifications WHERE notification_id=ANY($1::uuid[]) ORDER BY notification_id',[ids])).rows;
     expect(firstRead.find(row=>row.notification_id===a).read_at).not.toBeNull();expect(firstRead.find(row=>row.notification_id===b).read_at).toBeNull();
     const originalTime=firstRead.find(row=>row.notification_id===a).read_at.toISOString();
@@ -64,7 +64,7 @@ for(const width of [390,1440])for(const recovery of [false,true])test(`preview r
     await expect(rowB).toBeEnabled();await expect(rowB).toHaveClass(/is-unread/);
     await frameBarrier(page);expect(writes.map(item=>item.id)).toEqual(recovery?[a,a]:[a]);await expect(page).toHaveURL(/#guilds$/);
     // A new, explicit B activation is required; no queued or automatic B write.
-    hold=false;await rowB.click();await expect(page).toHaveURL(/#squads$/);await expect(panel).toBeHidden();await expect(bell).toHaveAccessibleName('通知');
+    hold=false;await rowB.click();await expect(page).toHaveURL(/#me\/teams$/);await expect(panel).toBeHidden();await expect(bell).toHaveAccessibleName('通知');
     expect(writes.map(item=>item.id)).toEqual(recovery?[a,a,b]:[a,b]);expect(writes.at(-1)!.key).not.toBe(writes[0].key);
     const final=(await e2eAuthPool.query('SELECT notification_id,read_at FROM member_notifications WHERE notification_id=ANY($1::uuid[])',[ids])).rows;
     expect(final.find(row=>row.notification_id===a).read_at.toISOString()).toBe(originalTime);expect(final.find(row=>row.notification_id===b).read_at).not.toBeNull();

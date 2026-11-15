@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { navigate, signOut } from './navigation.js';
-import { test, expect, type Browser, type Page } from './fixtures.js';
+import { test, expect, type Browser, type Locator, type Page } from './fixtures.js';
 import { DEMO_COMMUNITY, DEMO_USERS } from '../../packages/testing/seed.js';
 
 const GUEST_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
@@ -89,6 +89,20 @@ function contrast(foreground: string, background: string) {
 
 function card(page: Page, title: string) {
   return page.locator('article.service-card').filter({ has: page.getByRole('heading', { name: title, level: 3 }) });
+}
+async function openServiceFilters(page: Page) {
+  const filters = page.locator('.service-filters-disclosure');
+  await expect(filters).toBeAttached();
+  if (!await filters.evaluate(element => (element as HTMLDetailsElement).open)) await filters.locator(':scope > summary').click();
+  await expect(filters).toHaveJSProperty('open', true);
+}
+async function openServiceMore(container: Locator) {
+  await expect(container).toBeVisible();
+  const more = container.locator('.service-more');
+  if (await more.count()) {
+    if (!await more.evaluate(element => (element as HTMLDetailsElement).open)) await more.locator(':scope > summary').click();
+    await expect(more).toHaveJSProperty('open', true);
+  }
 }
 
 async function fillService(page: Page, title: string, category: string, summary: string, file = false) {
@@ -637,12 +651,15 @@ test('the click shows on the business board for the sharer', async ({ page }) =>
   test.setTimeout(90_000);
   await login(page, 'reviewer@local.test');
   await navigate(page, '推廣排行榜');
+  await page.locator('.legacy-promotion > summary').click();
   await page.locator('.promotion-rankings > summary').click();
-  const business = page.getByRole('article', { name: '業務推廣排行榜', exact: true });
-  await expect(business).toContainText('在社員服務分享區分享社員的服務，每次點擊 +1。');
+  const business = page.getByRole('article', { name: '服務', exact: true });
+  await expect(business).toContainText('發佈或分享社員服務，或有人透過你的連結點進來。');
   await expect(page.getByRole('button', { name: '本週', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(business.locator('li').filter({ hasText: '示範需求者' }).locator('strong')).toHaveText('1');
-  await expect(business).toContainText('我的名次：第 1 名・1 分');
+  // The board sums the credit ledger: 示範需求者 published four services above (+1 each), and the
+  // guest's click on the link they shared adds one. Without the click this would read 4.
+  await expect(business.locator('li').filter({ hasText: '示範需求者' }).locator('strong')).toHaveText('5');
+  await expect(business).toContainText(/我的名次：第 \d+ 名・5 分/);
   for (const theme of ['light', 'versefolk'] as const) {
     await themeOf(page, theme);
     for (const width of [1280, 390]) {
@@ -658,6 +675,7 @@ test('chips, covers and colours stay readable at phone, tablet and desktop', asy
   test.setTimeout(120_000);
   await login(page);
   await navigate(page, '社員服務');
+  await openServiceFilters(page);
   await page.getByRole('button', { name: '語言教學', exact: true }).click();
   await expect(page.getByRole('button', { name: '語言教學', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(card(page, PLACEHOLDER_TITLE)).toBeVisible();
@@ -754,6 +772,7 @@ test('the owner can pause, resume and delete a service', async ({ page, browser 
   test.setTimeout(120_000);
   await login(page);
   await navigate(page, '社員服務');
+  await openServiceMore(card(page, COVER_TITLE));
   await card(page, COVER_TITLE).getByRole('button', { name: '暫停', exact: true }).click();
   await expect(page.locator('li.service-mine-row').filter({ hasText: COVER_TITLE })).toContainText('暫停中');
   await expect(card(page, COVER_TITLE)).toHaveCount(0);
@@ -778,6 +797,7 @@ test('the owner can pause, resume and delete a service', async ({ page, browser 
   const restored = await page.request.get(servicePath);
   expect(restored.status()).toBe(200);
 
+  await openServiceMore(card(page, PLACEHOLDER_TITLE));
   await card(page, PLACEHOLDER_TITLE).getByRole('button', { name: '刪除', exact: true }).click();
   await card(page, PLACEHOLDER_TITLE).getByRole('button', { name: '確定刪除', exact: true }).click();
   await expect(page.getByText('服務已刪除。')).toBeVisible();
@@ -809,6 +829,7 @@ test('admin hide requires confirmation and cancelling never changes the service'
     const ownCard = card(page, titles[1]);
     const ownRow = page.locator('li.service-mine-row').filter({ hasText: titles[1] });
     for (const origin of [ownRow, ownCard]) {
+      await openServiceMore(origin);
       const trigger = origin.getByRole('button', { name: '隱藏', exact: true });
       await trigger.focus();
       await page.keyboard.press('Enter');
@@ -831,12 +852,14 @@ test('admin hide requires confirmation and cancelling never changes the service'
     await ownRow.getByRole('button', { name: '隱藏', exact: true }).press('Enter');
     await ownCard.getByRole('button', { name: '刪除', exact: true }).press('Enter');
     await expect(ownRow.getByRole('button', { name: '確定隱藏', exact: true })).toBeHidden();
+    await openServiceMore(card(page, titles[0]));
     await card(page, titles[0]).getByRole('button', { name: '隱藏', exact: true }).press('Enter');
     await expect(ownCard.getByRole('button', { name: '確定刪除', exact: true })).toBeHidden();
     await card(page, titles[0]).getByRole('button', { name: '取消', exact: true }).press('Enter');
     expect(writes).toEqual([]);
     for (const [index, id] of ids.entries()) {
       const target = card(page, titles[index]);
+      await openServiceMore(target);
       const trigger = target.getByRole('button', { name: '隱藏', exact: true });
       await trigger.focus();
       await page.keyboard.press('Enter');
@@ -1301,4 +1324,47 @@ test('a confirmed create can open an editable next draft while its list refresh 
     expect((await e2eAuthPool.query('SELECT title FROM member_services WHERE owner_user_id=$1 ORDER BY title', [owner])).rows.map(row => row.title).sort())
       .toEqual(['E2E 已確認建立', 'E2E 更新期間的新草稿'].sort());
   } finally { release(); }
+});
+
+test('public service page lets a visitor sign in back to the page and a member create a share link', async ({ page, browser, e2eAuthPool }) => {
+  const id = randomUUID();
+  await e2eAuthPool.query(
+    `INSERT INTO member_services(service_id,community_id,owner_user_id,title,category,summary,service_mode,contacts,state)
+     VALUES($1,$2,$3,'E2E 公開頁分享','design','公開頁分享測試','online','[{"label":"網站","url":"https://example.com/svc"}]'::jsonb,'active')`,
+    [id, DEMO_COMMUNITY, DEMO_USERS[0].user_id],
+  );
+  const visitorCtx = await browser.newContext({ userAgent: GUEST_UA });
+  const visitor = await visitorCtx.newPage();
+  const guestCtx = await browser.newContext({ userAgent: GUEST_UA });
+  const guest = await guestCtx.newPage();
+  try {
+    await visitor.goto(`/services/${id}`);
+    const loginLink = visitor.getByRole('link', { name: '登入取得分享連結', exact: true });
+    await expect(loginLink).toBeVisible();
+    await expect(loginLink).toHaveAttribute('href', `/?return_to=${encodeURIComponent(`/services/${id}`)}`);
+    await expect(visitor.locator('#service-share')).toBeHidden();
+    await loginLink.click();
+    await visitor.getByLabel('電子郵件', { exact: true }).fill('reviewer@local.test');
+    await visitor.getByLabel('密碼', { exact: true }).fill('freedom-local-demo');
+    await visitor.getByRole('button', { name: '登入', exact: true }).click();
+    await visitor.waitForURL(new RegExp(`/services/${id}$`));
+    const shareBtn = visitor.getByRole('button', { name: '我也要分享', exact: true });
+    await expect(shareBtn).toBeVisible();
+    await expect(loginLink).toBeHidden();
+    await visitor.setViewportSize({ width: 390, height: 844 });
+    await shareBtn.click();
+    const shareInput = visitor.getByLabel('我的分享連結', { exact: true });
+    await expect(shareInput).toHaveValue(/\/go\/[A-Za-z0-9_-]{10}$/);
+    await noOverflow(visitor);
+    const shareUrl = await shareInput.inputValue();
+    await guest.goto(shareUrl, { waitUntil: 'commit' });
+    await guest.waitForURL(new RegExp(`/services/${id}$`));
+    await expect(guest.getByRole('heading', { name: 'E2E 公開頁分享', level: 1 })).toBeVisible();
+  } finally {
+    await visitorCtx.close();
+    await guestCtx.close();
+    await e2eAuthPool.query(`DELETE FROM promotion_clicks WHERE link_id IN (SELECT link_id FROM promotion_links WHERE kind='member_service' AND target_key=$1)`, [id]);
+    await e2eAuthPool.query(`DELETE FROM promotion_links WHERE kind='member_service' AND target_key=$1`, [id]);
+    await e2eAuthPool.query(`DELETE FROM member_services WHERE service_id=$1`, [id]);
+  }
 });

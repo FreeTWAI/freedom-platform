@@ -14,11 +14,15 @@ async function login(page:Page){
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
 }
 async function freeze(page:Page){
   const time=new Date('2026-10-21T12:00:00Z');
   await page.clock.install({time});await page.clock.pauseAt(new Date(time.getTime()+1000));
+}
+async function openFilters(page:Page){
+  const filters=page.locator('.friends-panel .friends-filters');
+  if(!(await filters.evaluate(element=>(element as HTMLDetailsElement).open)))await filters.locator('> summary').click();
 }
 
 // Read-only synthetic directory projections; mutation cases stub only their exact target.
@@ -31,9 +35,10 @@ test('friend scope changes and pagination dispatch immediately even with a searc
     return route.fulfill({json:result([person()],21,q.get('offset')==='0'?20:null)});
   });
   await navigate(page,'我的好友');await expect(list(page)).toHaveAttribute('aria-busy','false');await freeze(page);
+  await openFilters(page);
   await page.getByLabel('搜尋好友名稱',{exact:true}).fill('測試');await page.clock.runFor(250);
   await expect.poll(()=>reads.at(-1)?.search).toBe('測試');await expect(list(page)).toHaveAttribute('aria-busy','false');
-  await page.getByRole('button',{name:'收到的邀請',exact:true}).click();
+  await page.getByRole('button',{name:'查看邀請',exact:true}).click();
   // No clock advance: the old implementation would still be waiting 250ms.
   await expect.poll(()=>reads.at(-1)?.scope).toBe('incoming');await expect(list(page)).toHaveAttribute('aria-busy','false');
   await page.getByRole('button',{name:'下一頁好友',exact:true}).click();
@@ -45,6 +50,7 @@ test('Chinese friend-name composition never queries incomplete input',async({pag
   await login(page);const searches:string[]=[];
   await page.route(url=>url.pathname===directoryPath,route=>{searches.push(new URL(route.request().url()).searchParams.get('search')??'');return route.fulfill({json:result()});});
   await navigate(page,'我的好友');await expect(list(page)).toHaveAttribute('aria-busy','false');await freeze(page);
+  await openFilters(page);
   const input=page.getByLabel('搜尋好友名稱',{exact:true});
   await input.dispatchEvent('compositionstart');await input.fill('ㄇ');await page.clock.runFor(300);
   await input.fill('小明');await page.clock.runFor(300);
@@ -58,6 +64,7 @@ test('Enter flushes a pending search and clear restores the input focus on mobil
   await page.setViewportSize({width:390,height:844});await login(page);const searches:string[]=[];
   await page.route(url=>url.pathname===directoryPath,route=>{searches.push(new URL(route.request().url()).searchParams.get('search')??'');return route.fulfill({json:result()});});
   await navigate(page,'我的好友');await expect(list(page)).toHaveAttribute('aria-busy','false');await freeze(page);
+  await openFilters(page);
   const input=page.getByLabel('搜尋好友名稱',{exact:true});
   await input.fill('朋友');await input.press('Enter');await expect.poll(()=>searches.at(-1)).toBe('朋友');
   await page.clock.runFor(250);expect(searches.filter(value=>value==='朋友')).toHaveLength(1);
@@ -76,7 +83,7 @@ test('changing friend scope aborts old requests and ignores a delayed response',
   try{
     await navigate(page,'我的好友');await started.promise;
     const aborted=page.waitForEvent('requestfailed',request=>new URL(request.url()).pathname===directoryPath&&new URL(request.url()).searchParams.get('scope')==='accepted');
-    await page.getByRole('button',{name:'收到的邀請',exact:true}).click();
+    await page.getByRole('button',{name:'查看邀請',exact:true}).click();
     expect((await aborted).failure()?.errorText).toMatch(/abort|cancel/i);
     await expect(list(page).getByRole('heading',{name:'新範圍邀請',exact:true})).toBeVisible();
     held.release();await finished.promise;await expect(list(page)).not.toContainText('過期好友結果');
@@ -98,7 +105,7 @@ test('accepting an invitation preserves the command version and refreshes confir
   await page.route(url=>url.pathname===`/api/v1/friends/${memberId}/accept`,route=>{
     commands.push(route.request().headers());accepted=true;return route.fulfill({json:{state:'accepted',aggregate_version:8}});
   });
-  await navigate(page,'我的好友');await page.getByRole('button',{name:'收到的邀請',exact:true}).click();
+  await navigate(page,'我的好友');await page.getByRole('button',{name:'查看邀請',exact:true}).click();
   await list(page).getByRole('button',{name:'接受邀請',exact:true}).click();
   await expect(page.getByText('已和邀請夥伴成為好友。',{exact:true})).toBeVisible();
   await expect(list(page).getByRole('heading',{name:'沒有等你回覆的邀請',exact:true})).toBeVisible();
@@ -114,7 +121,8 @@ test('removing the last invitation on a later page recovers to a valid page with
       :result([person('第一頁朋友','pending')],removed?20:21,removed?null:20)});
   });
   await page.route(url=>url.pathname===`/api/v1/friends/${memberId}/remove`,route=>{removed=true;return route.fulfill({json:{state:'removed',aggregate_version:8}});});
-  await navigate(page,'我的好友');await page.getByRole('button',{name:'收到的邀請',exact:true}).click();
+  await navigate(page,'我的好友');await page.getByRole('button',{name:'查看邀請',exact:true}).click();
+  await openFilters(page);
   const input=page.getByLabel('搜尋好友名稱',{exact:true});await input.fill('朋友');await input.press('Enter');
   await expect(list(page)).toHaveAttribute('aria-busy','false');await list(page).getByRole('button',{name:'下一頁好友',exact:true}).click();
   await expect(list(page).getByRole('heading',{name:'待回覆朋友',exact:true})).toBeVisible();
@@ -128,7 +136,7 @@ test('permission errors after a refresh remove previously loaded private results
   await login(page);let forbidden=false;
   await page.route(url=>url.pathname===directoryPath,route=>forbidden?route.fulfill({status:403,json:{code:'forbidden',detail:'目前無法讀取好友名單。'}}):route.fulfill({json:result([person('私人朋友姓名')])}));
   await navigate(page,'我的好友');await expect(list(page).getByRole('heading',{name:'私人朋友姓名',exact:true})).toBeVisible();
-  forbidden=true;await page.getByRole('button',{name:'搜尋好友',exact:true}).click();
+  forbidden=true;await openFilters(page);await page.getByRole('button',{name:'搜尋好友',exact:true}).click();
   await expect(list(page).getByRole('alert')).toBeVisible();await expect(list(page)).not.toContainText('私人朋友姓名');
   await expect(list(page)).not.toContainText('共 0');
 });
@@ -142,9 +150,11 @@ test('friend list states explain who is waiting and recover empty searches witho
   await navigate(page,'我的好友');
   await expect(list(page).getByRole('heading',{name:'還沒有好友',exact:true})).toBeVisible();
   await expect(list(page).getByRole('button',{name:'認識工坊夥伴',exact:true})).toBeVisible();
+  await openFilters(page);
   await page.getByRole('button',{name:'收到的邀請',exact:true}).click();
   await expect(page.locator('.friends-scope-hint')).toContainText('等你回覆');
   await expect(list(page).getByRole('heading',{name:'沒有等你回覆的邀請',exact:true})).toBeVisible();
+  await openFilters(page);
   await page.getByRole('button',{name:'送出的邀請',exact:true}).click();
   await expect(page.locator('.friends-scope-hint')).toContainText('等對方回覆');
   await expect(list(page)).toContainText('共 0 則邀請等對方回覆');

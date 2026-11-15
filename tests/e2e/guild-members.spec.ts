@@ -1,4 +1,4 @@
-import { navigate } from './navigation.js';
+import { navigate, openGuildCardMore } from './navigation.js';
 import { test, expect, type Page } from './fixtures.js';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
@@ -35,6 +35,7 @@ test('guild member lists load on demand, preserve guild filtering across pages a
     return route.fulfill({ json: { items: query.get('offset') === '10' ? [member(10)] : Array.from({ length: 10 }, (_, index) => member(index, index < 2 ? '同名夥伴' : undefined)), total: 11, next_offset: query.get('offset') === '10' ? null : 10 } });
   });
   await login(page); const card = page.getByRole('article', { name: '活動與空間公會', exact: true });
+  await openGuildCardMore(card);
   await expect(card.getByRole('button', { name: '查看成員', exact: true })).toBeVisible(); expect(queries).toHaveLength(0);
   const leaders=card.locator('.guild-leadership-row');await expect(leaders).toHaveCount(4);await expect(leaders.first()).toHaveClass(/guild-master/);for(const row of await leaders.all())await expect(row).toBeVisible();
   const assertRows=async()=>{const boxes=await leaders.evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,bottom:r.bottom};}));for(let i=1;i<boxes.length;i++){expect(boxes[i].x).toBeCloseTo(boxes[0].x,0);expect(boxes[i].width).toBeCloseTo(boxes[0].width,0);expect(boxes[i].y).toBeGreaterThanOrEqual(boxes[i-1].bottom);}};
@@ -61,7 +62,9 @@ test('guild member lists load on demand, preserve guild filtering across pages a
   await expect(panel.locator('.directory-member')).toHaveCount(1); await expect(panel).toContainText('剪輯活動夥伴');
   expect(queries.at(-1)?.get('guild_key')).toBe('guild_event_space'); expect(queries.at(-1)?.get('sort')).toBe('newest'); expect(queries.at(-1)?.get('offset')).toBe('0');
   await card.getByRole('button',{name:'關閉公會視窗',exact:true}).click();
-  await page.getByRole('article', { name: '資安公會', exact: true }).getByRole('button', { name: '查看成員', exact: true }).click();
+  const securityCard = page.getByRole('article', { name: '資安公會', exact: true });
+  await openGuildCardMore(securityCard);
+  await securityCard.getByRole('button', { name: '查看成員', exact: true }).click();
   await expect(panel).toHaveCount(0); await expect(page.getByRole('region', { name: '資安公會成員', exact: true })).toContainText('目前沒有可顯示的公會成員。');
   expect(queries.at(-1)?.get('guild_key')).toBe('guild_security'); expect(queries.at(-1)?.has('search')).toBe(false);
 });
@@ -75,13 +78,13 @@ test('closing a pending guild list prevents its response from leaking into anoth
     return route.fulfill({ json: { items: [member(2, guild === 'guild_security' ? '目前資安成員' : '重新讀取的活動成員')], total: 1, next_offset: null } });
   });
   await login(page); const first = page.getByRole('article', { name: '活動與空間公會', exact: true }), second = page.getByRole('article', { name: '資安公會', exact: true });
-  await first.getByRole('button', { name: '查看成員', exact: true }).click(); await requested;
+  await openGuildCardMore(first); await first.getByRole('button', { name: '查看成員', exact: true }).click(); await requested;
   await first.getByRole('button', { name: '關閉公會視窗', exact: true }).click();
-  await second.getByRole('button', { name: '查看成員', exact: true }).click(); await expect(second).toContainText('目前資安成員');
+  await openGuildCardMore(second); await second.getByRole('button', { name: '查看成員', exact: true }).click(); await expect(second).toContainText('目前資安成員');
   const delivered = page.waitForResponse(response => response.url().includes('/api/v1/members?') && new URL(response.url()).searchParams.get('guild_key') === 'guild_event_space');
   release(); await delivered; await expect(page.getByText('已過期的活動回應', { exact: true })).toHaveCount(0);
   await second.getByRole('button',{name:'關閉公會視窗',exact:true}).click();
-  await first.getByRole('button', { name: '查看成員', exact: true }).click(); await expect(first).toContainText('重新讀取的活動成員');
+  await openGuildCardMore(first); await first.getByRole('button', { name: '查看成員', exact: true }).click(); await expect(first).toContainText('重新讀取的活動成員');
   await expect(second.getByRole('region')).toHaveCount(0); expect(visits).toBe(2);
 });
 
@@ -92,7 +95,7 @@ test('guild list distinguishes empty/error states and compact details fit a narr
     if (unavailable) return route.fulfill({ status: 503, json: { detail: '成員清單暫時無法讀取。' } });
     return route.fulfill({ json: { items: query.has('search') ? [] : [{ ...member(0, '一位很長名字的活動與空間協作夥伴'), contacts: { discord: 'allowed-contact-only' } }], total: query.has('search') ? 0 : 1, next_offset: null } });
   });
-  await login(page); const card = page.getByRole('article', { name: '活動與空間公會', exact: true }); await card.getByRole('button', { name: '查看成員', exact: true }).click();
+  await login(page); const card = page.getByRole('article', { name: '活動與空間公會', exact: true }); await openGuildCardMore(card); await card.getByRole('button', { name: '查看成員', exact: true }).click();
   const panel = card.getByRole('region', { name: '活動與空間公會成員', exact: true });
   await expect(panel.getByRole('alert')).toContainText('服務暫時無法回應（503）。請稍後重試。'); await expect(panel.getByText('目前沒有可顯示的公會成員。', { exact: true })).toHaveCount(0);
   unavailable = false; await panel.getByRole('button', { name: '重新載入成員', exact: true }).click();
@@ -100,7 +103,7 @@ test('guild list distinguishes empty/error states and compact details fit a narr
   await panel.locator('.directory-member-details > summary').click(); await expect(panel.getByText('allowed-contact-only', { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 320, height: 844 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await panel.getByRole('searchbox', { name: '搜尋公會成員', exact: true }).fill('沒有這位成員'); await expect(panel).toContainText('沒有符合的公會成員。');
-  await card.getByRole('button', { name: '關閉公會視窗', exact: true }).click(); await card.getByRole('button', { name: '查看成員', exact: true }).click();
+  await card.getByRole('button', { name: '關閉公會視窗', exact: true }).click(); await openGuildCardMore(card); await card.getByRole('button', { name: '查看成員', exact: true }).click();
   await expect(panel.getByRole('searchbox', { name: '搜尋公會成員', exact: true })).toHaveValue(''); await expect(panel.locator('.directory-member')).toHaveCount(1);
 });
 
@@ -124,7 +127,7 @@ test('guild browsing uses the real membership filter and exposes only permitted 
     await login(page); const card = page.getByRole('article', { name: '活動與空間公會', exact: true });
     await card.locator('.guild-leadership').scrollIntoViewIfNeeded();const masterPhoto=card.locator('.guild-master img'),expertPhoto=card.locator(`.guild-expert[data-user-id="${ids[1]}"] img`);for(const [image,id]of [[masterPhoto,ids[0]],[expertPhoto,ids[1]]]as const){await expect(image).toHaveAttribute('src',`/api/v1/members/${id}/avatar?v=1`);await expect.poll(()=>image.evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBe(256);}
     const directory=(await (await page.request.get('/api/v1/guilds/directory')).json()).items.find((item:any)=>item.guild_key===guild);expect(directory.guild_master.avatar_url).toBe(`/api/v1/members/${ids[0]}/avatar?v=1`);expect(directory.guild_experts.find((item:any)=>item.user_id===ids[1]).avatar_url).toBe(`/api/v1/members/${ids[1]}/avatar?v=1`);
-    await card.getByRole('button', { name: '查看成員', exact: true }).click(); const panel = card.getByRole('region', { name: '活動與空間公會成員', exact: true });
+    await openGuildCardMore(card); await card.getByRole('button', { name: '查看成員', exact: true }).click(); const panel = card.getByRole('region', { name: '活動與空間公會成員', exact: true });
     await panel.getByRole('searchbox', { name: '搜尋公會成員', exact: true }).fill('Browser');
     await expect(panel.locator('.directory-member')).toHaveCount(2); await expect(panel).not.toContainText(names[2]);
     await expect(panel.locator(`[data-member-id="${ids[0]}"] .guild-member-leader`)).toHaveText('公會長');
@@ -159,7 +162,7 @@ test('guild browsing uses the real membership filter and exposes only permitted 
 
 test('onboarding recommendations show the master above three separate expert rows and retain guild selection',async({page})=>{
   await page.route('**/api/v1/guilds/directory',async route=>{const response=await route.fetch(),value=await response.json();value.items=value.items.map((guild:any)=>({...guild,guild_master:{user_id:'synthetic-master',display_name:'推薦公會會長'},guild_experts:[{user_id:'synthetic-master',display_name:'推薦公會會長'},{user_id:'synthetic-expert-2',display_name:'第二位專家'},{user_id:'synthetic-expert-3',display_name:'第三位專家'}]}));return route.fulfill({response,json:value});});
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();await page.getByLabel('社群顯示名稱',{exact:true}).fill('公會人物列測試');await page.getByLabel('電子郵件',{exact:true}).fill(`guild-people-${randomUUID()}@example.test`);await page.getByLabel('密碼',{exact:true}).fill('freedom-leadership-test-2026');await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();await page.locator('.welcome-optional > summary').click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();await page.getByLabel('社群顯示名稱',{exact:true}).fill('公會人物列測試');await page.getByLabel('電子郵件',{exact:true}).fill(`guild-people-${randomUUID()}@example.test`);await page.getByLabel('密碼',{exact:true}).fill('freedom-leadership-test-2026');await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();await page.locator('.welcome-optional > summary').click();
   await page.getByRole('button',{name:'開始／繼續定位 →',exact:true}).click();
   for(const title of ['你喜歡怎麼做事？','遇到這些情境，你會怎麼做？']){await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();for(const question of await page.locator('.quiz-question').all())await question.getByRole('radio').first().check();await page.getByRole('button',{name:'保存，繼續下一步 →',exact:true}).click();}
   await expect(page.getByRole('heading',{name:'你從哪裡來，帶著哪些能力？',exact:true})).toBeVisible();await page.getByRole('button',{name:'保存，繼續下一步 →',exact:true}).click();await page.getByRole('button',{name:'看看適合我的公會',exact:true}).click();
@@ -198,7 +201,7 @@ test('guild partner cards keep consent-filtered data, keyboard disclosure and th
   });
   let extraReads=0,socialReads=0;await page.route('**/api/v1/members/*/contribution-outcomes*',route=>{extraReads++;return route.fulfill({json:{accepted_count:0,entries:[],next_offset:null}});});await page.route('**/api/v1/members/*/social-links*',route=>{socialReads++;return route.fulfill({json:{items:[],total:0,next_offset:null}});});
   try{
-    await login(page);const card=page.getByRole('article',{name:'活動與空間公會',exact:true});await card.getByRole('button',{name:'查看成員',exact:true}).click();await started;
+    await login(page);const card=page.getByRole('article',{name:'活動與空間公會',exact:true});await openGuildCardMore(card);await card.getByRole('button',{name:'查看成員',exact:true}).click();await started;
     const panel=card.getByRole('region',{name:'活動與空間公會成員',exact:true});await expect(panel.getByRole('status')).toHaveText('正在載入成員…');release();
     await expect(panel.locator('.guild-member-card')).toHaveCount(2);await expect(panel).toContainText('這裡也有你的位置');await expect(panel).toContainText('尚未填寫專長');
     const row=panel.locator(`[data-member-id="${id}"]`),summary=row.locator('.directory-member-details > summary');
@@ -233,7 +236,7 @@ test('guild card admin retry after a lost response reuses the original operation
     if(writes.length===1)return route.abort('failed');tier='full';return route.fulfill({json:{changed:true,user_id:id,guild_key:'guild_event_space',member_tier:'full',aggregate_version:4}});
   });
   await login(page);viewer=(await(await page.request.get('/api/v1/session')).json()).user.user_id;await page.reload();
-  const card=page.getByRole('article',{name:'活動與空間公會',exact:true});await card.getByRole('button',{name:'查看成員',exact:true}).click();
+  const card=page.getByRole('article',{name:'活動與空間公會',exact:true});await openGuildCardMore(card);await card.getByRole('button',{name:'查看成員',exact:true}).click();
   const panel=card.getByRole('region',{name:'活動與空間公會成員',exact:true}),promote=panel.getByRole('button',{name:'設為正式成員',exact:true});
   await expect(panel.getByRole('group',{name:'管理待設定的合成成員',exact:true})).toBeVisible();await promote.click();await expect(panel.getByRole('alert')).toBeVisible();await expect(promote).toBeEnabled();await promote.click();await expect(panel.locator('.guild-member-tier-full')).toHaveText('正式成員');
   expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);

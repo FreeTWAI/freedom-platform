@@ -1,3 +1,4 @@
+import {eventAppPath} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
 import {quickJoin} from './quick-join.js';
@@ -9,7 +10,7 @@ import type {CommunityEvent} from '../../apps/portal-web/src/modules/EventsPanel
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==','base64');
 async function login(page:Page){
  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
- const home=page.getByRole('heading',{name:'會員首頁',exact:true}),join=page.getByRole('region',{name:'快速加入公會',exact:true});await expect(home.or(join)).toBeVisible();if(await join.isVisible())await quickJoin(page);await expect(home).toBeVisible();
+ const home=page.getByRole('heading',{name:'動態',exact:true}),join=page.getByRole('region',{name:'快速加入公會',exact:true});await expect(home.or(join)).toBeVisible();if(await join.isVisible())await quickJoin(page);await expect(home).toBeVisible();
  const session=await page.evaluate(async()=>{const response=await fetch('/api/v1/session');if(!response.ok)throw Error('Synthetic session unavailable');return response.json();});return session.user.user_id as string;
 }
 async function routes(page:Page,owner:string,lostFirst=false){
@@ -41,7 +42,7 @@ for(const width of [320,390,1440])for(const theme of ['light','dark','versefolk'
  await page.setViewportSize({width,height:900});await page.emulateMedia({reducedMotion:'reduce'});await page.addInitScript(theme=>{localStorage.setItem('freedom-theme',theme);localStorage.setItem('freedom-seasonal-theme','off');},theme);
  const owner=await login(page),state=await routes(page,owner,true);
  try{
-  await page.goto('/#events');await page.getByRole('button',{name:'管理 合成獎品 的照片',exact:true}).click();
+  await page.goto(`/#events/${state.event.event_id}/manage`);await page.getByText('更多',{exact:true}).click();await page.getByRole('button',{name:'管理 合成獎品 的照片',exact:true}).click();
   const editor=page.getByRole('region',{name:'合成獎品 的照片設定',exact:true}),input=editor.getByLabel('選擇獎品照片');
   await expect(editor.getByRole('heading',{name:'合成獎品 的照片',exact:true})).toBeFocused();await expect(input).toBeEnabled();await input.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});await expect(editor.getByText('尚未儲存的預覽',{exact:false})).toBeVisible();expect(state.writes).toHaveLength(0);
   await expect(input).toHaveCSS('font-size','16px');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -67,7 +68,7 @@ test('default OFF native management prevents selection but retains explicit remo
  const owner=await login(page),state=await routes(page,owner);state.setAvailability(false);
  const prize=state.event.prize_details![0];state.event.aggregate_version=4;state.event.prize_photos=[{prize_id:prize.prize_id,photo_version:4,url:`/api/v1/events/${state.event.event_id}/prizes/${prize.prize_id}/photo?v=4`}];
  try{
-  await page.goto('/#events');await page.getByRole('button',{name:'管理 合成獎品 的照片',exact:true}).click();const editor=page.getByRole('region',{name:'合成獎品 的照片設定',exact:true});await expect(editor.getByText(/照片上傳尚未開放或暫時無法使用/)).toBeVisible();await expect(editor.getByLabel('選擇獎品照片')).toBeDisabled();expect(state.writes).toHaveLength(0);
+  await page.goto(`/#events/${state.event.event_id}/manage`);await page.getByText('更多',{exact:true}).click();await page.getByRole('button',{name:'管理 合成獎品 的照片',exact:true}).click();const editor=page.getByRole('region',{name:'合成獎品 的照片設定',exact:true});await expect(editor.getByText(/照片上傳尚未開放或暫時無法使用/)).toBeVisible();await expect(editor.getByLabel('選擇獎品照片')).toBeDisabled();expect(state.writes).toHaveLength(0);
   await editor.getByRole('button',{name:'移除已保存照片',exact:true}).click();await editor.getByRole('button',{name:'返回，不移除',exact:true}).click();expect(state.writes).toHaveLength(0);
   await editor.getByRole('button',{name:'移除已保存照片',exact:true}).click();await editor.getByRole('button',{name:'確定移除照片',exact:true}).click();await expect(editor.getByText(/目前沒有已保存照片/)).toBeVisible();expect(state.writes).toHaveLength(1);expect(state.writes[0].operation).toBe('remove');
   state.setAvailability(true);await editor.getByRole('button',{name:'重新確認照片上傳狀態',exact:true}).click();await expect(editor.getByLabel('選擇獎品照片')).toBeEnabled();expect(state.writes).toHaveLength(1);
@@ -78,7 +79,7 @@ test('anonymous native page reads only its exact public version and retries imag
  const event={event_id:eventId,title:'合成公開獎品活動',description:'唯讀獎品說明',starts_at:'2099-01-01T12:00:00Z',ends_at:'2099-01-01T13:00:00Z',mode:'online',location:'合成教室',online_url:null,event_kind:'other',topic:null,visibility:'open',registration_policy:'community_member',capacity:null,attending_count:0,organizer_name:'合成主辦者',banner_url:null,video_url:null,video_mime:null,prize_details:[{prize_id:prizeId,name:'公開合成獎品',description:'示意測試',quantity:1,completion_rule:'依公開條件確認',claim_note:'現場領取',icon_id:'gift'}],prize_photos:[{prize_id:prizeId,photo_version:4,url:path}]};let fail=true;const writes:string[]=[];
  await page.route(`**/api/v1/public/events/${eventId}`,route=>route.fulfill({json:event}));
  await page.route(`**${path}`,async route=>{expect(route.request().method()).toBe('GET');if(fail)await route.fulfill({status:503,body:'Unavailable'});else await route.fulfill({contentType:'image/png',headers:{'Cache-Control':'no-store'},body:png});});
- page.on('request',request=>{if(new URL(request.url()).pathname.includes(`/events/${eventId}`)&&request.method()!=='GET')writes.push(request.url());});
- try{await page.goto(`/events/${eventId}`);await expect(page.getByRole('heading',{name:event.title,exact:true})).toBeVisible();await expect(page.getByText(/照片暫時無法載入/)).toBeVisible();expect(await page.locator('.event-prize-heading svg').count()).toBe(1);await expect(page.getByRole('button',{name:/管理 .* 的照片/})).toHaveCount(0);fail=false;await page.getByRole('button',{name:'重試載入照片',exact:true}).click();await expect(page.getByRole('img',{name:'公開合成獎品 的獎品照片',exact:true})).toHaveJSProperty('naturalWidth',1);expect(writes).toEqual([]);}
+ page.on('request',request=>{if(new URL(request.url()).pathname.includes(eventAppPath(`/events/${eventId}`))&&request.method()!=='GET')writes.push(request.url());});
+ try{await page.goto(eventAppPath(`/events/${eventId}`));await expect(page.getByRole('heading',{name:event.title,exact:true})).toBeVisible();await expect(page.getByText(/照片暫時無法載入/)).toBeVisible();expect(await page.locator('.event-prize-heading svg').count()).toBe(1);await expect(page.getByRole('button',{name:/管理 .* 的照片/})).toHaveCount(0);fail=false;await page.getByRole('button',{name:'重試載入照片',exact:true}).click();await expect(page.getByRole('img',{name:'公開合成獎品 的獎品照片',exact:true})).toHaveJSProperty('naturalWidth',1);expect(writes).toEqual([]);}
  finally{await page.unrouteAll({behavior:'wait'});}
 });

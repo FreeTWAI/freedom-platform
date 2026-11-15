@@ -103,7 +103,7 @@ const noNetwork=()=>{throw Error('Real network forbidden');};
 const frame=(fn:()=>void)=>queueMicrotask(fn);
 const bundled=buildSync({stdin:{contents:`export {EventsPanel,blankEvent,eventPayload} from './apps/portal-web/src/modules/EventsPanel'; export * from './apps/portal-web/src/modules/EventPrizeDetails'; export * from './apps/portal-web/src/modules/EventPrizeFields'; export {ApiError} from './apps/portal-web/src/api';`,resolveDir:process.cwd(),sourcefile:'event-prize-ui-entry.ts'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',jsx:'automatic',loader:{'.css':'empty'}});
 const production={exports:{} as any};
-runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:{language:'zh-TW',languages:['zh-TW'],clipboard:{writeText:noNetwork}},fetch:noNetwork,requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='zod')return require('zod');throw Error(name);}});
+runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:{language:'zh-TW',languages:['zh-TW'],clipboard:{writeText:noNetwork}},fetch:noNetwork,requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='react-dom')return require('react-dom');if(name==='qrcode')return require('qrcode');if(name==='zod')return require('zod');throw Error(name);}});
 const {EventsPanel,EventPrizeFields,EventPrizeDetails,newEventPrize,eventPrizePayload,eventPrizeDrafts,eventPrizeFieldError,ApiError}=production.exports;
 const OWNER='30000000-0000-4000-8000-000000000001',ID='10000000-0000-4000-8000-000000000001';
 const prize=()=>({...newEventPrize(),name:'合成獎品',description:'合成介紹',quantity:'3',icon_id:'book',completion_rule:'由主辦者評選作品',claim_note:'活動結束前當場領取'});
@@ -126,11 +126,11 @@ function panel(t:TestContext){
  const settle=async(r:any,value:any,reject=false)=>{assert(r);await React.act(async()=>{r[reject?'reject':'resolve'](value);await new Promise(resolve=>setImmediate(resolve));});};
  const ready=async(items:any[]=[])=>{for(const r of reads().filter(r=>!r.done)){r.done=true;await settle(r,{items:r.path==='/events'?items:[]});}};
  const submit=(twice=false)=>{const form=h.nodes().find(n=>n.nodeName==='FORM');assert(form);flush(()=>{form.dispatchEvent({type:'submit'});if(twice)form.dispatchEvent({type:'submit'});});};
- return {...h,props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
+ return {...h,button:(name:string)=>{if(name==='編輯活動'&&!props.locationHash.includes('/manage')){props.locationHash='#events/'+ID+'/manage';h.setProps(props);}return h.button(name);},props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
 }
-const ack=(request:any,overrides:any={})=>stored({...request.body,aggregate_version:(request.options?.ifMatch??0)+1,...overrides});
+const ack=(request:any,overrides:any={})=>stored({...request.body,state:request.path==='/events'?'published':'pending',aggregate_version:(request.options?.ifMatch??0)+1,...overrides});
 const tuple=(r:any)=>JSON.stringify({path:r.path,body:r.body,options:r.options});
-async function createWithPrize(h:ReturnType<typeof panel>){await h.ready();h.click(h.button('辦活動'));h.change('活動名稱','合成新活動');h.change('活動說明','合成新說明');h.change('線上場地','合成場地');h.click(h.button('加入獎品'));h.change('獎品名稱','合成獎品');h.change('準備幾份','3');h.change('要做到什麼','完成現場練習，由主辦者評選');h.change('怎麼領取','主辦者在現場交付');}
+async function createWithPrize(h:ReturnType<typeof panel>){await h.ready();h.click(h.button('辦活動'));h.change('活動名稱','合成新活動');h.change('活動說明','合成新說明');h.change('地點','合成場地');h.click(h.button('加入獎品'));h.change('獎品名稱','合成獎品');h.change('準備幾份','3');h.change('要做到什麼','完成現場練習，由主辦者評選');h.change('怎麼領取','主辦者在現場交付');}
 
 test('draft IDs survive typing, rerender, controlled icon changes, payload snapshots and edit conversion',t=>{
  let value=[prize()];const first=value[0].prize_id;let h:any;const props=()=>({value,onChange:(next:any)=>{value=next;h.setProps(props());}});h=host(t,EventPrizeFields,props());
@@ -148,14 +148,14 @@ test('read-only details fail closed for invalid IDs, show old empty data without
  const h=host(t,EventPrizeDetails,{value:undefined});assert.equal(h.text(),'');h.setProps({value:[{...eventPrizePayload([prize()])[0],icon_id:'unknown'}]});assert.match(h.text(),/獎品資料無法確認/);assert.equal(h.nodes().filter(n=>n.nodeName==='SVG').length,0);h.setProps({value:[{...eventPrizePayload([prize()])[0],name:'<img onerror=alert(1)>'}]});assert.match(h.text(),/<img onerror=alert\(1\)>/);assert.equal(h.nodes().filter(n=>n.nodeName==='IMG').length,0);assert.match(h.text(),/不代表已發獎/);
 });
 test('real panel freezes one exact save tuple on same-tick submit and unknown until canonical prize ACK',async t=>{
- const h=panel(t);await createWithPrize(h);h.submit(true);assert.equal(h.writes().length,1);const first=h.writes()[0],id=first.body.prize_details[0].prize_id;assert.equal(h.leave(),false);await h.settle(first,new ApiError({message:'lost reply',network:true}),true);h.submit();const retry=h.writes()[1];assert.equal(tuple(retry),tuple(first));await h.settle(retry,ack(retry,{prize_details:[]}));assert.equal(h.leave(),false);assert.doesNotMatch(h.text(),/活動已送出審核/);h.submit();assert.equal(tuple(h.writes()[2]),tuple(first));await h.settle(h.writes()[2],ack(first));assert.match(h.text(),/活動已送出審核/);assert.equal(h.writes()[2].body.prize_details[0].prize_id,id);assert.equal(h.leave(),true);
+ const h=panel(t);await createWithPrize(h);h.submit(true);assert.equal(h.writes().length,1);const first=h.writes()[0],id=first.body.prize_details[0].prize_id;assert.equal(h.leave(),false);await h.settle(first,new ApiError({message:'lost reply',network:true}),true);h.submit();const retry=h.writes()[1];assert.equal(tuple(retry),tuple(first));await h.settle(retry,ack(retry,{prize_details:[]}));assert.equal(h.leave(),false);assert.doesNotMatch(h.text(),/活動已發布/);h.submit();assert.equal(tuple(h.writes()[2]),tuple(first));await h.settle(h.writes()[2],ack(first));assert.match(h.text(),/活動已發布/);assert.equal(h.writes()[2].body.prize_details[0].prize_id,id);assert.equal(h.leave(),true);
 });
 for(const change of ['client','session','user','unmount'])test(`late prize ACK cannot cross ${change}`,async t=>{
  const h=panel(t);await createWithPrize(h);h.submit();const first=h.writes()[0];if(change==='unmount')h.unmount();else{if(change==='client')h.props.client={...h.client};if(change==='session'){h.client.sessionGeneration++;h.client.csrfToken='replacement';}if(change==='user')h.props.session={user:{user_id:'30000000-0000-4000-8000-000000000002'}};h.setProps(h.props);}
- await h.settle(first,ack(first));assert.equal(h.writes().length,1);if(change!=='unmount'){assert.doesNotMatch(h.text(),/合成獎品|活動已送出審核/);await h.ready();h.click(h.button('辦活動'));assert.equal(h.field('活動名稱').value,'');assert.equal(h.button('移除獎品 1'),undefined);}
+ await h.settle(first,ack(first));assert.equal(h.writes().length,1);if(change!=='unmount'){assert.doesNotMatch(h.text(),/合成獎品|活動已發布/);await h.ready();h.click(h.button('辦活動'));assert.equal(h.field('活動名稱').value,'');assert.equal(h.button('移除獎品 1'),undefined);}
 });
 test('edit keeps server prize IDs, preserves unknown original version and rejects wrong-event receipt',async t=>{
- const h=panel(t),data=stored({aggregate_version:9,prize_details:eventPrizePayload([prize()])});await h.ready([data]);h.click(h.button('編輯草稿'));h.change('準備幾份','4');h.submit();const first=h.writes()[0];assert.equal(first.options.ifMatch,9);assert.equal(first.body.prize_details[0].prize_id,data.prize_details[0].prize_id);await h.settle(first,ack(first,{event_id:'10000000-0000-4000-8000-000000000002'}));assert.equal(h.leave(),false);h.submit();assert.equal(tuple(h.writes()[1]),tuple(first));await h.settle(h.writes()[1],ack(first));assert.match(h.text(),/活動已更新/);
+ const h=panel(t),data=stored({aggregate_version:9,prize_details:eventPrizePayload([prize()])});await h.ready([data]);h.click(h.button('編輯活動'));h.change('準備幾份','4');h.submit();const first=h.writes()[0];assert.equal(first.options.ifMatch,9);assert.equal(first.body.prize_details[0].prize_id,data.prize_details[0].prize_id);await h.settle(first,ack(first,{event_id:'10000000-0000-4000-8000-000000000002'}));assert.equal(h.leave(),false);h.submit();assert.equal(tuple(h.writes()[1]),tuple(first));await h.settle(h.writes()[1],ack(first));assert.match(h.text(),/活動已更新/);
 });
 
 test('event A prize details never render as event B while its GET is pending or late',async t=>{
@@ -167,13 +167,13 @@ test('event A prize details never render as event B while its GET is pending or 
 
 test('late newer event GET cannot silently rebase an older prize draft onto a new version',async t=>{
  const h=panel(t);h.props.locationHash='#events/'+ID;h.setProps(h.props);
- const original=stored({prize_details:eventPrizePayload([prize()])});await h.settle(h.reads().find(r=>r.path==='/events/'+ID),original);h.click(h.button('編輯草稿'));h.change('獎品名稱','尚未儲存的草稿獎品');
+ const original=stored({prize_details:eventPrizePayload([prize()])});await h.settle(h.reads().find(r=>r.path==='/events/'+ID),original);h.click(h.button('編輯活動'));h.change('獎品名稱','尚未儲存的草稿獎品');
  await h.ready([stored({aggregate_version:2,prize_details:eventPrizePayload([{...prize(),name:'其他操作的新獎品'}])})]);
  assert.equal(h.field('獎品名稱').value,'尚未儲存的草稿獎品');h.submit();assert.equal(h.writes().length,0);assert.match(h.text(),/活動已有較新的版本/);assert.equal(h.field('獎品名稱').value,'尚未儲存的草稿獎品');
 });
 
 for(const [label,value] of [['null',null],['object',{}],['malformed array',[{name:'untrusted'}]],['unknown icon',[{...eventPrizePayload([prize()])[0],icon_id:'unknown'}]]])test(`malformed persisted prizes ${label} cannot be opened as an editable empty list`,async t=>{
- const h=panel(t);await h.ready([stored({prize_details:value})]);assert.match(h.text(),/獎品資料無法確認/);assert.equal(propsOf(h.button('編輯草稿')).disabled,true);assert.equal(h.writes().length,0);
+ const h=panel(t);await h.ready([stored({prize_details:value})]);assert.match(h.text(),/獎品資料無法確認/);assert.equal(propsOf(h.button('編輯活動')).disabled,true);assert.equal(h.writes().length,0);
 });
 
 test('shared event keyboard focus and prize fields use the declared semantic focus token',()=>{

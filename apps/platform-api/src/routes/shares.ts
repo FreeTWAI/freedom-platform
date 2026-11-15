@@ -1,0 +1,106 @@
+import { publicSharePage,publicNotFoundHtml,sharePageCss } from '../../../../modules/shares/public-page.js';
+import { Hono } from 'hono';
+import { z } from 'zod';
+import type { Pool } from 'pg';
+import { Problem } from '../../../../packages/shared/problem.js';
+import { readWithMemberSession } from '../../../../packages/db/member-session.js';
+import { moduleCommand, type PlatformEnv } from '../module-context.js';
+import { createShare, previewShare, visibleShare, listShares, myCredit, retractShare, reportShare, shareLink } from '../../../../modules/shares/service.js';
+import { refreshRepository,repositoryPage } from '../../../../modules/shares/repository-cache.js';
+import { starShare,claimShareAuthor } from '../../../../modules/shares/repository-actions.js';
+import { attachMemberRepositoryShare } from '../../../../modules/shares/repository-sources.js';
+import type { socialLoader } from './github-social.js';
+import type { AdapterContext,RepositoryFacts } from '../../../../modules/shares/types.js';
+export function createShareRoutes(pool:Pool,context:AdapterContext={},loadSocial?:ReturnType<typeof socialLoader>,afterResponse?:(work:()=>Promise<void>)=>void) {
+  const app=new Hono<PlatformEnv>();
+  app.use('*',async(c,next)=>{c.header('Cache-Control','private, no-store');await next();});
+  app.post('/shares/preview',async c=>c.json(await previewShare(pool,await moduleCommand(c),context)));
+  app.post('/shares',async c=>{
+    let preparedFacts:RepositoryFacts|undefined;
+    const result=await createShare(pool,await moduleCommand(c),context,facts=>{preparedFacts=facts;});
+    const repo=(await pool.query('SELECT repo_id FROM shares WHERE share_id=$1',[result.share_id])).rows[0]?.repo_id;
+    if(repo){const refresh=()=>refreshRepository(pool,repo,context,false,preparedFacts);if(afterResponse)afterResponse(refresh);else void refresh().catch(()=>{});}
+    return c.json(result);
+  });
+  app.get('/shares',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>listShares(q,c.get('actor'),c.req.query()))));
+  app.get('/shares/:share_id',async c=>{
+    const result=await readWithMemberSession(pool,c.get('actor'),async q=>{
+      const s=await visibleShare(q,c.get('actor'),z.uuid().parse(c.req.param('share_id')));
+      const sharers=(await q.query(`SELECT u.display_name,CASE WHEN e.user_id=$2 THEN 'sharer' ELSE 'co_sharer' END AS role
+        FROM share_endorsements e JOIN users u USING(user_id) WHERE e.share_id=$1 AND e.withdrawn_at IS NULL AND NOT is_verification_test_account(e.user_id)
+        UNION ALL SELECT u.display_name,e.role FROM share_credit_events e JOIN users u USING(user_id)
+        WHERE e.share_id=$1 AND e.basis='claim_verified' AND e.units=1 AND NOT EXISTS(SELECT 1 FROM share_credit_events r WHERE r.reverses_event_id=e.event_id)
+        LIMIT 50`,[s.share_id,s.first_sharer_user_id])).rows;
+      const {editor_notes:archivedNotes,...publicFields}=s;
+      return {...publicFields,sharers,repository:s.repo_id?await repositoryPage(q,s.repo_id):null};
+    });
+    if(result.repo_id&&result.repository?.stale){const refresh=()=>refreshRepository(pool,result.repo_id!,context);if(afterResponse)afterResponse(refresh);else void refresh().catch(()=>{});}
+    return c.json(result);
+  });
+  app.post('/shares/:share_id/retract',async c=>c.json(await retractShare(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')))));
+  app.post('/shares/:share_id/report',async c=>c.json(await reportShare(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')))));
+  app.post('/shares/:share_id/links',async c=>c.json(await shareLink(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')),context.publicCommunity)));
+  if(loadSocial){
+    app.post('/shares/:share_id/star',async c=>c.json(await starShare(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')),await loadSocial())));
+    app.post('/shares/:share_id/claim',async c=>c.json(await claimShareAuthor(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')),await loadSocial())));
+  }
+  app.get('/me/credit',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>myCredit(q,c.get('actor'),c.req.query()))));
+  return app;
+}
+
+// Run as an app-level observer before skill-submission routes so they need not import modules/shares (which depends on skill-submissions).
+// Any attach deferred because GitHub resolution failed or raced is completed later by the repository-share backfill.
+export function registerShareAttachments(app:Hono<any>,pool:Pool,context:AdapterContext={},afterResponse?:(work:()=>Promise<void>)=>void){
+  const schedule=(ref:{project_id:string;submission_id?:string})=>{
+    const work=()=>attachMemberRepositoryShare(pool,ref,context).then(()=>{});
+    if(afterResponse)afterResponse(work);else void work().catch(()=>{});
+  };
+  const readJson=async(res:Response):Promise<Record<string,unknown>|null>=>{
+    try{const v=await res.clone().json();return v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;}catch{return null;}
+  };
+  app.use('/api/v1/opensource/projects',async(c,next)=>{
+    await next();
+    if(c.req.method!=='POST'||c.res.status<200||c.res.status>=300)return;
+    const body=await readJson(c.res);
+    const project=z.uuid().safeParse(body?.project_id);
+    if(project.success)schedule({project_id:project.data});
+  });
+  app.use('/api/v1/me/skill-submissions/:id/publish',async(c,next)=>{
+    await next();
+    if(c.req.method!=='POST'||c.res.status<200||c.res.status>=300)return;
+    const body=await readJson(c.res);
+    const project=z.uuid().safeParse(body?.project_id);
+    const submission=z.uuid().safeParse(body?.submission_id);
+    if(project.success&&submission.success&&body?.status==='published'&&submission.data.toLowerCase()===c.req.param('id').toLowerCase()){
+      schedule({project_id:project.data,submission_id:submission.data});
+    }
+  });
+}
+
+export function acceptsHtml(accept?:string){
+ if(!accept)return false;
+ return accept.toLowerCase().split(',').some(part=>{
+  const [type,...params]=part.trim().split(';');
+  return type.trim()==='text/html'&&!params.some(p=>/^q\s*=\s*0(?:\.0+)?$/.test(p.trim()));
+ });
+}
+
+export function createPublicShareRoutes(pool:Pool,origin:string,context:AdapterContext={},afterResponse?:(work:()=>Promise<void>)=>void){
+ const app=new Hono<PlatformEnv>();
+ app.get('/share-page.css',c=>{c.header('Content-Type','text/css; charset=utf-8');return c.body(sharePageCss);});
+ app.get('/s/:share_id',async c=>{
+  c.header('Cache-Control','no-store');
+  const htmlRequest=acceptsHtml(c.req.header('Accept'));
+  const parsed=z.uuid().safeParse(c.req.param('share_id'));
+  if(!parsed.success){
+   if(htmlRequest)return c.html(publicNotFoundHtml(),404);
+   throw parsed.error;
+  }
+  let page;
+  try{page=await publicSharePage(pool,parsed.data,origin,c.req.query('via'));}
+  catch(err){if(htmlRequest&&err instanceof Problem&&(err.status===404||err.status===400))return c.html(publicNotFoundHtml(),404);throw err;}
+  if(page.repo_id&&page.stale){const refresh=()=>refreshRepository(pool,page.repo_id,context);if(afterResponse)afterResponse(refresh);else void refresh().catch(()=>{});}
+  return c.html(page.html);
+ });
+ return app;
+}

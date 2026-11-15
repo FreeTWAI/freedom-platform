@@ -16,7 +16,6 @@
     "apps/portal-web/src/PageTools.css",
     "apps/portal-web/src/RequestFeedback.tsx",
     "apps/portal-web/src/RequestFeedback.css",
-    "apps/portal-web/src/ShareLauncher.css",
     "apps/portal-web/src/WorkspaceCompanionLayout.css",
     "apps/portal-web/src/access-fetch.ts",
     "apps/portal-web/src/brand-home-link.ts",
@@ -72,7 +71,11 @@
     "tests/e2e/seasonal-theme.spec.ts",
     "docs/design/seasonal-theme.md",
     "docs/design/seasonal-theme-art-manifest.json",
-    "tests/runtime/shared-controls.test.ts"
+    "tests/runtime/shared-controls.test.ts",
+    "apps/portal-web/src/portal-route.ts",
+    "tests/runtime/portal-route.test.ts",
+    "tests/e2e/five-place-shell.spec.ts",
+    "apps/portal-web/src/guild-tools/**"
   ],
   "public_exports": [
     "apps/portal-web/src/api.ts",

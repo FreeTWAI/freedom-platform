@@ -53,6 +53,6 @@ show(<main className="card" role="status">正在開啟{arcade?'遊樂場':'自�
 // Resolve the entry before rendering it. An initial Suspense reveal depends on
 // a timer even after its import resolves, and froze clock-controlled journeys.
 const entry=arcade
-  ? import('./games/AbsurdDaily').then(({AbsurdDaily})=><AbsurdDaily/>)
+  ? fetch('/api/v1/public/guilds/guild_games/tools',{credentials:'omit'}).then(r=>r.ok?r.json():{items:[]}).catch(()=>({items:[]})).then(async registry=>{if(registry.items.some((t:{tool_id:string})=>t.tool_id==='arcade')){history.replaceState(null,'',location.pathname+location.search+'#guilds/guild_games/tools/arcade');const {App}=await import('./App');return <App/>;}const {AbsurdDaily}=await import('./games/AbsurdDaily');return <AbsurdDaily/>;})
   : import('./App').then(({App})=><App/>)
 void entry.then(show).catch(()=>show(<StartupFailure/>))

@@ -734,7 +734,7 @@ test('SC-E2E-14 a request outside the first 200 opens from every entry and after
       await expect(review.getByText('$11.00',{exact:true})).toBeVisible();
       await expect(review.getByRole('button',{name:'同意',exact:true})).toBeEnabled();
       await expect(review.getByText('未在目前的部分清單中',{exact:false})).toHaveCount(0);
-      expect(new URL(pageA.url()).hash).toBe(reviewHash);
+      expect(new URL(pageA.url()).hash).toBe(reviewHash.replace('#stores/', '#guilds/guild_product_quality_supply/tools/catalog/'));
     };
     const openReview=async(action:()=>Promise<unknown>,reload=false)=>{
       const requests=new Set<import('@playwright/test').Request>();

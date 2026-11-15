@@ -1,3 +1,4 @@
+import type { GuildToolFetch } from '../../../modules/guild-tools/transport.js';
 import type {GoogleLoginOptions} from '../../../modules/identity-membership/google/service.js';
 import type {StoreGalleryAssets} from '../../../modules/assets/storefront-gallery.js';
 import type {StoreAppearanceAssets} from '../../../modules/assets/storefront-appearance.js';
@@ -36,6 +37,9 @@ export const SHARED_NETWORK_KEY = 'shared-server';
  * bindings, so no configuration is shared through process-wide state.
  */
 export type PlatformRuntime = {
+  /** Registration-only HTTPS transport with host-specific destination policy; absent hides registration. */
+  guildToolFetch?:GuildToolFetch;
+  guildToolSigner?:import('../../../modules/guild-tools/tokens.js').ToolSigner;
   /** Optional Google login; false/absent is OFF. Secrets never enter public config. */
   googleLogin?: GoogleLoginOptions;
   afterResponse?:(work:()=>Promise<void>)=>void;

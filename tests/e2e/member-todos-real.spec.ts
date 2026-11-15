@@ -1,3 +1,5 @@
+import {clearMemberAgentEvents} from './navigation.js';
+import {expectDestination} from './navigation.js';
 import {openAccountSettings} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
@@ -36,6 +38,7 @@ async function removeOwned(db:Pool,own:Owned){
     await q('DELETE FROM transition_journal WHERE actor_ref=ANY($1::uuid[])',[users]);
     for(const table of ['member_client_errors','member_guild_answers','member_social_links','member_avatars','onboarding_assessments','member_skill_book_grants','guild_member_preferences',
       'positioning_profession_memberships','member_accounts','command_receipts','sessions'])await q(`DELETE FROM ${table} WHERE user_id=ANY($1::uuid[])`,[users]);
+    await clearMemberAgentEvents(client,users);
     await q('DELETE FROM users WHERE user_id=ANY($1::uuid[])',[users]);
     await client.query('COMMIT');
   }catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}
@@ -70,13 +73,13 @@ async function expectStates(page:Page,states:Partial<Record<typeof TASKS[number]
   for(const [key,state] of Object.entries(states))await expect(task(page,key),key).toHaveAttribute('data-task-state',state);
 }
 async function openTodos(page:Page){
-  await navigate(page,'入門指南');await expect(page).toHaveURL(/#todos$/);
-  for(const key of TASKS)await expect(task(page,key)).toBeVisible();
+  await navigate(page,'入門指南');await expect(page).toHaveURL(/#me\/start$/);
+  for(const key of TASKS)if(key!=='github')await expect(task(page,key)).toBeVisible();
   // Nothing on this page can be ticked by hand.
   await expect(page.locator('article[data-task] input')).toHaveCount(0);await expect(page.locator('article[data-task]').getByRole('checkbox')).toHaveCount(0);
 }
 async function follow(page:Page,key:string,name:string,hash:string,title:string){
-  await cta(page,key,name).click();await expect(page).toHaveURL(new RegExp(`#${hash}$`));await expect(page.getByRole('heading',{level:1})).toHaveText(title);
+  await cta(page,key,name).click();await expectDestination(page,'#'+hash);
 }
 async function noOverflow(page:Page){expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
 async function shot(page:Page,name:string){await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:`${SHOTS}/${name}.png`,fullPage:true});}
@@ -84,7 +87,8 @@ async function getJson(page:Page,path:string){const response=await page.request.
 /** The GitHub card mirrors whatever the local server really reports; OAuth is never started here. */
 async function expectGithub(page:Page){
   const github=await getJson(page,'/me/github') as {configured:boolean;connected:boolean};
-  await expectStates(page,{github:github.connected?'done':github.configured?'todo':'unavailable'});
+  if(!github.configured&&!github.connected)await expect(task(page,'github')).toHaveCount(0);
+  else await expectStates(page,{github:github.connected?'done':'todo'});
 }
 async function answerPreferences(page:Page){
   await expect(page.getByRole('heading',{name:'你喜歡怎麼做事？',exact:true})).toBeVisible();
@@ -230,13 +234,14 @@ test('a legacy member completes profile and positioning todos through the real U
     for(const [key,name] of [['onboarding','查看我的定位'],['primary-guild','查看職業公會'],['avatar','到我的名片管理頭像'],['social-link','到我的名片管理社群連結'],['skill-book','查看技能書架']])
       await expect(cta(page,key,name)).toBeVisible();
     // Leaving the page and returning (a remount) re-reads the same real facts.
-    await page.reload();await expect(page.locator('.shell')).toBeVisible();await expect(page).toHaveURL(/#todos$/);
+    await page.reload();await expect(page.locator('.shell')).toBeVisible();await expect(page).toHaveURL(/#me\/start$/);
     await expectStates(page,{onboarding:'done','primary-guild':'done',avatar:'done','social-link':'done','skill-book':'done'});
     await noOverflow(page);await shot(page,'todos-desktop');
 
     await page.setViewportSize({width:320,height:844});
     await expectStates(page,{onboarding:'done','primary-guild':'done',avatar:'done','social-link':'done','skill-book':'done'});
-    for(const key of TASKS){await task(page,key).scrollIntoViewIfNeeded();await expect(task(page,key)).toBeVisible();}
+    for(const key of TASKS)if(key!=='github'){await task(page,key).scrollIntoViewIfNeeded();await expect(task(page,key)).toBeVisible();}
+    await expectGithub(page);
     await noOverflow(page);
     const buttons=page.locator('article[data-task] .member-task-actions button');
     expect(await buttons.count()).toBeGreaterThanOrEqual(5);
@@ -253,7 +258,7 @@ test('a newly registered member at 320px stays behind the mandatory positioning 
     // Recorded before the account exists, so cleanup finds it even if the registration response is lost.
     const email=`todos-new-${randomUUID()}@example.test`,nickname=`待辦新會員 ${randomUUID().slice(0,8)}`;own.emails.push(email);
     await page.goto('/#todos');
-    await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+    await page.getByRole('button',{name:'免費加入',exact:true}).click();
     await page.getByLabel('社群顯示名稱',{exact:true}).fill(nickname);
     await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill('freedom-workshop-member-2026');
     const registered=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/api/v1/auth/register'));
@@ -288,14 +293,14 @@ test('a quick-entry member sees an optional positioning to-do',async({browser,ba
     const email=`todos-quick-${randomUUID()}@example.test`,nickname=`待辦快速加入 ${randomUUID().slice(0,8)}`;own.emails.push(email);
     const page=await open({width:1280,height:900});
     await page.goto('/');
-    await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+    await page.getByRole('button',{name:'免費加入',exact:true}).click();
     await page.getByLabel('社群顯示名稱',{exact:true}).fill(nickname);
     await page.getByLabel('電子郵件',{exact:true}).fill(email);
     await page.getByLabel('密碼',{exact:true}).fill('freedom-workshop-member-2026');
     await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
     await expect(page.getByRole('heading',{name:`${nickname}，歡迎來到自由工坊。`})).toBeVisible();
     await quickJoin(page);
-    await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
     const row=(await db.query('SELECT user_id FROM users WHERE email=$1',[email])).rows;
     expect(row).toHaveLength(1);own.users.push(row[0].user_id);
     const onboarding=await getJson(page,'/me/onboarding');

@@ -35,21 +35,24 @@ async function post(page: Page, path: string, body: unknown, expected = 201) {
 }
 async function search(page: Page, query: string) {
   await navigate(page, '搜尋社群內容');
-  await expect(page.getByRole('heading', { level: 1, name: '搜尋社群內容', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: '探索', exact: true })).toBeVisible();
   await page.getByRole('searchbox', { name: '關鍵字', exact: true }).fill(query);
   await expect(page.getByRole('region', { name: '社群內容搜尋結果' })).toHaveAttribute('aria-busy', 'false');
 }
 const results = (page: Page) => page.getByRole('region', { name: '社群內容搜尋結果' });
+async function openFilters(page: Page) {
+  const filters = page.locator('details.explore-filters');
+  if (!await filters.evaluate(element => (element as HTMLDetailsElement).open)) await filters.locator(':scope > summary').click();
+}
 
 test('SEARCH-001 actual anonymous and member HTTP search keep public and same-community audiences separate', async ({ browser, page, baseURL, e2eAuthPool }) => {
   const token = `搜尋範圍${randomUUID().slice(0, 8)}`;
-  const foreignCommunity = randomUUID();
+  const foreignCommunity = randomUUID(), event = randomUUID();
   let logged: Awaited<ReturnType<typeof signedIn>> | undefined;
   try {
     const member = await person(e2eAuthPool);
     await e2eAuthPool.query('INSERT INTO communities VALUES($1,$2)', [foreignCommunity, '搜尋外部合成社群']);
     const foreign = await person(e2eAuthPool, foreignCommunity);
-    const event = randomUUID();
     await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
       VALUES($1,$2,$3,$4,'公開摘要',now()+interval '1 day',now()+interval '2 days','online','私人位置','published','open','other')`,
     [event, DEMO_COMMUNITY, member.id, `${token}公開活動`]);
@@ -77,6 +80,8 @@ test('SEARCH-001 actual anonymous and member HTTP search keep public and same-co
       const cleanup = await e2eAuthPool.connect();
       try {
         await cleanup.query('BEGIN');
+        // This public fixture must not alter later visitor-page layout checks.
+        await cleanup.query('DELETE FROM community_events WHERE event_id=$1', [event]);
         await cleanup.query('DELETE FROM community_social_posts WHERE community_id=$1', [foreignCommunity]);
         await cleanup.query('DELETE FROM users WHERE community_id=$1', [foreignCommunity]);
         await cleanup.query('DELETE FROM communities WHERE community_id=$1', [foreignCommunity]);
@@ -133,6 +138,7 @@ test('SEARCH-003 current full-guild maintainer saves topics through HTTP while a
   const logged = await signedIn(browser, baseURL!, maintainer.email), denied = await signedIn(browser, baseURL!, ordinary.email);
   try {
     await search(logged.page, book!.title);
+    await openFilters(logged.page);
     await logged.page.getByRole('button', { name: '編輯我的內容主題', exact: true }).click();
     const editor = logged.page.locator('.community-content-search h3').filter({ hasText: book!.title }).locator('..');
     await expect(editor).toHaveCount(1);
@@ -143,12 +149,14 @@ test('SEARCH-003 current full-guild maintainer saves topics through HTTP while a
     await expect(logged.page.getByText('主題已儲存。', { exact: true })).toBeVisible();
     expect((await e2eAuthPool.query("SELECT topics,aggregate_version FROM community_content_topic_sets WHERE content_kind='skill_book' AND content_id=$1", [book!.id])).rows[0]).toMatchObject({ topics: ['tools'], aggregate_version: '1' });
     await search(denied.page, book!.title);
+    await openFilters(denied.page);
     await denied.page.getByRole('button', { name: '編輯我的內容主題', exact: true }).click();
     await expect(denied.page.getByText('目前沒有可編輯主題的內容。', { exact: true })).toBeVisible();
     await expect(denied.page.locator('.community-content-search h3').filter({ hasText: book!.title })).toHaveCount(0);
     await post(denied.page, '/community-search/topics', { kind: 'skill_book', id: book!.id, topics: ['help'] }, 403);
     await e2eAuthPool.query("UPDATE positioning_profession_memberships SET member_tier='intern' WHERE user_id=$1 AND guild_key='guild_ai_vibe'", [maintainer.id]);
     await logged.page.reload();
+    await openFilters(logged.page);
     await logged.page.getByRole('button', { name: '編輯我的內容主題', exact: true }).click();
     await expect(logged.page.getByText('目前沒有可編輯主題的內容。', { exact: true })).toBeVisible();
     await post(logged.page, '/community-search/topics', { kind: 'skill_book', id: book!.id, topics: ['help'] }, 403);
@@ -217,6 +225,7 @@ test('SEARCH-005 only published showcases enter the topic editor and republishin
     const openEditor = async () => {
       await logged.page.reload();
       await search(logged.page, title);
+      await openFilters(logged.page);
       await logged.page.getByRole('button', { name: '編輯我的內容主題', exact: true }).click();
     };
     const transition = async (action: 'publish' | 'withdraw', version: number) => {
@@ -249,6 +258,15 @@ test('SEARCH-005 only published showcases enter the topic editor and republishin
 });
 
 const privateList = (page: Page) => page.getByRole('region', { name: '我的私人書籤與追蹤', exact: true });
+async function openSavedList(page: Page) {
+  if (!new URL(page.url()).hash.startsWith('#me/saved')) {
+    const menu = page.getByRole('button', { name: '開啟選單', exact: true });
+    if (await menu.isVisible()) await menu.click();
+    await page.locator('#workspace-navigation').getByRole('button', { name: '我的', exact: true, includeHidden: true }).click();
+    await page.getByLabel('我的檢視', { exact: true }).selectOption('#me/saved');
+  }
+  await expect(privateList(page)).toBeVisible();
+}
 async function followedShowcase(browser: Browser, baseURL: string, db: Pool) {
   const member = await person(db), title = `返回追蹤${randomUUID().slice(0, 8)}`;
   const logged = await signedIn(browser, baseURL, member.email);
@@ -260,6 +278,9 @@ async function followedShowcase(browser: Browser, baseURL: string, db: Pool) {
     await post(logged.page, '/community-relations/follows', { kind: 'author', id: member.id, selected: true }, 200);
     await post(logged.page, '/community-search/topics', { kind: 'work', id: made.showcase_id, topics: ['tools'] }, 200);
     await search(logged.page, title);
+    await openFilters(logged.page);
+    await expect(privateList(logged.page)).toHaveCount(0);
+    await openSavedList(logged.page);
     await expect(privateList(logged.page).getByRole('link', { name: title, exact: true })).toBeVisible();
     return { ...logged, member, title, id: made.showcase_id };
   } catch (error) { await logged.context.close(); throw error; }
@@ -282,29 +303,21 @@ for (const width of [390, 1440]) test(`SEARCH-006 private-list Back/Forward reco
     await expect(updates).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     expect(await page.evaluate(() => history.length)).toBe(historyLength);
-    const conditions = page.getByRole('region', { name: '社群內容搜尋條件', exact: true });
-    await conditions.getByRole('checkbox', { name: '作品', exact: true }).check();
-    await conditions.getByRole('checkbox', { name: '工具資源', exact: true }).check();
-    await expect(results(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     expect(await page.evaluate(() => history.state.navigationProbe)).toBe('unchanged');
     const before = reads.length;
     await privateList(page).getByRole('link', { name: logged.title, exact: true }).click();
     await expect(page.locator(`#showcase-${logged.id}`)).toBeVisible();
     await page.goBack();
+    await expect(page.getByLabel('我的檢視', { exact: true })).toHaveValue('#me/saved');
     await expect(updates).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
-    await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toHaveValue(logged.title);
-    await expect(conditions.getByRole('checkbox', { name: '作品', exact: true })).toBeChecked();
-    await expect(conditions.getByRole('checkbox', { name: '工具資源', exact: true })).toBeChecked();
     expect(reads.length).toBe(before + 1);
     await page.goForward(); await expect(page.locator(`#showcase-${logged.id}`)).toBeVisible();
     await page.goBack();
+    await expect(page.getByLabel('我的檢視', { exact: true })).toHaveValue('#me/saved');
     await expect(updates).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     expect(reads.length).toBe(before + 2);
-    await conditions.getByRole('button', { name: '清除搜尋條件', exact: true }).click();
-    await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toBeFocused();
-    await expect(updates).toHaveAttribute('aria-pressed', 'true');
     expect(await page.evaluate(() => history.state.navigationProbe)).toBe('unchanged');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(writes).toEqual([]);
@@ -330,24 +343,21 @@ test('SEARCH-007 reload, another account and the same user signing in again reje
       await privateList(page).getByRole('button', { name: '追蹤更新', exact: true }).click();
       await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
       const old = await page.evaluate(() => history.state);
-      // Public search remains available after logout. Do not use the shared
-      // signOut helper, which expects the login screen immediately.
+      // An explicit sign-out clears the hash and history state and lands on the login screen (p2x-1),
+      // so the next member never resumes the previous member's page.
       await page.getByRole('button', { name: '設定', exact: true }).click();
       const signedOut = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/logout' && response.request().method() === 'POST');
       await page.getByRole('menu', { name: '個人檔案' }).getByRole('menuitem', { name: '登出', exact: true }).click();
       expect((await signedOut).status()).toBe(200);
       await expect(privateList(page)).toHaveCount(0);
       expect((await page.request.get('/api/v1/session')).status()).toBe(401);
-      await expect(page.getByRole('heading', { level: 1, name: '搜尋社群內容', exact: true })).toBeVisible();
-      await expect(results(page)).toHaveAttribute('aria-busy', 'false');
-      await expect(results(page)).not.toContainText(logged.title);
-      await page.getByRole('link', { name: '返回登入', exact: true }).click();
       await expect(page.getByRole('heading', { name: '登入', exact: true })).toBeVisible();
       await page.getByLabel('電子郵件', { exact: true }).fill(email);
       await page.getByLabel('密碼', { exact: true }).fill(DEMO_PASSWORD);
       await page.getByRole('button', { name: '登入', exact: true }).click();
       await expect(page.locator('.shell')).toBeVisible();
-      await search(page, logged.title);
+      await page.goto('/#me/saved');
+      await expect(privateList(page)).toBeVisible();
       expect(await page.evaluate(() => Reflect.get(window, 'searchHistoryDocumentMarker'))).toBe(documentMarker);
       await page.evaluate(value => {
         history.replaceState(value, ''); window.dispatchEvent(new PopStateEvent('popstate', { state: value }));
@@ -427,18 +437,26 @@ test('SEARCH-010 list selection belongs to its own search history entry without 
   });
   try {
     await privateList(page).getByRole('button', { name: '追蹤清單', exact: true }).click();
-    await page.getByRole('searchbox', { name: '關鍵字', exact: true }).fill('history');
+    await search(page, 'history');
     await expect(results(page).getByRole('link', { name: '合成第一頁', exact: true })).toBeVisible();
     await results(page).getByRole('button', { name: '下一頁', exact: true }).click();
     await expect(results(page).getByRole('link', { name: '合成第二頁', exact: true })).toBeVisible();
     await expect(results(page)).toBeFocused();
+    await page.goto('/#me/saved');
     await privateList(page).getByRole('button', { name: '追蹤更新', exact: true }).click();
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     await page.goBack();
+    await expect(results(page).getByRole('link', { name: '合成第二頁', exact: true })).toBeVisible();
+    await page.goBack();
     await expect(results(page).getByRole('link', { name: '合成第一頁', exact: true })).toBeVisible();
+    await page.goBack();
     await expect(privateList(page).getByRole('button', { name: '追蹤清單', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.goForward();
+    await expect(results(page).getByRole('link', { name: '合成第一頁', exact: true })).toBeVisible();
+    await page.goForward();
     await expect(results(page).getByRole('link', { name: '合成第二頁', exact: true })).toBeVisible();
+    await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toHaveValue('history');
+    await page.goForward();
     await expect(privateList(page).getByRole('button', { name: '追蹤更新', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     const before = reads.length;
@@ -448,7 +466,29 @@ test('SEARCH-010 list selection belongs to its own search history entry without 
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     });
     expect(reads.length).toBe(before);
-    await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toHaveValue('history');
+  } finally { await logged.context.close(); }
+});
+
+test('SEARCH-011 bookmarking in explore and removing under 我的 → 書籤與追蹤 updates the explore result button', async ({ browser, baseURL, e2eAuthPool }) => {
+  const member = await person(e2eAuthPool), title = `探索書籤${randomUUID().slice(0, 8)}`;
+  const logged = await signedIn(browser, baseURL!, member.email), page = logged.page;
+  try {
+    await post(page, '/showcases', { title, description: '書籤往返測試內容', consent_to_share: true });
+    await search(page, title);
+    const card = results(page).locator('article').filter({ has: page.getByRole('link', { name: title, exact: true }) });
+    const saveButton = card.getByRole('button', { name: '儲存私人書籤', exact: true });
+    await expect(saveButton).toHaveAttribute('aria-pressed', 'false');
+    await saveButton.click();
+    await expect(card.getByRole('button', { name: '移除書籤', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await openSavedList(page);
+    await expect(privateList(page).getByRole('button', { name: '私人書籤', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const savedItem = privateList(page).locator('article').filter({ has: page.getByRole('link', { name: title, exact: true }) });
+    await expect(savedItem).toBeVisible();
+    await savedItem.getByRole('button', { name: '移除書籤', exact: true }).click();
+    await expect(privateList(page).getByRole('link', { name: title, exact: true })).toHaveCount(0);
+    await search(page, title);
+    await expect(card.getByRole('button', { name: '儲存私人書籤', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await expect(card.getByRole('button', { name: '移除書籤', exact: true })).toHaveCount(0);
   } finally { await logged.context.close(); }
 });
 
@@ -495,6 +535,7 @@ test('SEARCH-GUILD-002 anonymous, empty query and disabled launchpad never read 
     await search(page, ''); await expect(guildResults(page)).toHaveCount(0); expect(reads).toEqual([]);
     await page.getByRole('searchbox', {name: '關鍵字', exact: true}).fill('資安');
     await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
+    await openFilters(page);
     for (const label of ['作品', '工具資源']) {
       const count = reads.length;
       await page.getByRole('checkbox', {name: label, exact: true}).check();
@@ -503,15 +544,18 @@ test('SEARCH-GUILD-002 anonymous, empty query and disabled launchpad never read 
       await page.getByRole('checkbox', {name: label, exact: true}).uncheck();
       await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
     }
+    await expect(privateList(page)).toHaveCount(0);
+    await expect(guildResults(page)).toContainText('不套用私人書籤或追蹤清單');
+    await page.getByRole('button', {name: '清除搜尋條件', exact: true}).click();
+    await expect(guildResults(page)).toHaveCount(0);
     const beforeTabs = reads.length;
+    await page.goto('/#me/saved');
     for (const name of ['追蹤清單', '追蹤更新', '私人書籤']) {
       await privateList(page).getByRole('button', {name, exact: true}).click();
       await expect(privateList(page).getByRole('button', {name, exact: true})).toHaveAttribute('aria-pressed', 'true');
-      await expect(guildResults(page)).toContainText('不套用私人書籤或追蹤清單');
     }
     expect(reads.length).toBe(beforeTabs);
-    await page.getByRole('button', {name: '清除搜尋條件', exact: true}).click();
-    await expect(guildResults(page)).toHaveCount(0); expect(reads.length).toBe(beforeTabs);
+    await page.goBack();
     // Synthetic site response changes this browser's display only, never flags.
     await page.route(url => url.pathname === '/api/v1/site', async route => {
       const response = await route.fetch(); await route.fulfill({response, json: {...await response.json(), guild_launchpad_enabled: false}});

@@ -229,6 +229,8 @@ for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} s
  // Every native RAF for the real 60s round took ~106s locally; hosted traces
  // spent ~2.23s per simulated second (~134s before setup). Match the existing
  // native Tofu 180s allowance without changing game, draw or light budgets.
- if(!light)test.setTimeout(180_000);
+ // Measured since: native took 85.1-135.9 s and light 30.2-30.7 s in Verify 43701950520, 43707780287 and
+ // 43715862147, so each gets about twice its slowest time.
+ test.setTimeout(light?75_000:285_000);
  await openTofuScene(page,light,true);await partyAdvance(page,PT.tofuMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 0 / 12 層，"]')).toBeVisible();expect(await partyElapsed(page)).toBe(PT.tofuMs);await tofuFullscreen(page,true);
 });

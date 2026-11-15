@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {test, expect, type Page} from './fixtures.js';
 import {quickJoin} from './quick-join.js';
-import {navigate, openHomeGuide} from './navigation.js';
+import {navigate, openHomeGuide, openLoginMore} from './navigation.js';
 
 async function login(page:Page) {
   await page.getByRole('button',{name:'會員登入',exact:true}).click();
@@ -15,8 +15,17 @@ const entries = [
   {button:'開發者：找專案與夥伴', target:'tasks', label:'社群專案與任務', heading:'社群任務'},
 ];
 
+const destinations: Record<string, {hash:string; heading:string}> = {
+  supplier: {hash:'guilds/guild_product_quality_supply/tools/supplier-kit', heading:'供貨工具'},
+  showcase: {hash:'explore/works', heading:'探索'},
+  tasks: {hash:'guilds/guild_ai_project/tools/work/discovery', heading:'工作'},
+  members: {hash:'explore/people', heading:'探索'},
+  retail: {hash:'guilds/guild_commerce_sales/tools/retail-kit', heading:'零售工具'},
+};
+
 for (const entry of entries) test(`${entry.target} entry survives registration and refresh, retains guild gate and opens the actual module`,async({page})=>{
   await page.setViewportSize({width:390,height:844});await page.goto('/');
+  await openLoginMore(page);
   await page.getByRole('button',{name:entry.button,exact:true}).click();
   await expect(page.getByRole('heading',{name:'加入自由工坊',exact:true})).toBeVisible();
   await expect(page.getByLabel('電子郵件',{exact:true})).toBeFocused();
@@ -30,28 +39,27 @@ for (const entry of entries) test(`${entry.target} entry survives registration a
   expect((await page.request.get('/api/v1/retail/catalog')).status()).toBe(403);
   await expect(page.getByRole('navigation',{name:'主要工作區'})).toHaveCount(0);
   await quickJoin(page);
-  await expect(page).toHaveURL(new RegExp(`#${entry.target}$`));
-  await expect(page.getByRole('heading',{name:entry.heading,exact:true,level:1})).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`#${destinations[entry.target].hash}$`));
+  await expect(page.getByRole('heading',{name:destinations[entry.target].heading,exact:true,level:1})).toBeVisible();
 });
 
 test('existing members reach their chosen entry and all six collaboration destinations without selecting a permanent role',async({page})=>{
-  await page.goto('/');await page.getByRole('button',{name:entries[0].button,exact:true}).click();await login(page);
-  await expect(page).toHaveURL(/#supplier$/);
+  await page.goto('/');await openLoginMore(page);await page.getByRole('button',{name:entries[0].button,exact:true}).click();await login(page);
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/supplier-kit$/);
   const actions=[['展示我的商品','supplier','我有東西要賣'],['找合作夥伴','members','工坊夥伴'],['找合作案件','showcase','作品與合作'],['挑商品推廣','retail','我可以賣東西'],['找專案任務','tasks','社群任務'],['分享開發作品','showcase','作品與合作']];
   for(const [label,target,heading] of actions){
     await page.goto('/#home');
     await openHomeGuide(page);
     const entry=page.getByRole('navigation',{name:'商品、作品與活動',exact:true});
-    await expect(entry).toBeVisible();
-    await expect(entry.getByRole('heading')).toHaveText(['商品與供貨','作品與活動']);
-    await expect(entry.getByRole('button')).toHaveCount(4);
+    await expect(entry).toHaveCount(0);
+    await expect(page.getByRole('link',{name:'編輯個人頁',exact:true})).toBeVisible();
     await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();
     // The legacy intent remains reachable through its canonical global entry,
     // rather than duplicating six role-oriented buttons on the member home.
     const navigationLabel = target === 'supplier' ? 'AI 整理供貨商品' : target === 'retail' ? 'AI 製作銷售網站' : heading;
     await test.step(label, () => navigate(page, navigationLabel));
-    await expect(page).toHaveURL(new RegExp(`#${target}$`));
-    await expect(page.getByRole('heading',{name:heading,exact:true,level:1})).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`#${destinations[target].hash}$`));
+    await expect(page.getByRole('heading',{name:destinations[target].heading,exact:true,level:1})).toBeVisible();
   }
 });
 
@@ -59,10 +67,15 @@ test('public purpose is visible before the form on 320px in every theme, keeps t
   await page.setViewportSize({width:320,height:800});
   for(const theme of ['light','rpg','versefolk']){
     await page.goto('/');await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+    const story=page.locator('.login-story-copy');
+    await expect(story.getByRole('heading',{level:1})).toHaveText('讓你的商品、作品和技術，找到合作夥伴。');
+    const join=story.getByRole('button',{name:'免費加入',exact:true});
+    await expect(join).toBeVisible();expect((await join.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await story.boundingBox())!.y).toBeLessThan((await page.locator('.login-form-area').boundingBox())!.y);
+    await openLoginMore(page);
     const entry=page.getByRole('region',{name:'商品、創作與開發合作入口'});
     await expect(entry).toBeVisible();
     for(const role of entries){const button=entry.getByRole('button',{name:role.button,exact:true});await expect(button).toBeVisible();expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);}
-    expect((await entry.boundingBox())!.y).toBeLessThan((await page.locator('.login-form-area').boundingBox())!.y);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await expect(page.locator('.login-story .login-entry-logo')).toHaveAttribute('src','/brand/freedom-workshop-compact-transparent.png');
     await page.screenshot({path:`test-results/platform-purpose-${theme}-320.png`,fullPage:true});
@@ -71,8 +84,9 @@ test('public purpose is visible before the form on 320px in every theme, keeps t
 
 test('closed registration offers login and does not create an extra registration path',async({page})=>{
   await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),registration_enabled:false}});});
-  await page.goto('/');await page.getByRole('button',{name:entries[2].button,exact:true}).click();
+  await page.goto('/');await openLoginMore(page);await page.getByRole('button',{name:entries[2].button,exact:true}).click();
   await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'免費加入',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'建立帳號',exact:true})).toHaveCount(0);
   await expect(page.getByLabel('電子郵件',{exact:true})).toBeFocused();
 });
@@ -83,7 +97,7 @@ for(const width of [320,390])test(`phone login error separates submit and recove
   for(const theme of ['light','rpg','versefolk']){
     await page.goto('/');await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
     const card=page.locator('.login-card');
-    await expect(card.getByRole('button',{name:'提出想法',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'提出想法',exact:true})).toHaveCount(0);
     await page.getByLabel('電子郵件',{exact:true}).fill('mobile-login-error@example.test');
     await page.getByLabel('密碼',{exact:true}).fill('invalid-mobile-password');
     const submit=card.getByRole('button',{name:'登入',exact:true}),recovery=card.getByRole('button',{name:'忘記密碼？',exact:true});
@@ -98,8 +112,9 @@ for(const width of [320,390])test(`phone login error separates submit and recove
     await card.scrollIntoViewIfNeeded();await page.screenshot({path:`test-results/mobile-login-error-${theme}-${width}.png`});
     await recovery.click();await expect(page.getByRole('heading',{name:'忘記密碼',exact:true})).toBeVisible();
     await card.getByRole('button',{name:'返回登入',exact:true}).click();await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();
-    const trigger=card.locator('.page-tools-menu > summary');await trigger.click();
-    await card.getByRole('button',{name:'頁面說明',exact:true}).click();
+    await openLoginMore(page);
+    const tools=page.locator('.login-more-tools'),trigger=tools.locator('.page-tools-menu > summary');await trigger.click();
+    await tools.getByRole('button',{name:'頁面說明',exact:true}).click();
     const help=page.getByRole('dialog');await expect(help).toBeVisible();await help.getByRole('button',{name:'關閉',exact:true}).click();
     await expect(trigger).toBeFocused();
   }
@@ -114,22 +129,22 @@ for(const viewport of [{width:390,height:844},{width:1280,height:800}])for(const
     try{
       await page.goto('/',{waitUntil:'domcontentloaded'});
       await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
-      const first=page.locator('.visitor-first-step'),toggle=first.locator('.entry-resources > details > summary');
+      const first=page.locator('.login-story-copy'),cta=first.getByRole('button',{name:'免費加入',exact:true});
       await expect(first.getByRole('heading',{level:1})).toHaveText('讓你的商品、作品和技術，找到合作夥伴。');
       await expect(page.getByRole('heading',{level:1})).toHaveCount(1);
-      await expect(toggle).toContainText('先看免費資源，不用註冊');
-      const before=(await toggle.boundingBox())!,art=page.locator('.login-story .login-entry-logo');
+      await expect(cta).toBeVisible();
+      const before=(await cta.boundingBox())!,art=page.locator('.login-story .login-entry-logo'),artBox=(await art.boundingBox())!;
       expect(before.y).toBeGreaterThanOrEqual(0);expect(before.y+before.height).toBeLessThanOrEqual(viewport.height);
       expect(before.height).toBeGreaterThanOrEqual(44);
-      expect(before.y+before.height).toBeLessThan((await art.boundingBox())!.y);
-      expect(before.y+before.height).toBeLessThan((await page.locator('.login-form-area').boundingBox())!.y);
-      const imageBefore=(await art.boundingBox())!;
+      expect(artBox.y+artBox.height).toBeLessThanOrEqual((await first.boundingBox())!.y);
+      if(viewport.width<=860)expect(before.y+before.height).toBeLessThan((await page.locator('.login-form-area').boundingBox())!.y);
+      const imageBefore=artBox;
       expect(imageBefore.width/imageBefore.height).toBeCloseTo(3,2);
       expect(await art.evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBe(0);
       releaseImage();await expect(art).toHaveJSProperty('naturalWidth',396);
       await expect(art).toHaveJSProperty('naturalHeight',132);
       expect(await art.boundingBox()).toEqual(imageBefore);
-      const after=(await toggle.boundingBox())!;
+      const after=(await cta.boundingBox())!;
       expect(Math.abs(after.y-before.y)).toBeLessThanOrEqual(1);
       expect(Math.abs(after.height-before.height)).toBeLessThanOrEqual(1);
       await expect(art).toHaveAttribute('src','/brand/freedom-workshop-compact-transparent.png');
@@ -142,28 +157,29 @@ for(const viewport of [{width:390,height:844},{width:1280,height:800}])for(const
 test('visitor preview is keyboard accessible, remains anonymous and returns focus to its book trigger',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   const writes:string[]=[];page.on('request',request=>{if(request.method()!=='GET'&&request.url().includes('/api/v1/'))writes.push(request.url());});
-  await page.goto('/');const before=page.url(),first=page.locator('.visitor-first-step');
-  const toggle=first.locator('.entry-resources > details > summary');
+  await page.goto('/');const before=page.url();
+  const moreToggle=page.locator('details.login-more > summary');
+  await moreToggle.focus();await page.keyboard.press('Enter');
+  await expect(page.locator('details.login-more')).toHaveJSProperty('open',true);
+  const resources=page.locator('.entry-resources'),toggle=resources.locator(':scope > details > summary');
   await toggle.focus();await page.keyboard.press('Enter');
-  const preview=first.getByRole('button',{name:'免費預覽',exact:true}).first();
+  const preview=resources.getByRole('button',{name:'免費預覽',exact:true}).first();
   await expect(preview).toBeVisible();await preview.focus();await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);await expect(preview).toBeFocused();
   await toggle.focus();await page.keyboard.press('Space');
-  await expect(first.locator('.entry-resources > details')).not.toHaveAttribute('open','');
+  await expect(resources.locator(':scope > details')).not.toHaveAttribute('open','');
   await expect(toggle).toBeFocused();expect(page.url()).toBe(before);expect(writes).toEqual([]);
   expect((await page.request.get('/api/v1/session')).status()).toBe(401);
 });
 
 test('visitor account choices reuse the existing keyboard-operable form without losing its draft',async({page})=>{
   await page.goto('/');const originalUrl=page.url(),email=page.getByLabel('電子郵件',{exact:true});
-  const switcher=page.getByRole('group',{name:'登入或建立帳號',exact:true});
   await email.fill('visitor-draft@example.test');
-  await switcher.getByRole('button',{name:'建立帳號',exact:true}).focus();await page.keyboard.press('Space');
+  await page.getByRole('button',{name:'免費加入',exact:true}).focus();await page.keyboard.press('Space');
   await expect(page.getByRole('heading',{name:'加入自由工坊',exact:true})).toBeVisible();await expect(email).toHaveValue('visitor-draft@example.test');
-  await page.keyboard.press('Tab');await expect(page.getByLabel('頁面工具',{exact:true})).toBeFocused();
-  await page.keyboard.press('Tab');await expect(email).toBeFocused();
-  await switcher.getByRole('button',{name:'會員登入',exact:true}).click();
+  await expect(email).toBeFocused();
+  await page.getByRole('button',{name:'會員登入',exact:true}).click();
   await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await expect(email).toHaveValue('visitor-draft@example.test');
   expect(page.url()).toBe(originalUrl);
 });
@@ -179,29 +195,50 @@ test('dedicated skill returns keep the original reading exit and do not become a
 test('the visitor first step uses all five existing interface languages at phone width',async({page})=>{
   await page.setViewportSize({width:390,height:844});await page.goto('/');
   const languages=[
-    ['zh-Hant','先看免費資源，不用註冊','會員登入','建立帳號'],
-    ['en','Explore free resources without signing up','Sign in','Create account'],
-    ['ja','登録せずに無料教材を見る','ログイン','アカウント作成'],
-    ['ko','가입 없이 무료 자료 둘러보기','로그인','계정 만들기'],
-    ['es','Explora recursos gratuitos sin registrarte','Iniciar sesión','Crear cuenta'],
+    ['zh-Hant','先看免費資源，不用註冊','登入','免費加入','更多'],
+    ['en','Explore free resources without signing up','Sign in','Join for free','More'],
+    ['ja','登録せずに無料教材を見る','ログイン','無料で参加','もっと見る'],
+    ['ko','가입 없이 무료 자료 둘러보기','로그인','무료 가입','더보기'],
+    ['es','Explora recursos gratuitos sin registrarte','Iniciar sesión','Únete gratis','Más'],
   ];
-  for(const [language,explore,login,register] of languages){
-    await page.getByRole('combobox',{name:'Language',exact:true}).selectOption(language);
-    const first=page.locator('.visitor-first-step'),toggle=first.locator('.entry-resources > details > summary');
+  for(const [language,explore,login,register,more] of languages){
+    await page.getByRole('combobox',{name:'語言',exact:true}).selectOption(language);
+    const joinButton=page.locator('.login-landing-cta').getByRole('button',{name:register,exact:true});
+    await expect(joinButton).toBeVisible();
+    await expect(page.locator('.login-card form button[type=submit]')).toHaveText(login);
+    const box=(await joinButton.boundingBox())!;expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThanOrEqual(844);
+    const moreSummary=page.locator('details.login-more > summary');
+    await expect(moreSummary).toHaveText(more);
+    await openLoginMore(page);
+    const toggle=page.locator('.entry-resources > details > summary');
     await expect(toggle).toContainText(explore);
-    await expect(page.locator('.auth-switch').getByRole('button',{name:login,exact:true})).toBeVisible();
-    await expect(page.locator('.auth-switch').getByRole('button',{name:register,exact:true})).toBeVisible();
-    const box=(await toggle.boundingBox())!;expect(box.y).toBeGreaterThanOrEqual(0);expect(box.y+box.height).toBeLessThanOrEqual(844);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await moreSummary.click();
+    await expect(page.locator('details.login-more')).not.toHaveAttribute('open','');
   }
 });
 
 test('compact visitor entry leaves breathing room below the email field on a short phone',async({page})=>{
   await page.setViewportSize({width:320,height:640});await page.goto('/');
-  await expect(page.locator('.visitor-first-step')).toBeVisible();
+  await expect(page.getByRole('button',{name:'免費加入',exact:true})).toBeVisible();
   const email=page.getByLabel('電子郵件',{exact:true});await expect(email).toBeVisible();
   const box=(await email.boundingBox())!;expect(box.y+box.height).toBeLessThanOrEqual(624);
+  await openLoginMore(page);
   await expect(page.locator('.entry-resources > details > summary')).toHaveText('先看免費資源，不用註冊 · 搜尋社群內容');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('compact visitor entry keeps the email field above 624px even when recent events load',async({page})=>{
+  const future=new Date(Date.now()+86_400_000).toISOString();
+  await page.route('**/api/v1/public/events',route=>route.fulfill({json:{items:[{event_id:'00000000-0000-4000-8000-000000000091',title:'合成近期交流會',starts_at:future,state:'published'}]}}));
+  await page.setViewportSize({width:320,height:640});
+  const eventsLoaded=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/public/events');
+  await page.goto('/');await eventsLoaded;
+  const email=page.getByLabel('電子郵件',{exact:true});await expect(email).toBeVisible();
+  const box=(await email.boundingBox())!;expect(box.y+box.height).toBeLessThanOrEqual(624);
+  await openLoginMore(page);
+  const events=page.getByRole('region',{name:'近期活動',exact:true});await expect(events).toBeVisible();
+  expect((await email.boundingBox())!.y).toBeLessThan((await events.boundingBox())!.y);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
@@ -217,6 +254,8 @@ for (const width of [390, 1280]) test(`visitor resource preview reads only three
   const email = page.getByLabel('電子郵件', { exact: true });
   await expect(email).toBeVisible();
   await email.fill('preview-reader@example.test');
+  expect(previewReads).toBe(0); expect(fullCatalogReads).toBe(0);
+  await openLoginMore(page);
   expect(previewReads).toBe(0); expect(fullCatalogReads).toBe(0);
   const resources = page.locator('.entry-resources'), toggle = resources.locator(':scope > details > summary');
   for (let attempt = 1; attempt <= 2; attempt++) {

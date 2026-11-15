@@ -28,7 +28,7 @@ for(const trigger of ['focus','pageshow','visibilitychange'])test(`a withdrawn p
 async function account(page:Page,name:string){
   const email=`connections51-${randomUUID()}@example.test`;
   await page.goto('/');
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill(name);
   await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-connections-password');
@@ -38,7 +38,7 @@ async function account(page:Page,name:string){
 }
 async function joinGuild(page:Page){
   await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 async function hintContrast(page:Page){
   return page.locator('.home-assessment-hint').evaluate(element=>{
@@ -240,7 +240,7 @@ test('welcome keeps one primary action and selected filters stay distinct in eve
   await shellTheme(page,'自由工坊－明亮','light');
   await expandHomeSections(page);
   await expect(page.getByRole('button',{name:'補做定位測驗',exact:true})).toHaveClass(/btn-ghost/);
-  await expect(page.getByRole('button',{name:'編輯我的名片',exact:true})).toBeVisible();
+  await expect(page.getByRole('link',{name:'編輯個人頁',exact:true})).toBeVisible();
   await expect(page.getByText('完成定位後，名片會顯示擅長能力，也更容易遇到合適的夥伴。',{exact:true})).toBeVisible();
   await page.screenshot({path:'test-results/mc51-home-cta-1280.png',fullPage:true});
   await setHomeViewport(page,{width:390,height:844});

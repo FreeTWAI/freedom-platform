@@ -16,6 +16,7 @@ export type CommerceEmailErrorCode =
   | 'recipient_not_allowed'
   | 'sender_not_verified'
   | 'rate_limited'
+  | 'mail_send_timeout'
   | 'send_failed';
 export type CloudflareEmailErrorCode =
   | 'E_VALIDATION_ERROR'
@@ -62,6 +63,8 @@ export function mapCommerceEmailErrorCode(error: unknown): CommerceEmailErrorCod
     case 'E_RATE_LIMIT_EXCEEDED':
     case 'rate_limited':
       return 'rate_limited';
+    case 'mail_send_timeout':
+      return 'mail_send_timeout';
     default:
       return 'send_failed';
   }

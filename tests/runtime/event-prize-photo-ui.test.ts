@@ -110,7 +110,7 @@ const frame=(fn:()=>void)=>queueMicrotask(fn);
 document.visibilityState='visible';
 const bundled=buildSync({stdin:{contents:`export {EventsPanel} from './apps/portal-web/src/modules/EventsPanel'; export {EventPrizePhotoEditor,EventPrizePhoto} from './apps/portal-web/src/modules/EventPrizePhoto'; export {EventPrizeDetails} from './apps/portal-web/src/modules/EventPrizeDetails'; export {PublicEventPage} from './apps/portal-web/src/modules/PublicEventPage'; export {ApiError} from './apps/portal-web/src/api';`,resolveDir:process.cwd(),sourcefile:'prize-photo-ui-entry.ts'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',jsx:'automatic',loader:{'.css':'empty'}});
 const production={exports:{} as any};
-runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:{language:'zh-TW',languages:['zh-TW'],clipboard:{writeText:noNetwork}},fetch:(...args:any[])=>publicTransport.fetch(...args),requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='zod')return require('zod');throw Error(name);}});
+runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:{language:'zh-TW',languages:['zh-TW'],clipboard:{writeText:noNetwork}},fetch:(...args:any[])=>publicTransport.fetch(...args),requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='react-dom')return require('react-dom');if(name==='qrcode')return require('qrcode');if(name==='zod')return require('zod');throw Error(name);}});
 const {EventsPanel,EventPrizePhotoEditor,EventPrizePhoto,EventPrizeDetails,PublicEventPage,ApiError}=production.exports;
 const propsOf=(node:HostNode)=>node[Object.keys(node).find(k=>k.startsWith('__reactProps$'))!];
 function host(t:TestContext,component:any,initial:any,strict=false){
@@ -185,7 +185,7 @@ test('version keyed image failure resets, ignores detached late errors and retri
 test('public and member renderer admit only their exact same-origin paths and retain illustrative icon',async t=>{const h=host(t,EventPrizeDetails,{value:[prize()],eventId:ID,photos:[photo()],publicRead:true});assert.equal(h.nodes().filter(n=>n.nodeName==='IMG').length,0);assert.ok(h.nodes().some(n=>n.nodeName==='SVG'));h.setProps({value:[prize()],eventId:ID,photos:[photo(4,true)],publicRead:true});assert.equal(h.nodes().find(n=>n.nodeName==='IMG')?.src,photo(4,true).url);h.setProps({value:[prize()],eventId:ID,photos:[{...photo(),url:'//foreign.invalid/image'}]});assert.equal(h.nodes().filter(n=>n.nodeName==='IMG').length,0);assert.match(h.text(),/照片資料無法確認/);});
 function panel(t:TestContext,options:Record<string,unknown>={}){
  const {client,requests}=transport();let guard:(()=>boolean)|null=null;
- const props:any={client,session:{user:{user_id:OWNER}},locationHash:'#events',registerLeave:(value:any)=>guard=value,onList:()=>{},...options};
+ const props:any={client,session:{user:{user_id:OWNER}},locationHash:`#events/${ID}/manage`,registerLeave:(value:any)=>guard=value,onList:()=>{},...options};
  const h=host(t,EventsPanel,props),reads=()=>requests.filter(r=>r.method==='get'),writes=()=>requests.filter(r=>r.method==='post'||r.method==='photo');
  const ready=async(items=[stored()])=>{for(const [path,value] of [['/events',{items}],['/guilds/directory',{items:[]}],['/events/bulletins',{items:[]}]]){const request=reads().find(r=>r.path===path);if(request)await settle(request,value);}};
  const choose=async()=>{const r=requests.filter(r=>r.method==='availability').at(-1);if(r&&!r.done){r.done=true;await settle(r,{event_id:r.eventId,prize_id:r.prizeId,organizer_ref:OWNER,upload_available:true});}flush(()=>propsOf(h.field('選擇獎品照片')).onChange({target:{files:[file()]}}));};
@@ -194,20 +194,20 @@ function panel(t:TestContext,options:Record<string,unknown>={}){
 }
 test('saved panel blocks all event changes synchronously and leave/beforeunload while original photo is unknown',async t=>{
  const h=panel(t);await h.ready();const cancel=propsOf(h.button('取消活動')).onClick;h.click(h.button('管理 合成獎品 的照片'));await h.choose();const save=propsOf(h.button('儲存照片')).onClick;flush(()=>{save();cancel();save();});assert.equal(h.writes().length,1);assert.equal(h.leave(),false);
- let prevented=false;flush(()=>window.dispatchEvent({type:'beforeunload',preventDefault(){prevented=true;},returnValue:undefined}));assert.equal(prevented,true);await settle(h.writes()[0],new ApiError({network:true,message:'lost'}),true);assert.equal(propsOf(h.button('取消活動')).disabled,true);assert.equal(propsOf(h.button('編輯草稿')).disabled,true);assert.equal(h.leave(),false);assert.equal(h.writes().length,1);
+ let prevented=false;flush(()=>window.dispatchEvent({type:'beforeunload',preventDefault(){prevented=true;},returnValue:undefined}));assert.equal(prevented,true);await settle(h.writes()[0],new ApiError({network:true,message:'lost'}),true);assert.equal(propsOf(h.button('取消活動')).disabled,true);assert.equal(propsOf(h.button('編輯活動')).disabled,true);assert.equal(h.leave(),false);assert.equal(h.writes().length,1);
  // Refresh changes the list from pending to published, but the editor is outside
  // that list and retains its original File, key, version and unresolved guard.
  h.click(h.button('重新讀取目前照片'));await settle(h.reads().at(-1),stored({state:'published',aggregate_version:9,prize_photos:[]}));assert.equal(h.leave(),false);assert.ok(h.button('確認原照片操作'));h.click(h.button('確認原照片操作'));const retry=h.writes().at(-1);assert.equal(tuple(retry),tuple(h.writes()[0]));assert.equal(retry.file,h.writes()[0].file);
  await settle(retry,ack(retry));assert.equal(h.leave(),true);await settle(h.reads().at(-1),new Error('current read failed'),true);assert.equal(h.leave(),true);assert.equal(propsOf(h.button('取消活動')).disabled,true,'separate refresh barrier remains after ACK');assert.match(h.text(),/原照片儲存操作已確認/);h.click(h.button('重新讀取目前照片'));await settle(h.reads().at(-1),stored({state:'published',aggregate_version:10,prize_photos:[]}));assert.equal(propsOf(h.button('取消活動')).disabled,false);assert.equal(h.writes().length,2);
 });
 test('saved prize photo deletion asks explicitly at same event CAS and Cancel sends zero writes',async t=>{
- const h=panel(t);await h.ready([stored({aggregate_version:4,prize_photos:[photo()]})]);h.click(h.button('編輯草稿'));assert.equal(propsOf(h.button('管理 合成獎品 的照片')).disabled,true);h.click(h.button('移除獎品 1'));h.click(h.button('確認移除'));const messages:string[]=[];t.mock.method(window,'confirm',(message:string)=>{messages.push(message);return false;});h.submit();assert.equal(h.writes().length,0);assert.match(messages[0],/獎品及其已保存照片/);t.mock.method(window,'confirm',()=>true);h.submit();assert.equal(h.writes().length,1);assert.equal(h.writes()[0].options.ifMatch,4);assert.deepEqual(h.writes()[0].body.prize_details,[]);
+ const h=panel(t);await h.ready([stored({aggregate_version:4,prize_photos:[photo()]})]);h.click(h.button('編輯活動'));assert.equal(propsOf(h.button('管理 合成獎品 的照片')).disabled,true);h.click(h.button('移除獎品 1'));h.click(h.button('確認移除'));const messages:string[]=[];t.mock.method(window,'confirm',(message:string)=>{messages.push(message);return false;});h.submit();assert.equal(h.writes().length,0);assert.match(messages[0],/獎品及其已保存照片/);t.mock.method(window,'confirm',()=>true);h.submit();assert.equal(h.writes().length,1);assert.equal(h.writes()[0].options.ifMatch,4);assert.deepEqual(h.writes()[0].body.prize_details,[]);
 });
 test('unsaved activities never offer a photo upload, and leaving a local preview can be declined',async t=>{
- const h=panel(t);await h.ready();h.click(h.button('辦活動'));assert.equal(h.nodes().filter(n=>n.nodeName==='INPUT'&&propsOf(n).type==='file'&&propsOf(n).accept==='image/jpeg,image/png,image/webp').length,1,'only legacy poster exists');assert.equal(h.button('管理 合成獎品 的照片')&&propsOf(h.button('管理 合成獎品 的照片')).disabled,true);assert.match(h.text(),/獎品照片需先送出活動及獎品說明/);h.click(h.button('返回'));h.click(h.button('管理 合成獎品 的照片'));await h.choose();t.mock.method(window,'confirm',()=>false);assert.equal(h.leave(),false);assert.equal(h.writes().length,0);assert.equal(propsOf(h.button('取消活動')).disabled,true);
+ const h=panel(t,{locationHash:'#events'});await h.ready();h.click(h.button('辦活動'));assert.equal(h.nodes().filter(n=>n.nodeName==='INPUT'&&propsOf(n).type==='file'&&propsOf(n).accept==='image/jpeg,image/png,image/webp').length,1,'only legacy poster exists');assert.equal(h.button('管理 合成獎品 的照片'),undefined);assert.match(h.text(),/填好名稱、時間和地點即可發布/);h.click(h.button('返回'));h.setProps({...h.props,locationHash:`#events/${ID}/manage`});h.click(h.button('管理 合成獎品 的照片'));await h.choose();t.mock.method(window,'confirm',()=>false);assert.equal(h.leave(),false);assert.equal(h.writes().length,0);assert.equal(propsOf(h.button('取消活動')).disabled,true);
 });
 test('accepted event A → B → A route change fences old editor and does not clear a newer pending command',async t=>{
- const h=panel(t);await h.ready();h.click(h.button('管理 合成獎品 的照片'));await h.choose();h.click(h.button('儲存照片'));const old=h.writes()[0];h.setProps({...h.props,locationHash:`#events/${OTHER}`});h.setProps({...h.props});h.click(h.button('管理 合成獎品 的照片'));await h.choose();h.click(h.button('儲存照片'));assert.equal(h.writes().length,2);await settle(old,ack(old));assert.equal(h.leave(),false);assert.doesNotMatch(h.text(),/原照片儲存操作已確認/);await settle(h.writes()[1],ack(h.writes()[1]));assert.equal(h.leave(),true);
+ const h=panel(t);await h.ready();h.click(h.button('管理 合成獎品 的照片'));await h.choose();h.click(h.button('儲存照片'));const old=h.writes()[0];h.setProps({...h.props,locationHash:`#events/${OTHER}/manage`});h.setProps({...h.props});h.click(h.button('管理 合成獎品 的照片'));await h.choose();h.click(h.button('儲存照片'));assert.equal(h.writes().length,2);await settle(old,ack(old));assert.equal(h.leave(),false);assert.doesNotMatch(h.text(),/原照片儲存操作已確認/);await settle(h.writes()[1],ack(h.writes()[1]));assert.equal(h.leave(),true);
 });
 test('photo controls retain 44px touch targets, 16px inputs and semantic focus tokens without inline theme colors',()=>{const css=readFileSync('apps/portal-web/src/modules/EventPrizePhoto.css','utf8');assert.match(css,/min-height: 44px/);assert.match(css,/font-size: 1rem/);assert.match(css,/outline: 3px solid var\(--focus\)/);assert.doesNotMatch(css,/#(?:[a-f0-9]{3}|[a-f0-9]{6})\b/i);});
 for(const bad of [{},[null],null,[{...photo(),asset_id:OTHER}],[photo(),photo()],[photo(4,true)],[{...photo(),url:'https://foreign.invalid/a'}]])test(`malformed photo sidecar retains icon without rendering unsafe image ${JSON.stringify(bad)}`,async t=>{const h=host(t,EventPrizeDetails,{eventId:ID,value:[prize()],photos:bad});assert.equal(h.nodes().filter(n=>n.nodeName==='IMG').length,0);assert.ok(h.nodes().some(n=>n.nodeName==='SVG'));assert.match(h.text(),/照片資料無法確認/);});
@@ -276,25 +276,25 @@ test('discarding a local photo preview returns parent focus after the trigger is
  const h=panel(t);await h.ready();const trigger=h.button('管理 合成獎品 的照片');h.click(trigger);await h.choose();assert.equal(trigger.disabled,true);trigger.focusAttempts=[];t.mock.method(window,'confirm',()=>true);h.click(h.button('返回活動'));
  assert.equal(h.button('儲存照片'),undefined);assert.equal(trigger.disabled,false);assert.equal(document.activeElement,trigger);assert.deepEqual(trigger.focusAttempts,[{disabled:false,connected:true}]);assert.equal(h.writes().length,0);
 });
-for(const state of ['refreshing','published'])test(`closing the photo editor uses a stable heading when its trigger is ${state==='refreshing'?'disabled':'disconnected'}`,async t=>{
+for(const state of ['refreshing','cancelled'])test(`closing the photo editor uses a stable heading when its trigger is ${state==='refreshing'?'disabled':'disconnected'}`,async t=>{
  const h=panel(t);await h.ready();const trigger=h.button('管理 合成獎品 的照片');h.click(trigger);await h.choose();h.click(h.button('儲存照片'));await settle(h.writes()[0],ack(h.writes()[0]));
- if(state==='published')await settle(h.reads().at(-1),stored({state:'published',aggregate_version:5,prize_photos:[]}));
+ if(state==='cancelled')await settle(h.reads().at(-1),stored({state:'cancelled',aggregate_version:5,prize_photos:[]}));
  assert.equal(state==='refreshing'?trigger.disabled:!trigger.isConnected,true);trigger.focusAttempts=[];h.click(h.button('返回活動'));
- assert.equal(document.activeElement,h.nodes().find(n=>n.nodeName==='H2'&&n.textContent==='一起參加活動，也可以自己辦。'));assert.deepEqual(trigger.focusAttempts,[]);assert.equal(h.writes().length,1);
+ assert.equal(document.activeElement,h.button('返回活動列表與行事曆'));assert.deepEqual(trigger.focusAttempts,[]);assert.equal(h.writes().length,1);
 });
 for(const bad of [null,{},[null],[photo(),photo()],[{...photo(),asset_id:OTHER}]])test(`editing refuses malformed photo sidecar ${JSON.stringify(bad)} without a metadata write`,async t=>{
- const h=panel(t);await h.ready([stored({aggregate_version:4,prize_photos:bad})]);h.click(h.button('編輯草稿'));assert.equal(h.nodes().filter(n=>n.nodeName==='FORM').length,0);assert.match(h.text(),/獎品資料無法確認/);assert.equal(h.writes().length,0);
+ const h=panel(t);await h.ready([stored({aggregate_version:4,prize_photos:bad})]);h.click(h.button('編輯活動'));assert.equal(h.nodes().filter(n=>n.nodeName==='FORM').length,0);assert.match(h.text(),/獎品資料無法確認/);assert.equal(h.writes().length,0);
 });
 test('legacy omitted photo sidecar still permits a saved activity edit and metadata save',async t=>{
- const h=panel(t),legacy=stored({prize_photos:undefined});await h.ready([legacy]);h.click(h.button('編輯草稿'));h.submit();assert.equal(h.writes().length,1);assert.equal(h.writes()[0].options.ifMatch,legacy.aggregate_version);
+ const h=panel(t),legacy=stored({prize_photos:undefined});await h.ready([legacy]);h.click(h.button('編輯活動'));h.submit();assert.equal(h.writes().length,1);assert.equal(h.writes()[0].options.ifMatch,legacy.aggregate_version);
 });
 
 for(const bad of [null,{},[null],[photo(),photo()],[{...photo(),asset_id:OTHER}]])test(`same-version list refresh with malformed sidecar ${JSON.stringify(bad)} blocks an already-open prize deletion`,async t=>{
  // A detail response opens the editor while the original list read is still
  // pending; the later real list response replaces it without changing CAS.
- const h=panel(t,{locationHash:`#events/${ID}`});
+ const h=panel(t,{locationHash:`#events/${ID}/manage`});
  await settle(h.reads().find(r=>r.path===`/events/${ID}`),stored({aggregate_version:4,prize_photos:[photo()]}));
- h.click(h.button('編輯草稿'));h.click(h.button('移除獎品 1'));h.click(h.button('確認移除'));
+ h.click(h.button('編輯活動'));h.click(h.button('移除獎品 1'));h.click(h.button('確認移除'));
  await h.ready([stored({aggregate_version:4,prize_photos:bad})]);
  const confirmation=t.mock.method(window,'confirm',()=>true);h.submit();
  assert.equal(confirmation.mock.callCount(),0,'malformed data cannot downgrade to the photo-free save flow');assert.equal(h.writes().length,0);assert.match(h.text(),/獎品資料無法確認/);assert.ok(h.nodes().some(n=>n.nodeName==='FORM'),'draft remains mounted');
@@ -320,7 +320,7 @@ test('preview cancellation does not steal focus moved to another connected contr
  flush(()=>{cancel();other.focus();});assert.equal(document.activeElement,other);assert.deepEqual(input.focusAttempts,[]);assert.equal(h.writes().length,0);
 });
 for(const hidden of [false,true])test(`parent close does not steal ${hidden?'background':'deliberately moved'} focus during the same commit`,async t=>{
- const h=panel(t);await h.ready();const trigger=h.button('管理 合成獎品 的照片');h.click(trigger);await h.choose();const close=propsOf(h.button('返回活動')).onClick,other=h.button('報名參加');trigger.focusAttempts=[];t.mock.method(window,'confirm',()=>true);
+ const h=panel(t);await h.ready();const trigger=h.button('管理 合成獎品 的照片');h.click(trigger);await h.choose();const close=propsOf(h.button('返回活動')).onClick,other=h.button('返回活動列表與行事曆');trigger.focusAttempts=[];t.mock.method(window,'confirm',()=>true);
  const before=document.activeElement;if(hidden)document.visibilityState='hidden';
  try{flush(()=>{close();if(!hidden)other.focus();});assert.deepEqual(trigger.focusAttempts,[]);assert.equal(document.activeElement,hidden?before:other);}finally{document.visibilityState='visible';}
  assert.equal(h.writes().length,0);

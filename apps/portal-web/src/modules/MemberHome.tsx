@@ -1,12 +1,12 @@
+import {RecentEvents} from '../share/RecentEvents';
 import {useLanguage} from '../language';
 import {FirstParticipation} from './FirstParticipation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ModulePanelProps } from './shared';
 import type { TabId } from '../types';
-import { WorkshopIcon } from '../WorkshopIcon';
 import { loadLabels, type MemberCardData } from './Membership';
 import { MemberAvatar } from './MemberAvatar';
-import { PromotionShare } from './PromotionShare';
+import { promotionLink, ShareButton } from '../share/ShareButton';
 import { logConsoleEvent } from '../game-console-core';
 import { consoleChannel } from '../game-console-routing';
 import './HomeDesign.css';
@@ -14,7 +14,6 @@ import {MemberRecommendations} from './MemberRecommendations';
 import {SkillBookIntro, type IntroBook} from './SkillBookIntro';
 import {openMemberChat} from './chat-entry';
 import {SocialZone} from './SocialZone';
-import {HomeParticipation} from './HomeParticipation';
 import {SECTION_LABELS} from '../../../../contracts/guild-launchpad/v1/guild-preferences';
 import {consumeHomeJournalIntent, createHomeReadCycle, loadHomeNextSteps, observeHomeReturns, resolveHomeJournalUrl, type HomeRefreshReason} from './member-home-loading';
 
@@ -54,10 +53,6 @@ function HomeJournal({onOpen}: {onOpen: () => boolean}) {
   </section>;
 }
 
-const shortcuts: { id: TabId; title: string }[] = [
-  { id: 'messages', title: '開始聊天' },
-  { id: 'members', title: '找夥伴' },
-];
 // The third next-step button follows real work facts, in this order: a claim of mine that is not finished (/dashboard, work.ts),
 // then the open task board, then work sharing. Titles stay on their own pages and no count is shown.
 const taskActions = {
@@ -73,27 +68,19 @@ type HomeMember = HomeValue<MemberCardData> & {reason: HomeRefreshReason};
 type HomeGuildScope = {scope: HomeScope; guildKey: string | null};
 type HomeGuildValue<T> = {guildScope: HomeGuildScope; value: T};
 
-export function MemberHome({ client, session, onNavigate, openHomeJournal, firstParticipationEnabled=false, guildLaunchpadEnabled=false, personalContentEnabled=false, shortVideos=false, bookmarksEnabled=false, onOpenSupply }: ModulePanelProps&{openHomeJournal:()=>boolean; firstParticipationEnabled?:boolean; guildLaunchpadEnabled?:boolean; personalContentEnabled?:boolean; shortVideos?:boolean; bookmarksEnabled?:boolean; onOpenSupply?:()=>void}) {
+export function MemberHome({ client, session, onNavigate, openHomeJournal, firstParticipationEnabled=false, shortVideos=false, bookmarksEnabled=false, focusPost }: ModulePanelProps&{openHomeJournal:()=>boolean; firstParticipationEnabled?:boolean; shortVideos?:boolean; bookmarksEnabled?:boolean;focusPost?:{id:string;sequence:number}}) {
   const {t} = useLanguage();
-  const [wide,setWide]=useState(()=>window.matchMedia('(min-width:861px)').matches);
-  useEffect(()=>{const media=window.matchMedia('(min-width:861px)'),update=()=>setWide(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
   const sessionGeneration = client.sessionGeneration;
   const participationSession = `${session.user.user_id}:${sessionGeneration}`;
   const scope = useMemo(() => createHomeReadCycle(() => client.sessionGeneration),
     [client, session.user.user_id, sessionGeneration]);
-  const [openedParticipation, setOpenedParticipation] = useState<HomeScope | null>(null);
-  const participationDisclosure = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    // A replacement client must not inherit a closed section's activation.
-    // If the section remains visibly open, read the replacement client's facts.
-    if (participationDisclosure.current?.open) setOpenedParticipation(scope);
-  }, [scope]);
   const [memberValue, setMemberValue] = useState<HomeMember | null>(null);
   const [labelValue, setLabelValue] = useState<HomeValue<Record<string, string>> | null>(null);
   const [onboardingValue, setOnboardingValue] = useState<HomeValue<HomeOnboarding | null> | null>(null);
   const [loadState, setLoadState] = useState<{scope: HomeScope; loading: boolean; error: string | null} | null>(null);
   const [bookValue, setBookValue] = useState<HomeGuildValue<IntroBook | null> | null>(null);
   const [taskValue, setTaskValue] = useState<HomeGuildValue<keyof typeof taskActions | null> | null>(null);
+  const [publishedValue, setPublishedValue] = useState<{scope: HomeScope; shareId: string; url: string; title: string; kind: string; seq: number} | null>(null);
   // Hide the old session's view synchronously, before effect cleanup can run.
   const currentMember = memberValue?.scope === scope ? memberValue : null;
   const member = currentMember?.value ?? null;
@@ -101,6 +88,7 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
   const onboarding = onboardingValue?.scope === scope ? onboardingValue.value : null;
   const loading = loadState?.scope === scope ? loadState.loading : true;
   const loadError = loadState?.scope === scope ? loadState.error : null;
+  const publishedShare = publishedValue?.scope === scope ? publishedValue : null;
   const guildKey = member?.primary_guild?.guild_key ?? null;
   // Same-session, same-guild refreshes keep mounted dialogs and focused actions.
   // Returning to a previous guild creates a new lifetime, never a cached view.
@@ -110,6 +98,35 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
   const summary = useRef<HTMLElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   const focusFrame = useRef<number | null>(null);
+  const publishedRef = useRef<HTMLElement>(null);
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const publishedSeq = useRef(0);
+  const focusedSeq = useRef(0);
+
+  useEffect(() => {
+    function onSharePublished(event: Event) {
+      const detail = (event as CustomEvent<{shareId?: string; url?: string; title?: string; kind?: string}>).detail;
+      if (!detail?.shareId) return;
+      const seq = ++publishedSeq.current;
+      setPublishedValue({
+        scope: scopeRef.current,
+        shareId: detail.shareId,
+        url: detail.url ?? `#shares/${detail.shareId}`,
+        title: detail.title?.trim() || '新分享',
+        kind: detail.kind ?? 'link',
+        seq,
+      });
+    }
+    window.addEventListener('freedom-share-published', onSharePublished);
+    return () => window.removeEventListener('freedom-share-published', onSharePublished);
+  }, []);
+
+  useEffect(() => {
+    if (!publishedShare || focusedSeq.current === publishedShare.seq) return;
+    focusedSeq.current = publishedShare.seq;
+    publishedRef.current?.focus();
+  }, [publishedShare]);
 
   const load = useCallback((withLabels: boolean, reason: HomeRefreshReason = 'manual') => {
     const ticket = scope.begin(reason);
@@ -213,20 +230,16 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
 
   return <div className="member-home freedom-home">
     {loadError && <div ref={alertRef} role="alert" className="banner banner-error home-load-error">
-      <p>{loadError}下方常用入口仍可使用。</p>
+      <p>{loadError}下方動態仍可使用。</p>
       <button type="button" className="btn btn-ghost" aria-disabled={loading} onClick={retry}>{loading ? '正在重新載入名片…' : '重新載入名片'}</button>
     </div>}
     <div className="home-layout">
     <div className="home-main">
-    <details ref={participationDisclosure} className="home-participation-disclosure" key={participationSession} onToggle={event => {
-      // Keep the read active after first opening; collapsing does not reset a
-      // pending/error state or fetch again. A new login needs its own opening.
-      if (event.target === event.currentTarget && event.currentTarget.open) setOpenedParticipation(scope);
-    }}>
+    <details className="home-participation-disclosure" key={participationSession}>
     {/* Collapsed by default, so surface the same unfinished-claim fact (dashboard `now`) without a count or titles.
         The tag is a description, keeping the summary's accessible name stable. */}
     <summary aria-describedby={primaryGuild && taskAction === 'resume' ? 'home-explore-work' : undefined}><span>{t('home.explore')}</span>{primaryGuild && taskAction === 'resume' && <span id="home-explore-work" className="pill home-explore-work" aria-hidden="true">{t('home.workToResume')}</span>}<span className="home-explore-indicator" aria-hidden="true"><span className="home-explore-open">{t('home.expand')} ＋</span><span className="home-explore-close">{t('home.collapse')} −</span></span></summary>
-    <div className="home-exploration-content">
+    <div className="home-exploration-content" data-guide-anchor="home:shortcuts">
     {nextStep && <section className="home-next-step" aria-label="公會與技能書建議">
       <div className="home-next-copy">
       <h2 className="home-next-eyebrow">公會與學習</h2>
@@ -245,41 +258,15 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
       <img className="home-next-art" src="/art/rpg/skill-codex.webp" alt="" width="124" height="108"/>
     </section>}
 
-    <HomeParticipation client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled} active={openedParticipation === scope}/>
     </div>
     </details>
-    <nav className="home-discovery-links" aria-label="共創誌與遊戲">
-      <HomeJournal onOpen={openHomeJournal}/>
-      <a className="btn btn-ghost" href="/play" target="_blank" rel="noopener noreferrer">遊戲大廳<span className="sr-only">（另開分頁）</span></a>
-    </nav>
-    <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
+    <div className="home-discovery-links">
+      <ShareButton title="自由工坊" fallbackUrl="/" makeLink={promotionLink(client, 'platform', 'workshop')} text="自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。" label="分享自由工坊" buttonClassName="btn btn-primary"/>
+      <nav aria-label="共創誌">
+        <HomeJournal onOpen={openHomeJournal}/>
+      </nav>
     </div>
-    <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>
-    <div className="home-support">
-    <nav className="home-destinations" aria-label="商品、作品與活動">
-      <section>
-        <h2>商品與供貨</h2>
-        {guildLaunchpadEnabled ? <>
-          <button type="button" onClick={onOpenSupply}><strong>我的供貨商品庫</strong><span>管理商品與合作條件</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
-          <button type="button" onClick={() => onNavigate?.('stores')}><strong>我的商店</strong><span>編輯店面與公開商品</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
-        </> : <>
-          <button type="button" onClick={() => onNavigate?.('supplier')}><strong>我有東西要賣</strong><span>整理商品提案</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
-          <button type="button" onClick={() => onNavigate?.('retail')}><strong>我可以賣東西</strong><span>挑選商品與規劃展示</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
-        </>}
-      </section>
-      <section>
-        <h2>作品與活動</h2>
-        <button type="button" onClick={() => onNavigate?.('opensource')}><strong>開源投稿</strong><span>介紹工具與預覽分享內容</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
-        <button type="button" onClick={() => onNavigate?.('events')}><strong>社群活動</strong><span>查看、提交與管理活動</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
-      </section>
-    </nav>
-
-    <nav className="home-shortcuts" data-guide-anchor="home:shortcuts" aria-label="常用入口">
-      {shortcuts.map(entry => <button key={entry.id} type="button" className="home-shortcut" onClick={() => onNavigate?.(entry.id)}>
-        <span className="home-shortcut-icon" aria-hidden="true"><WorkshopIcon name={entry.id}/></span><span>{entry.title}</span>
-      </button>)}
-    </nav>
-
+    <RecentEvents client={client}/><section className="home-timeline" aria-label="首頁社群動態">{publishedShare && <article ref={publishedRef} tabIndex={-1} className="card home-published-share"><span className="pill">{publishedShare.kind === 'repository' ? '開源專案' : publishedShare.kind === 'post' ? '貼文' : publishedShare.kind === 'event' ? '活動' : '網址'}</span><h2 className="home-published-share-title">{publishedShare.title}</h2><a className="btn btn-secondary btn-small" href={publishedShare.url}>看分享頁</a></article>}<SocialZone focusPost={focusPost} client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-personal home-disclosure">
     <summary>我的名片與推薦夥伴</summary>
@@ -298,14 +285,12 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
         {featured.map(id => <span className="pill" key={id}>{skillLabel(id)}</span>)}
       </div>}
       <div className="home-member-actions">
-        <button type="button" className="btn btn-ghost" onClick={() => onNavigate?.('account')}>編輯我的名片</button>
+        <a className="btn btn-ghost" href="#me/settings">編輯個人頁</a>
         {showAssessment && <button type="button" className="btn btn-ghost" onClick={() => onNavigate?.('positioning')}>補做定位測驗</button>}
-        <PromotionShare client={client} kind="platform" target="workshop" title="自由工坊" text="自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。" label="分享自由工坊"/>
       </div>
     </section>
     <MemberRecommendations client={client}/>
     </aside>
-    </details>
     </details>
     </div>
   </div>;

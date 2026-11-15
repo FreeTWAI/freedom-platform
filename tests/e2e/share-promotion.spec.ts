@@ -1,8 +1,11 @@
 import { mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { navigate, expandHomeSections, selectSocialFeed } from './navigation.js';
+import { navigate, expandHomeSections, selectSocialFeed, openSkillCardMore } from './navigation.js';
 import { test, expect, type Browser, type Page } from './fixtures.js';
+import { communityCatalog } from '../../modules/community/catalog.js';
+import { attachRepositorySources, bookSource } from '../../modules/shares/repository-sources.js';
+import type { RepositoryFacts } from '../../modules/shares/types.js';
 
 const GUEST_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 const SHOTS = process.env.AUDIT_EVIDENCE_DIR ?? 'test-results/share-promotion';
@@ -64,6 +67,8 @@ async function creditVisit(browser: Browser, url: string, expected: (url: URL) =
 
 async function openBoards(page: Page) {
   await navigate(page, '推廣排行榜');
+  const legacy = page.locator('.legacy-promotion');
+  if (!await legacy.evaluate(element => (element as HTMLDetailsElement).open)) await legacy.locator(':scope > summary').click();
   const rankings = page.locator('.promotion-rankings');
   await expect(rankings).toBeVisible();
   if (!await rankings.evaluate(element => (element as HTMLDetailsElement).open)) await rankings.locator(':scope > summary').click();
@@ -94,36 +99,68 @@ function contrast(foreground: string, background: string) {
 
 test('a skill-book share link credits one guest click on the weekly board', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(60_000);
+  // Catalog books earn points through their repository share;
+  // the share backfill (O3) makes it, and this case makes the one the backfill would make.
+  const book = communityCatalog.skill_books.find(b => b.id === 'social-post');
+  if (!book) throw new Error('Missing social-post catalog book');
+  const community = COMMUNITY;
+  const facts: RepositoryFacts = {
+    id: '990000101',
+    full_name: 'Hao0321/claude-skill-social-post',
+    url: book.upstream_url,
+    description: book.description,
+    archived: false,
+    fork: false,
+    owner_id: '990000100',
+    owner_login: 'Hao0321',
+    default_branch: 'main',
+    stars: 0,
+    topics: [],
+    homepage: null,
+    license_spdx: book.license_status,
+  };
+  const client = await e2eAuthPool.connect();
+  try {
+    await client.query('BEGIN');
+    await attachRepositorySources(client, { community, facts, sources: [bookSource(community, book)] });
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
   await login(page);
   await navigate(page, '技能書架');
   await page.getByRole('button', { name: '未解鎖', exact: true }).click();
   const library = page.locator('.community-library');
   await library.getByLabel('搜尋技能書', { exact: true }).fill('社群貼文');
   const card = library.locator('article[data-book-id="social-post"]');
+  await openSkillCardMore(card);
   await card.getByRole('button', { name: '分享技能', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '分享「Hao 社群貼文技能書」', exact: true });
   const url = dialog.locator('.skill-share-url');
   await expect(url).toHaveText(/\/go\/[A-Za-z0-9_-]{10}(\?intro=\d+)?$/);
-  await expect(dialog.locator('.promotion-share-points')).toHaveText(/這個連結：本週 \d+ 分・累計 \d+ 分/);
-  const before = await dialog.locator('.promotion-share-points').innerText();
-  const weekBefore = Number(/本週 (\d+) 分/.exec(before)![1]);
+  await expect(dialog.locator('.share-credit-note')).toHaveText('有人點開，會記在你名下。');
+  const boardsBefore = await (await page.request.get('/api/v1/promotion/leaderboards?period=week')).json() as { boards: { kind: string; me?: { points: number } | null }[] };
+  const weekBefore = Number(boardsBefore.boards.find(board => board.kind === 'repository')?.me?.points ?? 0);
   const go = (await url.innerText()).trim();
   await page.keyboard.press('Escape');
 
   await creditVisit(browser, go, url => url.pathname === '/development/skills/social-post', e2eAuthPool);
   await page.goto('/');
   await openBoards(page);
-  const skill = board(page, '技能推廣排行榜');
-  await expect(skill).toContainText('示範創作者');
-  await expect(skill).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
-  await expect(skill.locator('li').filter({ hasText: '示範創作者' }).locator('.promotion-rank')).toHaveText('第 1 名');
+  const repo = board(page, '開源專案');
+  await expect(repo).toContainText('示範創作者');
+  await expect(repo).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
+  await expect(repo.locator('li').filter({ hasText: '示範創作者' }).locator('.promotion-rank')).toHaveText('第 1 名');
 
   await creditVisit(browser, go, url => url.pathname === '/development/skills/social-post', e2eAuthPool);
   await page.goto(go);
   await expect(page).toHaveURL(/\/development\/skills\/social-post/);
   await page.goto('/');
   await openBoards(page);
-  await expect(board(page, '技能推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
+  await expect(board(page, '開源專案')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
 });
 
 test('an event share link lands on the public page and shows the click', async ({ page, browser, e2eAuthPool }) => {
@@ -146,11 +183,15 @@ test('an event share link lands on the public page and shows the click', async (
   const card = page.locator('article.experience-card').filter({ has: page.getByRole('heading', { name: EVENT_TITLE, level: 3 }) });
   await card.scrollIntoViewIfNeeded();
   await card.getByRole('button', { name: '分享活動', exact: true }).click();
-  const field = card.getByLabel('分享連結');
-  await expect(field).toHaveValue(/\/go\/[A-Za-z0-9_-]{10}$/);
-  await expect(card.getByText('推薦碼已包含在連結內；訪客每天點開算 1 分（活動推廣排行榜）。')).toBeVisible();
-  eventGo = await field.inputValue();
+  const dialog = page.getByRole('dialog', { name: `分享「${EVENT_TITLE}」`, exact: true });
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  await expect(dialog.locator('.share-credit-note')).toHaveText('有人點開，會記在你名下。');
+  eventGo = (await dialog.locator('.skill-share-url').innerText()).trim();
+  await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, eventGo, url => url.pathname === `/events/${eventId}` && url.searchParams.has('ref'), e2eAuthPool);
+  await card.getByRole('link', { name: '管理活動', exact: true }).click();
+  await expect(page.getByRole('region', { name: '管理活動', exact: true })).toBeVisible();
+  await card.locator('details.event-form-options > summary').filter({ hasText: '更多' }).click();
   await card.getByRole('button', { name: '分享報名統計', exact: true }).click();
   const report = card.locator('.event-referral-report');
   await expect(report.getByRole('listitem')).toHaveCount(20);
@@ -191,10 +232,10 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   const dialog = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   await expect(dialog).toContainText('自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。');
-  await expect(dialog.locator('.promotion-share-rule')).toHaveText('只在你按下分享或複製後交給系統處理，不會自動發文或傳訊息。請先確認內容適合對方。有效點擊依既有規則計分；不代表閱讀、成交或獎勵。');
-  const points = dialog.locator('.promotion-share-points');
-  await expect(points).toHaveText(/這個連結：本週 \d+ 分・累計 \d+ 分/);
-  const weekBefore = Number(/本週 (\d+) 分/.exec(await points.innerText())![1]);
+  await expect(dialog.locator('.share-credit-note')).toHaveText('有人點開，會記在你名下。');
+  const boardsBefore = await (await page.request.get('/api/v1/promotion/leaderboards?period=week')).json() as { boards: { kind: string; me?: { points: number } | null }[] };
+  // The platform link credits through the community's link share, so its points land on the 連結 board.
+  const weekBefore = Number(boardsBefore.boards.find(board => board.kind === 'link')?.me?.points ?? 0);
   platformGo = (await dialog.locator('.skill-share-url').innerText()).trim();
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
 
@@ -202,15 +243,22 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await page.goto(platformGo);
   await expect(page).toHaveURL(url => url.pathname === '/' && url.search === '');
   await openBoards(page);
-  await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
-  await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
-  const again = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
-  await expect(again.locator('.skill-share-url')).toHaveText(platformGo);
-  await again.getByRole('button', { name: '關閉分享', exact: true }).click();
+  await expect(board(page, '連結')).toContainText(new RegExp(`我的名次：第 \\d+ 名・${weekBefore + 1} 分`));
+  // 我的貢獻 presents results once; reuse the existing personal link through 再分享.
+  // The click also credited the community's platform share, which only anchors that credit: it adds no row.
+  const existing = page.getByRole('region', { name: '我的貢獻', exact: true }).getByRole('article').filter({ has: page.getByText('自由工坊', { exact: true }) });
+  await expect(existing).toHaveCount(1);
+  await existing.getByRole('button', { name: '再分享', exact: true }).click();
+  const reshare = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
+  await expect(reshare.locator('.skill-share-url')).toHaveText(platformGo);
+  await reshare.getByRole('button', { name: '複製連結', exact: true }).click();
+  await expect(reshare.getByRole('status')).toHaveText('已複製。');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(platformGo);
+  await reshare.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '', e2eAuthPool);
   await page.reload();
   await openBoards(page);
-  await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
+  await expect(board(page, '連結')).toContainText(new RegExp(`我的名次：第 \\d+ 名・${weekBefore + 1} 分`));
 });
 
 // Controlled capabilities: this case never opens LINE/Telegram or sends a message.
@@ -244,7 +292,7 @@ test('platform choices hand the canonical referral URL to LINE and Telegram only
   });
   await login(page);
   await controlPromotionCapabilities(page);
-  await openBoards(page);
+  await expandHomeSections(page);
   await page.evaluate(() => {
     const address = new URL(location.href); address.searchParams.set('private-share', 'never-export');
     history.replaceState(history.state, '', address);
@@ -261,6 +309,7 @@ test('platform choices hand the canonical referral URL to LINE and Telegram only
   expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionOpens)).toEqual([]);
   await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
+  await dialog.locator('.share-more > summary').click();
   try {
     await requested;
     await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toBeDisabled();
@@ -294,7 +343,7 @@ test('platform choices hand the canonical referral URL to LINE and Telegram only
   await dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true }).click();
   const manual = dialog.getByLabel('手動複製分享內容', { exact: true });
   await expect(manual).toHaveValue(`${text}\n${url}`); await expect(manual).toBeFocused();
-  await expect(dialog.getByRole('status')).toHaveText('無法開啟 LINE 分享，請選取並複製下方內容');
+  await expect(dialog.getByRole('status')).toHaveText('無法開啟 LINE 分享，請手動複製下面的內容。');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden(); await expect(page.getByRole('button', { name: '分享自由工坊', exact: true })).toBeFocused();
 });
@@ -303,7 +352,7 @@ test('the home share button stays as compact as the profile button', async ({ pa
   await login(page);
   await themeOf(page, 'light');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  const edit = page.getByRole('button', { name: '編輯我的名片', exact: true });
+  const edit = page.getByRole('link', { name: '編輯個人頁', exact: true });
   const share = page.getByRole('button', { name: '分享自由工坊', exact: true });
   const row = page.locator('.home-member-actions');
   await expect(edit).toBeVisible();
@@ -314,9 +363,12 @@ test('the home share button stays as compact as the profile button', async ({ pa
   const phoneShare = (await share.boundingBox())!;
   const phoneEdit = (await edit.boundingBox())!;
   const phoneRow = (await row.boundingBox())!;
+  const phoneDiscovery = (await page.locator('.home-discovery-links').boundingBox())!;
   expect(phoneShare.height).toBeGreaterThanOrEqual(44);
   expect(phoneShare.width).toBeLessThan(phoneRow.width * 0.6);
-  expect(phoneShare.width).toBeLessThanOrEqual(phoneEdit.width + 16);
+  expect(phoneShare.width).toBeLessThan(phoneDiscovery.width * 0.5);
+  // 2348fc61d moved 分享自由工坊 out of .home-member-actions (0.875rem, 0.5rem 0.8rem) to .home-discovery-links as .btn.btn-primary (0.55rem 0.95rem, bold), adding ~4.8px padding + weight over 5-char 編輯個人頁.
+  expect(phoneShare.width).toBeLessThanOrEqual(phoneEdit.width + 24);
   await noOverflow(page);
 
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -365,12 +417,15 @@ test('the social zone previews, shares, replaces and keeps a thumbnail', async (
   await sharePost(page, INSTAGRAM);
   await sharePost(page, FACEBOOK, 'Facebook 示範');
 
-  await youtube.getByRole('button', { name: '推廣原文', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '分享「E2E 示範影片」', exact: true });
-  await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toHaveCount(0);
-  await expect(dialog.getByRole('button', { name: 'Telegram 分享 ↗', exact: true })).toHaveCount(0);
+  await youtube.getByRole('button', { name: '分享貼文連結', exact: true }).click();
+  const postShare = page.getByRole('dialog', { name: '分享貼文連結', exact: true });
+  const dialog = postShare;
+  await expect(dialog.locator('.share-more')).not.toHaveAttribute('open');
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   const go = (await dialog.locator('.skill-share-url').innerText()).trim();
+  await dialog.getByRole('button', { name: '複製連結', exact: true }).click();
+  await expect(dialog.getByRole('status')).toHaveText('已複製。');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(go);
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, go, url => url.href === YOUTUBE, e2eAuthPool, 'https://www.youtube.com/**');
   await page.reload();
@@ -406,10 +461,11 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
   const avatar = await card.locator('.social-byline .social-avatar').boundingBox();
   expect(avatar!.width).toBeLessThanOrEqual(40);
   const open = await card.getByRole('link', { name: '開啟原文 ↗', exact: true }).boundingBox();
-  const share = await card.getByRole('button', { name: '推廣原文', exact: true }).boundingBox();
-  expect(Math.abs(open!.y - share!.y)).toBeLessThanOrEqual(1);
+  const share = await card.getByRole('button', { name: '分享貼文連結', exact: true }).boundingBox();
+  expect(open!.height).toBeGreaterThanOrEqual(44);
+  expect(share!.height).toBeGreaterThanOrEqual(44);
 
-  await openBoards(page);
+  await navigate(page, '會員首頁');await expandHomeSections(page);
   await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '分享「自由工坊」' });
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
@@ -423,27 +479,32 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
   expect((await leader.boundingBox())!.width).toBeLessThanOrEqual(36);
 });
 
-test('all six boards render, and a board with no clicks says so', async ({ page }) => {
+test('all seven boards render, and a board with no points says so', async ({ page }) => {
   await login(page);
+  // Other cases (and other specs in a CI shard) may give any board points, so the service board
+  // is emptied in the real response: the empty state is then fixed whatever ran before.
+  await page.route(url => url.pathname === '/api/v1/promotion/leaderboards', async route => {
+    const response = await route.fetch();
+    const body = await response.json() as { boards: { kind: string; items: unknown[]; me: unknown }[] };
+    body.boards = body.boards.map(item => item.kind === 'service' ? { ...item, items: [], me: null } : item);
+    await route.fulfill({ response, json: body });
+  });
   await openBoards(page);
-  for (const name of ['名片點擊排行榜', '平台推廣排行榜', '技能推廣排行榜', '社群推廣排行榜', '業務推廣排行榜', '活動推廣排行榜']) {
+  for (const name of ['全部', '開源專案', '連結', '活動', '作品', '貼文', '服務']) {
     await expect(board(page, name)).toBeVisible();
   }
-  const cards = board(page, '名片點擊排行榜');
-  await expect(cards).toContainText('在我的名片分享名片連結，每次點擊 +1。');
-  await expect(cards).toContainText('你在這個排行榜還沒有分數。');
-  await expect(board(page, '業務推廣排行榜')).toContainText('這段期間還沒有計入的點擊。');
+  const services = board(page, '服務');
+  await expect(services).toContainText('發佈或分享社員服務，或有人透過你的連結點進來。');
+  await expect(services).toContainText('你在這個排行榜還沒有分數。');
+  await expect(services).toContainText('這段期間還沒有計入的分數。');
   await expect(page.getByText('計分規則', { exact: true })).toBeVisible();
   const note = page.locator('.promotion-period-note');
-  const mine = page.getByRole('region', { name: '我的推廣連結', exact: true });
+  await expect(page.getByRole('region', { name: '我的推廣連結', exact: true })).toHaveCount(0);
   await expect(note).toHaveText(/^本週：從 \d{1,2}\/\d{1,2}（週一） 00:00（台北時間）起算。每塊榜列出前 10 名，同分同名次。$/);
-  await expect(mine).toContainText('右側數字是本週的點擊分數。');
   await page.getByRole('button', { name: '本月', exact: true }).click();
   await expect(note).toHaveText(/^本月：從 \d{1,2}\/1（週.） 00:00（台北時間）起算。/);
-  await expect(mine).toContainText('右側數字是本月的點擊分數。');
   await page.getByRole('button', { name: '累計', exact: true }).click();
   await expect(note).toHaveText('累計：開站以來的全部點擊。每塊榜列出前 10 名，同分同名次。');
-  await expect(mine).toContainText('右側數字是累計的點擊分數。');
 });
 
 test('計分規則 shows a disclosure marker and opens from a click or Enter', async ({ page }) => {
@@ -451,7 +512,7 @@ test('計分規則 shows a disclosure marker and opens from a click or Enter', a
   await openBoards(page);
   const rules = page.locator('details.promotion-rules');
   const summary = rules.locator('summary');
-  const copy = '同一位訪客每天點同一個連結只算 1 分';
+  const copy = '有人透過你的分享點進來，每份分享每天最多 1 分';
   await expect(summary).toBeVisible();
   expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   const marker = () => summary.evaluate(element => getComputedStyle(element, '::before').content.replaceAll('"', ''));
@@ -478,8 +539,19 @@ test('計分規則 shows a disclosure marker and opens from a click or Enter', a
   }
 });
 
-test('share pages stay inside the viewport and stay readable in every theme', async ({ page }) => {
+async function ensureSocialFixture(pool: Pool, url: string, platform: string, title: string) {
+  await pool.query(`INSERT INTO community_social_posts(community_id,author_user_id,url,platform,title,note,state)
+    SELECT $1,$2,$3,$4,$5,NULL,'active' WHERE NOT EXISTS
+    (SELECT 1 FROM community_social_posts WHERE community_id=$1 AND url=$3 AND state='active')`,
+  [COMMUNITY, MAKER, url, platform, title]);
+}
+
+test('share pages stay inside the viewport and stay readable in every theme', async ({ page, e2eAuthPool }) => {
   test.setTimeout(60_000);
+  await ensureSocialFixture(e2eAuthPool, YOUTUBE, 'youtube', 'E2E 示範影片');
+  await ensureSocialFixture(e2eAuthPool, PLACEHOLDER, 'other', '沒有縮圖的貼文');
+  await ensureSocialFixture(e2eAuthPool, INSTAGRAM, 'instagram', 'Instagram 示範');
+  await ensureSocialFixture(e2eAuthPool, FACEBOOK, 'facebook', 'Facebook 示範');
   await login(page);
   await navigate(page, '社群分享');
   await selectSocialFeed(page,'全部動態');
@@ -540,8 +612,14 @@ async function themeOf(page: Page, theme: 'light' | 'dark' | 'versefolk') {
   await page.evaluate(value => { localStorage.setItem('freedom-theme', value); document.documentElement.dataset.theme = value; }, theme);
 }
 
-test('screenshots cover the boards, social zone, dialogs and interstitial', async ({ page, browser }) => {
+test('screenshots cover the boards, social zone, dialogs and interstitial', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(120_000);
+  const screenshotEventId = randomUUID(), screenshotTitle = `推廣截圖活動 ${screenshotEventId}`;
+  await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
+    VALUES($1,$2,$3,$4,'合成截圖活動',now()-interval '1 day',now()+interval '2 days','online','線上','published','open','other')`,
+  [screenshotEventId, COMMUNITY, MAKER, screenshotTitle]);
+  let screenshotGo = '';
+  try {
   await login(page);
   for (const theme of ['light', 'versefolk'] as const) {
     await openBoards(page);
@@ -552,6 +630,7 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
       await noOverflow(page);
     }
     await page.setViewportSize({ width: 1280, height: 900 });
+    await navigate(page, '會員首頁');await expandHomeSections(page);
     await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '分享「自由工坊」' });
     await expect(dialog.locator('.skill-share-url')).toBeVisible();
@@ -569,20 +648,23 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
     }
     await page.setViewportSize({ width: 1280, height: 900 });
     await navigate(page, '社群活動');
-    const card = page.locator('article.experience-card').filter({ has: page.getByRole('heading', { name: EVENT_TITLE, level: 3 }) });
+    const card = page.locator('article.experience-card').filter({ has: page.getByRole('heading', { name: screenshotTitle, level: 3 }) });
     await card.scrollIntoViewIfNeeded();
-    if (!await card.getByLabel('分享連結').count()) await card.getByRole('button', { name: '分享活動', exact: true }).click();
-    await expect(card.getByLabel('分享連結')).toBeVisible();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-      await card.screenshot({ path: `${SHOTS}/event-share-${theme}-${width}.png` });
+      await card.getByRole('button', { name: '分享活動', exact: true }).click();
+      const eventDialog = page.getByRole('dialog', { name: `分享「${screenshotTitle}」`, exact: true });
+      await expect(eventDialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+      screenshotGo = (await eventDialog.locator('.skill-share-url').innerText()).trim();
+      await eventDialog.screenshot({ path: `${SHOTS}/event-share-${theme}-${width}.png` });
+      await eventDialog.getByRole('button', { name: '關閉分享', exact: true }).click();
     }
   }
 
   const context = await browser.newContext({ userAgent: GUEST_UA, javaScriptEnabled: false });
   const guest = await context.newPage();
   await guest.setViewportSize({ width: 1280, height: 900 });
-  await guest.goto(eventGo || platformGo);
+  await guest.goto(screenshotGo);
   await expect(guest.getByRole('link', { name: '開啟站內內容', exact: true })).toBeVisible();
   await guest.screenshot({ path: `${SHOTS}/interstitial-light-1280.png`, fullPage: true });
   await guest.setViewportSize({ width: 390, height: 844 });
@@ -593,13 +675,21 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
   await guest.setViewportSize({ width: 390, height: 844 });
   await guest.screenshot({ path: `${SHOTS}/interstitial-dark-390.png`, fullPage: true });
   await context.close();
+  } finally {
+    await e2eAuthPool.query(`DELETE FROM promotion_clicks WHERE link_id IN (SELECT link_id FROM promotion_links WHERE kind='event' AND target_key=$1)`, [screenshotEventId]);
+    await e2eAuthPool.query(`DELETE FROM promotion_links WHERE kind='event' AND target_key=$1`, [screenshotEventId]);
+    await e2eAuthPool.query(`DELETE FROM community_event_share_codes WHERE event_id=$1`, [screenshotEventId]);
+    await e2eAuthPool.query(`DELETE FROM community_events WHERE event_id=$1`, [screenshotEventId]);
+  }
 });
 
-test('the author can delete their social post', async ({ page }) => {
+test('the author can delete their social post', async ({ page, e2eAuthPool }) => {
+  await ensureSocialFixture(e2eAuthPool, YOUTUBE, 'youtube', 'E2E 示範影片');
   await login(page);
   await navigate(page, '社群分享');
-  await selectSocialFeed(page,'全部動態');
-  const youtube = page.locator('article.social-card').filter({ has: page.getByRole('heading', { name: 'E2E 示範影片', level: 3 }) });
+  const title = `E2E 刪除影片 ${randomUUID()}`;
+  await sharePost(page, 'https://www.youtube.com/watch?v=e2eDemo0002', title);
+  const youtube = page.locator('article.social-card').filter({ has: page.getByRole('heading', { name: title, level: 3 }) });
   await youtube.getByText('⋯',{exact:true}).click();
   await youtube.getByRole('button', { name: '刪除', exact: true }).click();
   await page.getByRole('dialog', { name: '刪除貼文？', exact: true }).getByRole('button', { name: '確定刪除', exact: true }).click();
@@ -637,13 +727,13 @@ test('members share a personal tester-map link that lands publicly and credits t
   const counted = page.context().waitForEvent('request', { predicate: request => request.url().endsWith('/api/v1/promotion/clicks') });
   await page.goto(url, { waitUntil: 'commit' });
   await counted;
-  await expect(page).toHaveURL(baseURL + '/#tester-map');
+  await expect(page).toHaveURL(baseURL + '/#guilds/guild_custom_032fd02e754549e9b1e056e2b95b8d50/tools/tester-map');
   expect(await destinationPoints(e2eAuthPool, code)).toBe(before);
   const guest = await browser.newContext({ userAgent: GUEST_UA + ' TesterMap/' + Date.now() });
   try {
     const visitor = await guest.newPage();
     await visitor.goto(url, { waitUntil: 'commit' });
-    await expect(visitor).toHaveURL(baseURL + '/#tester-map');
+    await expect(visitor).toHaveURL(baseURL + '/#guilds/guild_custom_032fd02e754549e9b1e056e2b95b8d50/tools/tester-map');
     await expect(visitor.getByRole('heading', { level: 1, name: '測試員地圖', exact: true })).toBeVisible();
     await expect(visitor.locator('.tester-map .promotion-share')).toHaveCount(0);
     await expect(visitor.locator('.tester-map').getByRole('link', { name: '測試員地圖', exact: true })).toHaveAttribute('href', '/#tester-map');
@@ -830,35 +920,40 @@ test('sharing starts with real content choices and keeps ranking optional', asyn
   await login(page);
   let creates = 0;
   page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/api/v1/promotion/links')) creates++; });
-  await navigate(page, '推廣排行榜');
-  const choices = page.getByRole('region', {name:'選擇分享內容'});
+  await navigate(page, '搜尋社群內容');
+  const choices = page.getByRole('combobox', {name:'探索檢視',exact:true});
   await expect(choices).toBeVisible();
-  await expect(page.locator('.promotion-rankings')).not.toHaveAttribute('open');
-  for (const [label, href] of [['找一本技能書','#skills'],['查看社員服務','#services'],['找一場活動','#events'],['閱讀社群分享','#social']]) {
-    await expect(choices.getByRole('link',{name:label,exact:true})).toHaveAttribute('href',href);
+  for (const [label, hash] of [['資源','#explore/resources'],['服務','#explore/services'],['活動','#explore/events']]) {
+    await expect(choices.getByRole('option',{name:label,exact:true})).toHaveAttribute('value',hash);
   }
-  await expect(page.getByRole('region',{name:'我的推廣連結',exact:true})).toBeVisible();
+  await expect(page.getByRole('navigation',{name:'主要工作區',exact:true}).getByRole('button',{name:'動態',exact:true})).toBeVisible();
+  await navigate(page, '推廣排行榜');
+  await expect(page.locator('.legacy-promotion')).not.toHaveAttribute('open');
+  await page.locator('.legacy-promotion > summary').click();
+  await expect(page.locator('.promotion-rankings')).not.toHaveAttribute('open');
+  await expect(page.getByRole('region',{name:'我的推廣連結',exact:true})).toHaveCount(0);
   expect(creates).toBe(0);
   const summary=page.locator('.promotion-rankings > summary');
   await summary.focus(); await summary.press('Enter');
-  await expect(board(page,'平台推廣排行榜')).toBeVisible();
+  await expect(board(page,'連結')).toBeVisible();
   await summary.press('Enter');
-  await expect(board(page,'平台推廣排行榜')).not.toBeVisible();
-  await choices.getByRole('link',{name:'查看社員服務',exact:true}).click();
-  await expect(page).toHaveURL(/#services$/);
+  await expect(board(page,'連結')).not.toBeVisible();
+  await navigate(page, '社員服務');
+  await expect(page).toHaveURL(/#explore\/services$/);
+  await page.goBack();await expect(page).toHaveURL(/#explore$/);
   await page.goBack();
-  await expect(page).toHaveURL(/#promotion$/);
+  await expect(page).toHaveURL(/#me\/credit$/);
   expect(creates).toBe(0);
 });
 
 test('failed personal-link reads are not presented as an empty sharing history', async ({page}) => {
   await login(page);
-  await page.route('**/api/v1/promotion/links/mine?period=*', route => route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({status:503,detail:'合成讀取失敗'})}));
+  await page.route('**/api/v1/me/share-results*', route => route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({status:503,detail:'合成讀取失敗'})}));
   await navigate(page, '推廣排行榜');
-  const mine=page.getByRole('region',{name:'我的推廣連結',exact:true});
-  await expect(mine).toContainText('尚未取得連結紀錄，請重新載入。');
-  await expect(mine).not.toContainText('還沒有建立分享連結。');
-  await page.unroute('**/api/v1/promotion/links/mine?period=*');
-  await page.getByRole('button',{name:'重新載入分享紀錄',exact:true}).click();
-  await expect(mine).not.toContainText('尚未取得連結紀錄');
+  const credit=page.getByRole('region',{name:'我的貢獻',exact:true});
+  await expect(credit.getByRole('alert')).toBeVisible();
+  await expect(credit).not.toContainText('還沒有分享。');
+  await page.unroute('**/api/v1/me/share-results*');
+  await credit.getByRole('button',{name:'再試一次',exact:true}).click();
+  await expect(credit.getByRole('alert')).toHaveCount(0);
 });

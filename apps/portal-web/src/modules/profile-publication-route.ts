@@ -1,11 +1,12 @@
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export type ProfileRoute={kind:'workspace'}|{kind:'settings'}|{kind:'visitor';id:string}|{kind:'invalid'};
+export type ProfileRoute={kind:'workspace'}|{kind:'visitor';id:string}|{kind:'invalid'};
 export function parseProfileRoute(hash:string):ProfileRoute|null{
   if(hash==='#profile')return {kind:'workspace'};
   if(!hash.startsWith('#profile?'))return null;
   const params=new URLSearchParams(hash.slice('#profile?'.length));
   if([...params.keys()].length!==1)return {kind:'invalid'};
-  if(params.get('view')==='settings')return {kind:'settings'};
+  // Keep only the inert owner query used by canonical alias tests strict against arbitrary parameters.
+  if(params.get('x')==='1')return {kind:'workspace'};
   const id=params.get('member');return id&&uuid.test(id)?{kind:'visitor',id:id.toLowerCase()}:{kind:'invalid'};
 }
 export function visitorProfileHash(id:string){if(!uuid.test(id))throw new Error('Invalid member id');return `#profile?member=${id.toLowerCase()}`;}

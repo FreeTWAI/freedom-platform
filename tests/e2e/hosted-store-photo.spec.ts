@@ -160,7 +160,7 @@ test('committed HTTP loss survives actual 401 unmount, other member and same-mem
   });
   await photo(page).getByLabel('商品照片',{exact:true}).setInputFiles(file);
   const retry=photo(page).getByRole('button',{name:'重試原照片操作',exact:true});await expect(retry).toBeVisible();expect(statuses).toEqual([200]);
-  await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(new RegExp('#'+s.hash+'$'));await expect(photo(page)).toContainText(file.name);
+  await page.evaluate(()=>{location.hash='home';});await expect(page).toHaveURL(new RegExp('#guilds/guild_commerce_sales/tools/store/'+s.hash.slice('stores/'.length)+'$'));await expect(photo(page)).toContainText(file.name);
   // The leave guard restores the hash without remounting settings or starting another read.
   // Settle every started read before expiry so only the manual photo retry gets 401.
   await expect(page.locator('#store-settings-panel')).toContainText('可以使用：/shops/'+s.slug);
@@ -618,7 +618,8 @@ test('SC-E2E-68 upload with an unknown result is retried as the same operation (
   await page.evaluate(() => {
     location.hash = 'home';
   });
-  await expect(page).toHaveURL(new RegExp(`#${detailHash}$`));
+  // The supply console's canonical address lives under the supply guild's catalog tool.
+  await expect(page).toHaveURL(new RegExp(`#guilds/guild_product_quality_supply/tools/catalog/${detailHash.slice('stores/'.length)}$`));
   await expect(materialConsole(page).locator('.sc-announcement')).toHaveText(
     '尚未確認原操作的結果，請按「重試」確認後再離開。',
   );
@@ -1806,8 +1807,8 @@ async function photoGrantAll(page:Page,count:number){
  await expect(materialConsole(page).locator('.sc-announcement')).toHaveText('已保存：授權選取的店家。');
 }
 async function photoStoreNavigation(page:Page){
- const nav=page.locator('#workspace-navigation');await nav.locator(':scope > details > summary').click();
- await nav.getByRole('searchbox').fill('我的商店');await nav.getByRole('button',{name:'我的商店',exact:true}).click();
+ // The member's own navigation (the five places), not a bookmark.
+ await navigate(page,'我的商店');await expect(page.locator('.hosted-store')).toBeVisible();
 }
 const partnerPhotoBlock=(page:Page,title:string,product:string)=>sellerPartnerMaterials(page).locator('article.card').filter({hasText:title}).locator('div.stack > div.stack').filter({hasText:product});
 async function photoChoose(page:Page,title:string,product:string,update=false){

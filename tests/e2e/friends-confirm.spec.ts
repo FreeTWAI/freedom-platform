@@ -31,6 +31,13 @@ const state = async (pool: Pool, a: Member, b: Member) => {
   return (await pool.query('SELECT state, aggregate_version::int AS v FROM member_friendships WHERE low_ref=$1 AND high_ref=$2', [low, high])).rows[0] as { state: string; v: number };
 };
 
+async function openFilters(page: Page) {
+  const filters = page.locator('.friends-panel .friends-filters');
+  if (!(await filters.evaluate(element => (element as HTMLDetailsElement).open))) {
+    await filters.locator('> summary').click();
+  }
+}
+
 test('removing a friend and declining a request ask first, and cancelling writes nothing', async ({ page, e2eAuthPool }) => {
   test.setTimeout(120_000);
   const [owner, friend, requester] = [await member(e2eAuthPool, '本人'), await member(e2eAuthPool, '好友'), await member(e2eAuthPool, '邀請者')];
@@ -70,7 +77,7 @@ test('removing a friend and declining a request ask first, and cancelling writes
   await expect(row(friend)).toHaveCount(0);
 
   // Decline: same two steps; only the confirmed decline notifies the requester.
-  await page.getByRole('button', { name: '收到的邀請', exact: true }).click();
+  await page.getByRole('button', { name: '查看邀請', exact: true }).click();
   const decline = row(requester).getByRole('button', { name: '婉拒', exact: true });
   await decline.click();
   const declineGroup = row(requester).getByRole('group', { name: `婉拒「${requester.nickname}」`, exact: true });
@@ -90,6 +97,7 @@ test('removing a friend and declining a request ask first, and cancelling writes
   // Accepting stays a single step.
   const third = await member(e2eAuthPool, '新邀請');
   await friendship(e2eAuthPool, third, owner, 'pending');
+  await openFilters(page);
   await page.getByRole('button', { name: '收到的邀請', exact: true }).click();
   await row(third).getByRole('button', { name: '接受邀請', exact: true }).click();
   await expect(page.getByText(`已和${third.nickname}成為好友。`)).toBeVisible();
@@ -97,6 +105,7 @@ test('removing a friend and declining a request ask first, and cancelling writes
 
   for (const theme of ['light', 'dark', 'versefolk'] as const) {
     await page.evaluate(value => { localStorage.setItem('freedom-theme', value); document.documentElement.dataset.theme = value; }, theme);
+    await openFilters(page);
     await page.getByRole('button', { name: '我的好友', exact: true }).click();
     const settings = row(third).locator('.friends-manage');
     if (!await settings.evaluate(element => (element as HTMLDetailsElement).open)) await settings.locator('summary').click();
@@ -149,6 +158,7 @@ test('an open confirmation closes when the visible result set changes by search 
 
   // A search that still shows the same person also starts closed.
   const named = await openConfirmation();
+  await openFilters(page);
   await page.getByLabel('搜尋好友名稱', { exact: true }).fill(named);
   await page.getByRole('button', { name: '搜尋好友', exact: true }).click();
   await expect(rows).toHaveCount(1);

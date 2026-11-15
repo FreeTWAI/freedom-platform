@@ -35,3 +35,37 @@ test('password reset link is private, one-use, expiring, and revokes old session
   await pool.query("UPDATE password_reset_tokens SET created_at=now()-interval '40 minutes',expires_at=now()-interval '1 second' WHERE token_hash=(SELECT token_hash FROM password_reset_tokens ORDER BY created_at DESC LIMIT 1)");
   assert.equal((await post('/auth/reset/confirm',{token:expired,password:'another-password-2026'})).status,422);
 });
+
+test('reset request responds while sender is still blocked and deletes token after sender fails',async()=>{
+  const pending:Promise<void>[]=[];
+  let rejectSend:((error:Error)=>void)|undefined;
+  let started=false,settled=false;
+  const deferredApp=createApp(pool,origin,'local',{
+    passwordEmailSender:()=>{started=true;return new Promise((_,reject)=>{rejectSend=reject;});},
+    afterResponse:job=>{pending.push(job());},
+  });
+  await pool.query('DELETE FROM password_reset_tokens WHERE user_id=$1',[DEMO_USERS[1].user_id]);
+  const reqPromise=Promise.resolve(deferredApp.request(`${origin}/api/v1/auth/reset/request`,{
+    method:'POST',
+    headers:{Origin:origin,'Content-Type':'application/json'},
+    body:JSON.stringify({email:DEMO_USERS[1].email}),
+  })).then(r=>{settled=true;return r;});
+  try{
+    for(let i=0;i<50&&(!started||!settled);i++)await new Promise(r=>setTimeout(r,10));
+    assert.equal(started,true);
+    assert.equal(settled,true,'response must arrive while test sender is still blocked');
+    const response=await reqPromise;
+    assert.equal(response.status,200);
+    const body=await response.json() as any;
+    assert.equal(body.requested,true);
+    assert.equal(pending.length,1);
+    assert.equal((await pool.query('SELECT 1 FROM password_reset_tokens WHERE user_id=$1',[DEMO_USERS[1].user_id])).rowCount,1);
+    rejectSend!(new Error('provider failed'));
+    await Promise.all(pending);
+    assert.equal((await pool.query('SELECT 1 FROM password_reset_tokens WHERE user_id=$1',[DEMO_USERS[1].user_id])).rowCount,0);
+  }finally{
+    rejectSend?.(new Error('cleanup'));
+    await Promise.allSettled(pending);
+    await reqPromise.catch(()=>{});
+  }
+});

@@ -22,7 +22,7 @@ function decodeEntities(value: string) {
     .replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
 }
 
-function attributes(tag: string) {
+export function attributes(tag: string) {
   const found: Record<string, string> = {};
   for (const match of tag.matchAll(/(?:^|\s)([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) {
     found[match[1].toLowerCase()] = decodeEntities(match[2] ?? match[3] ?? match[4] ?? '');
@@ -30,7 +30,7 @@ function attributes(tag: string) {
   return found;
 }
 
-function meta(html: string, key: string) {
+export function meta(html: string, key: string) {
   for (const tag of html.match(/<meta\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi) ?? []) {
     const attrs = attributes(tag);
     if ((attrs.property || attrs.name || '').toLowerCase() === key && attrs.content?.trim()) return attrs.content.trim();
@@ -128,7 +128,7 @@ async function asThumbnail(bytes: Buffer, type: string) {
   try { return await normalizeRemoteThumbnail(bytes); } catch { return null; }
 }
 
-function htmlText(body: Buffer, contentType: string) {
+export function htmlText(body: Buffer, contentType: string) {
   // Consume parameters in order: a failed quoted value must not restart at its inner semicolon.
   const emptyParameter = /;[ \t]*(?=;|$)/y;
   const parameter = /;\s*([^;=\s]+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|([^;"\s]+))\s*(?=;|$)/y;
@@ -181,4 +181,9 @@ export async function previewLink(rawUrl: string, fetcher: PreviewFetch, timeout
   const image = await fetchChecked(fetcher, imageUrl, deadline, 'image/jpeg,image/png,image/webp', IMAGE_LIMIT);
   const thumb = image ? await asThumbnail(image.body, image.type) : null;
   return { title, image: thumb, source: thumb ? 'page' : null };
+}
+
+/** Bounded document port. Transport must be the host-provided DNS/egress guarded preview fetch. */
+export async function previewDocument(url:string,fetcher:PreviewFetch,deadline=Date.now()+6000){
+ return fetchChecked(fetcher,url,deadline,'text/html,application/ld+json,text/calendar',HTML_LIMIT);
 }

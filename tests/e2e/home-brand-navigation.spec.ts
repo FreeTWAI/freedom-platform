@@ -9,7 +9,7 @@ async function login(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 
 test('the wordmark is a guarded native home link and exploration never forces itself open',async({page,context})=>{
@@ -58,21 +58,21 @@ test('the wordmark is a guarded native home link and exploration never forces it
   await page.setViewportSize({width:1280,height:844});
   await expect(exploration).toHaveJSProperty('open',true);
   await page.goto('/?from=home-entry-test#skills');
-  await expect(page.getByRole('heading',{name:'技能書架',level:1,exact:true})).toBeVisible();
-  await expect(page).toHaveURL(/\?from=home-entry-test#skills$/);
+  await expect(page.getByRole('heading',{name:'探索',level:1,exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/\?from=home-entry-test#explore\/resources$/);
   const originalUrl=page.url();
   const popupPromise=context.waitForEvent('page');
   await home.click({modifiers:['ControlOrMeta']});
   const popup=await popupPromise;
   await expect(popup).toHaveURL(/\/#home$/);
-  await expect(popup.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(popup.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await expect(page).toHaveURL(originalUrl);
   await popup.close();
   await reachByKeyboard(page,home);
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/#home$/);
   await expect(exploration).toHaveJSProperty('open',false);
-  await page.goBack();await expect(page).toHaveURL(/\?from=home-entry-test#skills$/);
+  await page.goBack();await expect(page).toHaveURL(/\?from=home-entry-test#explore\/resources$/);
   await page.goForward();await expect(page).toHaveURL(/#home$/);
   await expect(exploration).toHaveJSProperty('open',false);
   await page.reload();
@@ -112,7 +112,7 @@ test('compact header reserves its image space while loading and when the asset f
 
 test('home keeps accessible headings while feed controls and mobile navigation stay compact',async({page})=>{
   await login(page);
-  const heading=page.getByRole('heading',{name:'會員首頁',level:1,exact:true});
+  const heading=page.getByRole('heading',{name:'動態',level:1,exact:true});
   await expect(heading).toHaveCount(1);
   const feed=page.locator('.home-timeline .social-zone');
   const filters=feed.locator('.social-feed-navigation');
@@ -143,9 +143,10 @@ test('home keeps accessible headings while feed controls and mobile navigation s
         const box=(await item.boundingBox())!;
         expect(box.height).toBeGreaterThanOrEqual(44);
         expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
-        const icon=(await item.locator('.workshop-icon').boundingBox())!;
-        const label=(await item.locator('span').last().boundingBox())!;
-        expect(label.x).toBeGreaterThan(icon.x+icon.width);
+        // Five text-only place buttons replace the old icon/label pairs.
+        const label=await item.evaluate(element=>{const range=document.createRange();range.selectNodeContents(element);const rect=range.getBoundingClientRect();return {x:rect.x,right:rect.right};});
+        expect(label.x).toBeGreaterThanOrEqual(box.x);
+        expect(label.right).toBeLessThanOrEqual(box.x+box.width);
       }
       await nav.getByRole('button',{name:'收合導覽',exact:true}).click();
       await expect(nav).not.toBeVisible();await expect(toggle).toBeFocused();
@@ -183,11 +184,12 @@ for(const width of [320,390,768,1440])for(const theme of ['light','dark','versef
     });
     expect(visual).toEqual({corners:[0,0,0,0],fit:'contain',background:'rgba(0, 0, 0, 0)',shadow:'none'});
     await page.getByLabel('電子郵件',{exact:true}).fill('logo-entry@example.test');
-    const switcher=page.getByRole('group',{name:'登入或建立帳號'});
-    for(const label of ['建立帳號','會員登入','建立帳號']){
-      const button=switcher.getByRole('button',{name:label,exact:true});
+    await expect(page.getByRole('group',{name:'登入或建立帳號'})).toHaveCount(0);
+    for(const step of [{label:'免費加入',heading:'加入自由工坊'},{label:'會員登入',heading:'登入'},{label:'免費加入',heading:'加入自由工坊'}]){
+      const button=page.getByRole('button',{name:step.label,exact:true});
       await button.focus();await button.press('Space');
-      await expect(button).toHaveAttribute('aria-pressed','true');
+      await expect(button).toHaveCount(0);
+      await expect(page.getByRole('heading',{name:step.heading,exact:true})).toBeVisible();
       await expect(page.getByLabel('電子郵件',{exact:true})).toHaveValue('logo-entry@example.test');
       await expect(logo).toBeVisible();
       const current=(await logo.boundingBox())!;
@@ -205,7 +207,7 @@ test('login wordmark failure retains its space and accessible name through regis
   await page.goto('/');
   const logo=page.locator('.login-entry-logo');
   for(const action of ['login','register','reload']){
-    if(action==='register')await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+    if(action==='register')await page.getByRole('button',{name:'免費加入',exact:true}).click();
     if(action==='reload')await page.reload();
     await expect(logo).toBeVisible();await expect(logo).toHaveAccessibleName('自由工坊');
     await expect(logo).toHaveJSProperty('naturalWidth',0);

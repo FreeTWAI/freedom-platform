@@ -4,6 +4,14 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {expect,type Page} from './fixtures.js';
 
+export async function openWorkForm(page:Page) {
+  const title=page.getByLabel('作品標題',{exact:true});
+  const trigger=page.locator('.work-sharing-entry').getByRole('button',{name:'發布作品',exact:true});
+  await expect(title.or(trigger)).toBeVisible();
+  if(!(await title.isVisible()))await trigger.click();
+  await expect(title).toBeVisible();
+}
+
 // Real React components, synthetic transport only. This fixture verifies client
 // session/remount behavior, not database authorization or real publication.
 export async function mountSharingFixture(page:Page, kind='probe') {
@@ -15,15 +23,20 @@ export async function mountSharingFixture(page:Page, kind='probe') {
     import {client,PortalContext} from './apps/portal-web/src/portal-session';
     import {useAuthoringDraft,setSharingDraftAccount,authoringDraftState,sharingMutationState} from './apps/portal-web/src/modules/authoring-drafts';
     import {useModuleMutation,performModuleMutation} from './apps/portal-web/src/modules/shared';
-    import {SimpleSkillSubmission} from './apps/portal-web/src/modules/SimpleSkillSubmission';
+    import {SkillSubmission} from './apps/portal-web/src/modules/SkillSubmission';
     import {CoCreationPanel} from './apps/portal-web/src/modules/CoCreationPanel';
     import {ShowcasePanel} from './apps/portal-web/src/modules/ShowcasePanel';
     import {MemberBlockingAction} from './apps/portal-web/src/modules/MemberBlocking';
-    import {ShareLauncher,SHARE_TARGETS} from './apps/portal-web/src/ShareLauncher';
+    import {ShareBoxLauncher} from './apps/portal-web/src/share/ShareBox';
     import {MyContent} from './apps/portal-web/src/modules/MyContent';
+    import {PersonalSpace} from './apps/portal-web/src/modules/PersonalSpace';
     import {Navigation} from './apps/portal-web/src/Navigation';
+    import {PlaceView} from './apps/portal-web/src/features/PlaceView';
+    import {portalHash,canonicalHash} from './apps/portal-web/src/portal-route';
     import {LanguageProvider} from './apps/portal-web/src/language';
     import {CommunitySearch} from './apps/portal-web/src/modules/CommunitySearch';
+    // The product's share launcher, mounted the way App mounts it (App also names it ShareLauncher).
+    const ShareLauncher=props=><ShareBoxLauncher client={client} userId={user} {...props}/>;
     const owner='10000000-0000-4000-8000-000000000001',other='10000000-0000-4000-8000-000000000002';
     const pending=[],calls=[],reads=[],pendingReads=[];
     let user=owner,token='synthetic-session-1',projects=[],drafts=[],showcases=[],opportunities=[],blocked=false,render,content=[],deferReads=false,enabled=true,resumeId=null;
@@ -33,6 +46,7 @@ export async function mountSharingFixture(page:Page, kind='probe') {
     client.get=async path=>{reads.push(path);
       if(deferReads&&(path==='/me/content'||path.startsWith('/me/skill-submissions/'))){const deferred=Promise.withResolvers();pendingReads.push({path,...deferred});return deferred.promise;}
       if(path==='/me/content')return {items:content};
+      if(path.startsWith('/members/'))return {user_id:user,is_self:true,nickname:'Synthetic member',primary_guild:null,secondary_guilds:[]};
       if(path.startsWith('/me/showcases/')){const row=showcases.find(row=>path.endsWith('/'+row.showcase_id));if(row)return row;throw Error('Missing synthetic showcase');}
       if(path.startsWith('/community-search?'))return {items:[],next_cursor:null};
       if(path==='/community-relations/bookmarks')return {items:[],next_cursor:null};
@@ -72,36 +86,39 @@ export async function mountSharingFixture(page:Page, kind='probe') {
       return <><output aria-label="Load cycles">{loads}</output><output aria-label="Error value">{error??'none'}</output><button onClick={()=>setRenders(v=>v+1)}>Unrelated render {renders}</button><button onClick={()=>setError('Synthetic error')}>Set error</button><button onClick={()=>setError(null)}>Clear error</button></>;
     }
     function Fixture(){
-      const [mounted,setMounted]=useState(true),[version,setVersion]=useState(0),[guided,setGuided]=useState(false),[target,setTarget]=useState('');render=()=>setVersion(v=>v+1);
+      const [mounted,setMounted]=useState(true),[version,setVersion]=useState(0),[target,setTarget]=useState(''),[contentHash,setContentHash]=useState('#me');render=()=>setVersion(v=>v+1);
       const session={user:{user_id:user},csrf_token:token};
+      useEffect(()=>{const changed=()=>setContentHash(canonicalHash(window.location.hash||'#me'));window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[]);
+      const selectContent=(id,hash)=>{setTarget(id);const next=hash??portalHash(id);setContentHash(next);window.location.hash=next;};
       const value={session,pending:null,error:null,mutate:()=>{throw Error('Authoring must use exact request identity')},clearError:()=>{},isMe:ref=>ref===user};
-      return <><button onClick={()=>setMounted(v=>!v)}>Toggle form</button><button onClick={()=>setGuided(v=>!v)}>Toggle guidance</button>
+      return <><button onClick={()=>setMounted(v=>!v)}>Toggle form</button>
         <output aria-label="Destination">{target}</output>
         {user&&mounted&&<PortalContext.Provider value={value}><div key={user+':'+client.sessionGeneration}>
-          {${JSON.stringify(kind)}==='identity'?<ErrorIdentityProbe/>:${JSON.stringify(kind)}==='probe'?<Probe/>:${JSON.stringify(kind)}==='skill'?<SimpleSkillSubmission client={client} userId={user} onPublished={async()=>{}}/>:
-          ${JSON.stringify(kind)}==='resume'?<SimpleSkillSubmission client={client} userId={user} resumeId={resumeId} onPublished={async()=>{}} onOpenDraft={id=>setTarget('advanced:'+id)}/>:
-          ${JSON.stringify(kind)}==='content'?<LanguageProvider><Navigation current="my-content" onSelect={id=>setTarget(id)} canManageGuild={false} guildLaunchpadEnabled={false} communitySearchEnabled={false} personalContentEnabled={enabled} mobileOpen/><ShareLauncher onChoose={()=>{}} onMyContent={enabled?()=>setTarget('my-content'):undefined}/><MyContent/></LanguageProvider>:
-          ${JSON.stringify(kind)}==='relations'?<CommunitySearch client={client} authKey={user+':'+client.sessionGeneration} relationsEnabled={enabled}/>:
+          {${JSON.stringify(kind)}==='identity'?<ErrorIdentityProbe/>:${JSON.stringify(kind)}==='probe'?<Probe/>:${JSON.stringify(kind)}==='skill'?<SkillSubmission client={client} userId={user} onPublished={async()=>{}}/>:
+          ${JSON.stringify(kind)}==='resume'?<SkillSubmission client={client} userId={user} resumeId={resumeId} onPublished={async()=>{}}/>:
+          ${JSON.stringify(kind)}==='content'?<LanguageProvider><Navigation current="profile" currentHash={contentHash} onSelect={selectContent} canManageGuild={false} guildLaunchpadEnabled={false} communitySearchEnabled={false} personalContentEnabled={enabled} mobileOpen/><PlaceView defaultTab="profile" context={{client,session,locationHash:contentHash,site:{personal_content_enabled:enabled},selectTab:selectContent}} render={tab=>tab==='my-content'?<MyContent/>:<PersonalSpace client={client} session={session} contentEnabled={enabled}/>}/><ShareLauncher onChoose={()=>{}}/></LanguageProvider>:
+          ${JSON.stringify(kind)}==='relations'?<LanguageProvider><React.Suspense fallback={null}><PlaceView defaultTab="profile" context={{client,session,locationHash:contentHash,site:{community_relations_enabled:enabled},selectTab:selectContent}} render={()=>null}/></React.Suspense><CommunitySearch client={client} authKey={user+':'+client.sessionGeneration} relationsEnabled={enabled}/></LanguageProvider>:
           ${JSON.stringify(kind)}==='cooperation'?<CoCreationPanel client={client} session={session}/>:
           ${JSON.stringify(kind)}==='showcase'?<ShowcasePanel/>:
           ${JSON.stringify(kind)}==='blocking'?<MemberBlockingAction client={client} userId={other} nickname="Synthetic peer" onChanged={()=>{}}/>:
-          <ShareLauncher guided={guided} onChoose={name=>setTarget(name+':'+SHARE_TARGETS[name].tab)}/>}
+          null}
         </div></PortalContext.Provider>}</>;
     }
     createRoot(document.getElementById('root')).render(<Fixture/>);
   `},bundle:true,write:false,format:'iife',platform:'browser',loader:{'.css':'empty'},logLevel:'silent'}).outputFiles[0].text;
   await page.route('**/__sharing-authoring-fixture',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><body><div id="root"></div></body></html>'}));
   await page.goto('/__sharing-authoring-fixture');
-  await page.addStyleTag({content:readFileSync(root+'/apps/portal-web/src/styles.css','utf8')+'\n'+readFileSync(root+'/apps/portal-web/src/ShareLauncher.css','utf8')});
+  await page.addStyleTag({content:readFileSync(root+'/apps/portal-web/src/styles.css','utf8')+'\n'+readFileSync(root+'/apps/portal-web/src/share/share.css','utf8')});
   await page.addScriptTag({content:script});
 }
 const fixture=(page:Page,body:(f:any)=>unknown)=>page.evaluate(body=>new Function('f','return ('+body+')(f)')((window as any).sharingFixture),body.toString());
 const remount=async(page:Page)=>{await page.getByRole('button',{name:'Toggle form',exact:true}).click();await page.getByRole('button',{name:'Toggle form',exact:true}).click();};
+const startManualSkill=async(page:Page,url='https://github.com/synthetic/repo')=>{await page.getByLabel('GitHub 專案網址',{exact:true}).fill(url);await page.getByRole('button',{name:'下一步',exact:true}).click();await page.getByRole('button',{name:'我自己填',exact:true}).click();};
 
 export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   'manual skill save-only retains one draft through preview close editing and explicit publish':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await startManualSkill(page);
     await page.getByLabel('作品名稱',{exact:true}).fill('Private skill');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
@@ -131,7 +148,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'manual skill rejected publication then unknown revision retries the manual tuple after remount':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await startManualSkill(page);
     await page.getByLabel('作品名稱',{exact:true}).fill('Rejected publication');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
@@ -155,7 +172,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'manual skill unknown save retains its exact tuple across a definitive rate limit':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await startManualSkill(page);
     await page.getByLabel('作品名稱',{exact:true}).fill('Ambiguous save');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
@@ -174,7 +191,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'manual skill saved draft reload reads server list and resumes without treating save as publish':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await startManualSkill(page);
     await page.getByLabel('作品名稱',{exact:true}).fill('Reload private skill');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Server-backed private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
@@ -185,9 +202,9 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.evaluate(stored=>(window as any).sharingFixture.drafts([stored]),stored);
     await remount(page);
-    await expect(page.getByLabel('作品名稱',{exact:true})).toHaveValue('');
-    await page.getByText(/繼續未公開的草稿/).click();
-    await page.getByRole('button',{name:'繼續投稿：Reload private skill',exact:true}).click();
+    await expect(page.getByLabel('GitHub 專案網址',{exact:true})).toHaveValue('');
+    await expect(page.getByLabel('作品名稱',{exact:true})).toHaveCount(0);
+    await page.getByRole('region',{name:'我的投稿草稿'}).getByRole('button',{name:'預覽並公開：Reload private skill',exact:true}).click();
     await expect(page.getByRole('button',{name:'重試公開投稿',exact:true})).toBeDisabled();
     await page.getByRole('button',{name:'修改內容',exact:true}).click();
     await expect(page.getByLabel('一句話介紹',{exact:true})).toHaveValue('Server-backed private description');
@@ -195,7 +212,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'manual skill save unknown retries original request after close without publishing':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await startManualSkill(page);
     await page.getByLabel('作品名稱',{exact:true}).fill('Unknown save');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
@@ -211,7 +228,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'manual skill required text validation and server URL rejection preserve fields without publication':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await startManualSkill(page);
     await page.getByLabel('作品名稱',{exact:true}).fill('   ');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Retained description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
@@ -232,20 +249,21 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'manual skill save-only late response is isolated from another account':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await startManualSkill(page);
     await page.getByLabel('作品名稱',{exact:true}).fill('Owner private content');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     await fixture(page,f=>f.session(f.other));
     await fixture(page,f=>f.resolve(0,{submission_id:'old-owner-save',status:'ready_for_review',can_edit:true,aggregate_version:1,payload:{...f.calls[0].body},public_path:null}));
-    await expect(page.getByLabel('作品名稱',{exact:true})).toHaveValue('');
+    await expect(page.getByLabel('GitHub 專案網址',{exact:true})).toHaveValue('');
+    await expect(page.getByLabel('作品名稱',{exact:true})).toHaveCount(0);
     await expect(page.getByText(/已保存私人草稿/)).toHaveCount(0);
     expect(await fixture(page,f=>f.calls.length)).toBe(1);
   },
 
   'manual skill unknown save during publish locks editing and recovers the original save tuple':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await startManualSkill(page);
     await page.getByLabel('作品名稱',{exact:true}).fill('Publish save recovery');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
@@ -264,7 +282,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'manual skill unknown publish bypasses dirty save and withdrawal resets the next draft label':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo.git/');
+    await startManualSkill(page,'https://github.com/synthetic/repo.git/');
     await page.getByLabel('作品名稱',{exact:true}).fill('Unknown publish');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
@@ -291,14 +309,14 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
 
   'private showcase unknown create survives Close reopen with exact replay':async page=>{
     await mountSharingFixture(page,'content');
-    await page.getByRole('button',{name:'新增私人作品草稿',exact:true}).click();
+    await page.getByRole('link',{name:'新增作品草稿',exact:true}).click();
     await page.getByLabel('作品標題',{exact:true}).fill('Unknown private draft');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     await fixture(page,f=>f.reject(0));
     await expect(page.getByRole('button',{name:'重試原請求',exact:true})).toBeVisible();
     await page.getByRole('button',{name:'回到內容清單',exact:true}).click();
-    await page.getByRole('button',{name:'新增私人作品草稿',exact:true}).click();
+    await page.getByRole('link',{name:'新增作品草稿',exact:true}).click();
     await expect(page.getByLabel('作品標題',{exact:true})).toHaveValue('Unknown private draft');
     await page.getByRole('button',{name:'重試原請求',exact:true}).click();
     expect(await fixture(page,f=>JSON.stringify(f.calls[0])===JSON.stringify(f.calls[1]))).toBe(true);
@@ -307,7 +325,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'saved new showcase keeps dirty input after Close and PATCHes its saved ID':async page=>{
     await mountSharingFixture(page,'content');
-    await page.getByRole('button',{name:'新增私人作品草稿',exact:true}).click();
+    await page.getByRole('link',{name:'新增作品草稿',exact:true}).click();
     await page.getByLabel('作品標題',{exact:true}).fill('Saved private draft');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
@@ -315,7 +333,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await expect(page.getByRole('region',{name:'私人作品編輯'})).toContainText('私人草稿已儲存');
     await page.getByLabel('作品標題',{exact:true}).fill('Unsent private edit');
     await page.getByRole('button',{name:'回到內容清單',exact:true}).click();
-    await page.getByRole('link',{name:'編輯',exact:true}).click();
+    await page.getByRole('link',{name:'開啟原始內容',exact:true}).click();
     await expect(page.getByLabel('作品標題',{exact:true})).toHaveValue('Unsent private edit');
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     expect(await fixture(page,f=>({path:f.calls[1].path,title:f.calls[1].body.title,version:f.calls[1].options.ifMatch}))).toEqual({path:'/me/showcases/saved-private',title:'Unsent private edit',version:1});
@@ -324,6 +342,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'authoritative gallery removal cannot resurrect the last publication receipt':async page=>{
     await mountSharingFixture(page,'showcase');
+    await openWorkForm(page);
     await page.getByLabel('作品標題',{exact:true}).fill('Withdrawn work');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Description');
     await page.getByLabel('我同意以社群可見方式分享這件作品').check();
@@ -339,21 +358,23 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     for(const width of [1280,320,390])for(const theme of ['light','dark','versefolk']){
       await page.setViewportSize({width,height:844});await mountSharingFixture(page,'content');
       await page.evaluate(value=>{document.documentElement.dataset.theme=value},theme);
-      await expect(page.getByRole('heading',{name:'草稿與已發布內容'})).toBeVisible();
-      const primary=page.locator('.nav-primary').getByRole('button',{name:'我的個人空間',exact:true});
+      await expect(page.getByRole('heading',{name:'我的內容'})).toBeVisible();
+      const primary=page.locator('.nav-primary').getByRole('button',{name:'我的',exact:true});
       await primary.focus();await page.keyboard.press('Enter');await expect(page.getByLabel('Destination')).toHaveText('profile');
       await expect(page.locator('.nav-primary').getByRole('button',{name:'我的內容',exact:true})).toHaveCount(0);
-      await page.locator('.nav-more > summary').click();
-      await page.getByRole('searchbox').fill('我的內容');
-      await page.getByRole('button',{name:'我的內容',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByLabel('Destination')).toHaveText('my-content');
+      await expect(page.locator('.nav-more, .nav-search')).toHaveCount(0);
+      const views=page.getByRole('combobox',{name:'我的檢視',exact:true});
+      await views.focus();await page.keyboard.press('Home');await page.keyboard.press('Enter');
+      await expect(views).toHaveValue('#me');await expect(page.getByLabel('Destination')).toHaveText('profile');await expect(views.getByRole('option',{name:'草稿',exact:true})).toHaveCount(0);
       const trigger=page.getByRole('button',{name:'分享或提交'});await trigger.focus();await page.keyboard.press('Enter');
       await expect(page.getByRole('dialog')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       await page.keyboard.press('Escape');await expect(trigger).toBeFocused();
-      await trigger.click();await page.getByRole('dialog').getByRole('button',{name:/我的內容/}).focus();await page.keyboard.press('Enter');
+      await trigger.click();await expect(page.getByRole('dialog').getByRole('button',{name:/我的內容/})).toHaveCount(0);await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).not.toBeVisible();await expect(trigger).toBeFocused();
       await fixture(page,f=>f.enabled(false));await trigger.click();await expect(page.getByRole('dialog').getByRole('button',{name:/我的內容/})).toHaveCount(0);
-      await page.keyboard.press('Escape');await page.locator('.nav-more > summary').click();
-      await page.getByRole('searchbox').fill('我的內容');await expect(page.getByRole('button',{name:'我的內容',exact:true})).toHaveCount(0);
+      await page.keyboard.press('Escape');
+      await expect(views.getByRole('option',{name:'草稿',exact:true})).toHaveCount(0);
+      await expect(page.locator('.nav-primary').getByRole('button',{name:'我的內容',exact:true})).toHaveCount(0);
     }
   },
   'private content late reads never cross same-user replacement account switch logout or expiry':async page=>{
@@ -387,8 +408,14 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await fixture(page,f=>f.reject(0));await expect(page.getByRole('heading',{name:'Local resumed edit'})).toBeVisible();
   },
   'community relations flag restores private controls only for enabled member':async page=>{
-    await mountSharingFixture(page,'relations');await expect(page.getByRole('heading',{name:'我的書籤與追蹤'})).toBeVisible();
-    await fixture(page,f=>f.enabled(false));await expect(page.getByRole('heading',{name:'我的書籤與追蹤'})).toHaveCount(0);
+    await mountSharingFixture(page,'relations');
+    await page.locator('details.explore-filters > summary').click();
+    await expect(page.locator('details.explore-filters').getByRole('region',{name:'我的私人書籤與追蹤',exact:true})).toHaveCount(0);
+    await page.getByLabel('我的檢視',{exact:true}).selectOption('#me/saved');
+    await expect(page.getByRole('region',{name:'我的私人書籤與追蹤',exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'我的書籤與追蹤',exact:true})).toBeVisible();
+    await fixture(page,f=>f.enabled(false));
+    await expect(page.getByRole('heading',{name:'我的書籤與追蹤',exact:true})).toHaveCount(0);
   },
   'stable mutation error setter does not loop a dependent Guilds-style load effect':async page=>{
     await mountSharingFixture(page,'identity');await expect(page.getByLabel('Load cycles')).toHaveText('1');
@@ -424,7 +451,8 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'manual skill retry preserves draft edit contract and canonical publication link':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');await page.getByLabel('作品名稱',{exact:true}).fill('Original title');await page.getByLabel('一句話介紹',{exact:true}).fill('Synthetic description');await fillSkillPageContent(page);
+    await startManualSkill(page);
+    await page.getByLabel('作品名稱',{exact:true}).fill('Original title');await page.getByLabel('一句話介紹',{exact:true}).fill('Synthetic description');await fillSkillPageContent(page);
     await remount(page);await page.getByRole('button',{name:'預覽投稿',exact:true}).click();await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();
     await page.getByRole('button',{name:'確認並公開',exact:true}).click();
     await fixture(page,f=>f.resolve(0,{submission_id:'10000000-0000-4000-8000-000000000099',status:'ready_for_review',can_edit:true,aggregate_version:1,payload:{...f.calls[0].body},public_path:null}));
@@ -440,9 +468,9 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'late old-session manual create cannot trigger publication':async page=>{
     for(const replacement of ['switch','same-user']){
-      await mountSharingFixture(page,'skill');await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');await page.getByLabel('作品名稱',{exact:true}).fill('Private');await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);await page.getByRole('button',{name:'預覽投稿',exact:true}).click();await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();await page.getByRole('button',{name:'確認並公開',exact:true}).click();
+      await mountSharingFixture(page,'skill');await startManualSkill(page);await page.getByLabel('作品名稱',{exact:true}).fill('Private');await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);await page.getByRole('button',{name:'預覽投稿',exact:true}).click();await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();await page.getByRole('button',{name:'確認並公開',exact:true}).click();
       await fixture(page,replacement==='switch'?f=>f.session(f.other):f=>f.session(f.owner));await fixture(page,f=>f.resolve(0,{submission_id:'late-draft',aggregate_version:1}));
-      await expect(page.getByLabel('作品名稱',{exact:true})).toHaveValue('');expect(await fixture(page,f=>f.calls.length)).toBe(1);
+      await expect(page.getByLabel('GitHub 專案網址',{exact:true})).toHaveValue('');await expect(page.getByLabel('作品名稱',{exact:true})).toHaveCount(0);expect(await fixture(page,f=>f.calls.length)).toBe(1);
     }
   },
   'existing blocking unknown failure keeps its retry key and original version':async page=>{
@@ -458,7 +486,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await expect(page.getByRole('heading',{name:'Synthetic invitation',exact:true})).toBeVisible();expect(await fixture(page,f=>f.reads.filter((p:string)=>p==='/co-creation/projects').length)).toBeGreaterThanOrEqual(3);
   },
   'work draft consent pending and real receipt survive remount; unknown retry is exact':async page=>{
-    await mountSharingFixture(page,'showcase');await page.getByLabel('作品標題',{exact:true}).fill('Synthetic work');await page.getByLabel('一句話介紹',{exact:true}).fill('Synthetic description');await page.getByLabel('我同意以社群可見方式分享這件作品').check();await remount(page);
+    await mountSharingFixture(page,'showcase');await openWorkForm(page);await page.getByLabel('作品標題',{exact:true}).fill('Synthetic work');await page.getByLabel('一句話介紹',{exact:true}).fill('Synthetic description');await page.getByLabel('我同意以社群可見方式分享這件作品').check();await remount(page);
     await expect(page.getByLabel('作品標題',{exact:true})).toHaveValue('Synthetic work');await expect(page.getByLabel('我同意以社群可見方式分享這件作品')).toBeChecked();await page.getByRole('button',{name:'發布作品',exact:true}).click();await remount(page);await expect(page.getByLabel('作品標題',{exact:true})).toBeDisabled();
     await fixture(page,f=>f.reject(0));await page.getByRole('button',{name:'發布作品',exact:true}).click();expect(await fixture(page,f=>JSON.stringify(f.calls[0])===JSON.stringify(f.calls[1]))).toBe(true);
     await fixture(page,f=>f.resolve(1,{...f.calls[0].body,showcase_id:'synthetic-work',owner_ref:f.owner,owner_name:'Synthetic owner',artifact_ref:'artifact:synthetic'}));await expect(page.getByRole('region',{name:'作品發布成功'})).toBeVisible();await page.getByRole('button',{name:'查看剛分享的作品',exact:true}).click();await expect(page.locator('#showcase-synthetic-work')).toBeFocused();
@@ -468,10 +496,5 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await page.getByRole('button',{name:'我想找你合作',exact:true}).click();await page.getByRole('textbox',{name:'你的需求',exact:true}).fill('Synthetic bilateral request');await remount(page);await expect(page.getByRole('textbox',{name:'你的需求',exact:true})).toHaveValue('Synthetic bilateral request');await page.getByRole('button',{name:'送出合作需求',exact:true}).click();await remount(page);await expect(page.getByRole('textbox',{name:'你的需求',exact:true})).toBeDisabled();await fixture(page,f=>f.reject(0));await page.getByRole('button',{name:'送出合作需求',exact:true}).click();expect(await fixture(page,f=>JSON.stringify(f.calls[0])===JSON.stringify(f.calls[1]))).toBe(true);
     await fixture(page,f=>{const raw={...f.calls[0].body,opportunity_id:'saved-need',provider_ref:f.other,client_ref:f.owner,state:'open',aggregate_version:1};f.opportunities([{...raw,showcase_title:'Peer work',provider_name:'Synthetic peer',client_name:'Synthetic owner'}]);f.resolve(1,raw)});
     await expect(page.locator('#opportunity-saved-need')).toContainText('Synthetic bilateral request');await page.getByRole('button',{name:'查看這份合作需求',exact:true}).click();await expect(page.locator('#opportunity-saved-need')).toBeFocused();
-  },
-  'guided launcher defaults off; navigation is write-free and Escape restores focus':async page=>{
-    await mountSharingFixture(page,'launcher');await page.setViewportSize({width:320,height:800});const trigger=page.getByRole('button',{name:'分享或提交',exact:true});await trigger.click();await expect(page.getByRole('button',{name:'找人合作',exact:true})).toHaveCount(0);await page.keyboard.press('Escape');await expect(trigger).toBeFocused();
-    await page.getByRole('button',{name:'Toggle guidance',exact:true}).click();await trigger.click();await expect(page.getByRole('dialog')).toHaveAccessibleName('你想分享什麼？');await page.getByRole('button',{name:'找人合作',exact:true}).click();await expect(page.getByLabel('Destination')).toHaveText('collaborate:showcase');
-    await trigger.click();await page.getByRole('button',{name:'發起共創邀請',exact:true}).click();await expect(page.getByLabel('Destination')).toHaveText('cocreate:cocreation');await trigger.click();await page.getByRole('button',{name:'刊登商品',exact:true}).click();await page.getByRole('button',{name:'← 返回分享選單',exact:true}).click();await page.keyboard.press('Escape');await expect(trigger).toBeFocused();expect(await fixture(page,f=>f.calls.length)).toBe(0);await expect(page.getByRole('link',{name:'我的內容'})).toHaveCount(0);
   },
 };

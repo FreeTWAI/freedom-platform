@@ -24,7 +24,8 @@ test('guild routes preserve legacy links and validate each workspace destination
     assert.equal(guildKeyFromHash(`#guilds/${guildKey}/${action}`), guildKey);
     assert.equal(guildActionFromHash(`#guilds/${guildKey}/${action}`), action);
   }
-  for (const suffix of ['/delete', '/work?url=https://example.com', '/work/extra', '?token=x', '/%77ork']) assert.equal(guildKeyFromHash(`#guilds/${guildKey}${suffix}`), null);
+  for (const suffix of ['/work?url=https://example.com','?token=x','/tools/native?draft=id']) assert.equal(guildKeyFromHash(`#guilds/${guildKey}${suffix}`),guildKey);
+  for (const suffix of ['/delete', '/work/extra', '/%77ork']) assert.equal(guildKeyFromHash(`#guilds/${guildKey}${suffix}`), null);
 });
 test('every registered guild has one matching independently publishable source profile', async () => {
   assert.equal(new Set(guildRepositories.map(entry => entry.guild_key)).size, guildRepositories.length);

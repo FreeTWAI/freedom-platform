@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdir} from 'node:fs/promises';
 import {readFileSync} from 'node:fs';
 import {test,expect,type Page,type Locator} from './fixtures.js';
-import {navigate,signOut} from './navigation.js';
+import {enablePrivateAiViews,navigate,signOut} from './navigation.js';
 import {quickJoin} from './quick-join.js';
 const manifest=JSON.parse(readFileSync(new URL('../../contracts/guide-packs/ai-sister-v1-20261005.json',import.meta.url),'utf8')) as {version:string;assets:{logicalId:string;sha256:string}[]};
 import {AI_SISTER_RELEASE_PIN} from '../../apps/portal-web/src/modules/newcomer-guides/ai-sister-release-pin.js';
@@ -15,14 +15,14 @@ const asset=(logicalId:string)=>`/public/guide-packs/ai-sister/${manifest.versio
 async function registerJoined(page:Page,profile='guide-ai-sister'){
   await page.addInitScript(profile=>{if(localStorage.getItem('freedom-theme')===null)localStorage.setItem('freedom-theme',profile)},profile);
   await page.context().route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill('AI Sister 導覽驗證');
   await page.getByLabel('電子郵件',{exact:true}).fill(`ai-sister-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill(`Fixture-A1!-${randomUUID()}`);
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   await expect(widget(page)).toHaveCount(0);
   await page.getByLabel('找感興趣的公會').fill('AI 開發公會');await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   if(profile==='guide-ai-sister')await expect(widget(page)).toHaveAttribute('data-character-id','claude');
 }
 async function openGuide(page:Page){
@@ -75,7 +75,8 @@ test('member selects one character; it persists across reload and changes outfit
   await expect(widget(page)).toHaveAttribute('data-character-id','kimi');await expect(widget(page)).toHaveAttribute('data-open','false');
   await page.reload();await expect(widget(page)).toHaveAttribute('data-character-id','kimi');
   expect(await page.evaluate(()=>localStorage.getItem('freedom-ai-sister-character'))).toBe('kimi');
-  expect(new Set(art)).toEqual(new Set([asset('claude/education-outfit'),asset('kimi/education-outfit'),asset('kimi/workplace-outfit')]));
+  // Reaching the work tool now visits the guild directory and its outfit first.
+  expect(new Set(art)).toEqual(new Set([asset('claude/education-outfit'),asset('kimi/education-outfit'),asset('kimi/international-outfit'),asset('kimi/workplace-outfit')]));
   expect(dragon).toEqual([]);
 });
 
@@ -101,6 +102,7 @@ test('wardrobe gallery offers all characters, 20 outfits and real poses; only se
 });
 
 test('current outfit uses real dialogue reactions and cleans guide focus when changing profile or losing member access',async({page})=>{
+  await enablePrivateAiViews(page);
   await registerJoined(page);await openGuide(page);
   await expect(widget(page).locator('.page-spirit-art')).toHaveAttribute('src',asset('claude/education-supported'));
   await panel(page).getByRole('textbox',{name:'問本頁問題'}).fill('謝謝');await panel(page).getByRole('button',{name:'送出',exact:true}).click();

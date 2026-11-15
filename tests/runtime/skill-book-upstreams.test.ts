@@ -1,23 +1,30 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {communityCatalog} from '../../modules/community/catalog.js';
-import {checkSkillBookUpstreams,formatSkillBookUpstreamReport,validateSkillBookPin} from '../../scripts/check-skill-book-upstreams.js';
+import {distinctCopyUrl} from '../../modules/community/book-urls.js';
+import {checkSkillBookUpstreams,formatSkillBookUpstreamReport,hasUpstreamFailures,validateSkillBookPin} from '../../scripts/check-skill-book-upstreams.js';
 
 test('all official books have internally consistent commit-pinned reading and evidence links',()=>{
   assert.equal(communityCatalog.skill_books.length,55);
   for(const book of communityCatalog.skill_books)validateSkillBookPin(book);
 });
 
-test('drift check follows original upstream rather than a newer FreeTWAI fork',async()=>{
+test('drift check follows original upstream rather than a newer FreeTWAI fork and does not fail when newer',async()=>{
   const book=communityCatalog.skill_books.find(book=>book.id==='social-post')!;
   const latest='a'.repeat(40);
   const requested:string[]=[];
   const checks=await checkSkillBookUpstreams([book],async input=>{
     requested.push(String(input));
-    return Response.json([{sha:latest}]);
+    if(String(input).endsWith('/commits?per_page=1'))return Response.json([{sha:latest}]);
+    return Response.json({sha:book.source_commit});
   });
-  assert.deepEqual(requested,['https://api.github.com/repos/Hao0321/claude-skill-social-post/commits?per_page=1']);
+  assert.deepEqual(requested,[
+    'https://api.github.com/repos/Hao0321/claude-skill-social-post/commits?per_page=1',
+    'https://api.github.com/repos/Hao0321/claude-skill-social-post/commits/'+book.source_commit,
+  ]);
   assert.equal(checks[0].latest,latest);
+  assert.equal(checks[0].pinned_in_original,true);
+  assert.equal(hasUpstreamFailures(checks),false);
   const report=formatSkillBookUpstreamReport(checks);
   assert.match(report,/1 checked; 1 changed; 0 errors/);
   assert.match(report,new RegExp(`/compare/${book.source_commit}\\.\\.\\.${latest}`));
@@ -52,4 +59,60 @@ test('a mismatched guide pin is reported before any upstream request',async()=>{
   assert.equal(called,false);
   assert.match(checks[0].error??'',/guide source commit differs/);
   assert.match(formatSkillBookUpstreamReport(checks),/1 errors/);
+  assert.equal(hasUpstreamFailures(checks),true);
+});
+
+test('missing original repo or missing pinned commit fails without reading copy repository',async()=>{
+  // p3-o2: repository_url is the original; the workshop copy's address lives in fork_url.
+  const copyBook=communityCatalog.skill_books.find(item=>distinctCopyUrl(item.fork_url,item.repository_url))!;
+  const copySlug=distinctCopyUrl(copyBook.fork_url,copyBook.repository_url)!.replace('https://github.com/','');
+  const origSlug=copyBook.upstream_url.replace('https://github.com/','');
+  const latest='b'.repeat(40);
+
+  // Original reachable, newer head exists, but pinned commit returns 404 in original -> fails without requesting copy
+  const requested:string[]=[];
+  const checks=await checkSkillBookUpstreams([copyBook],async input=>{
+    const url=String(input);requested.push(url);
+    if(url===`https://api.github.com/repos/${origSlug}/commits?per_page=1`)return Response.json([{sha:latest}]);
+    if(url===`https://api.github.com/repos/${origSlug}/commits/${copyBook.source_commit}`)return new Response('missing',{status:404});
+    throw new Error('Unexpected fetch '+url);
+  });
+  assert.equal(requested.some(url=>url.includes(copySlug)),false);
+  assert.equal(hasUpstreamFailures(checks),true);
+  assert.equal(checks[0].pinned_in_original,false);
+  assert.match(checks[0].error??'',/not found in original repository/);
+  const report=formatSkillBookUpstreamReport(checks);
+  assert.match(report,/1 checked; 1 changed; 1 errors\./);
+  assert.doesNotMatch(report,/installing from org copy|Books still installing from organization copy/);
+
+  // Original gone (404) or unresolvable URL -> fails without requesting copy
+  const goneRequested:string[]=[];
+  const goneChecks=await checkSkillBookUpstreams([copyBook],async input=>{
+    goneRequested.push(String(input));
+    return new Response('gone',{status:404});
+  });
+  assert.equal(goneRequested.some(url=>url.includes(copySlug)),false);
+  assert.equal(hasUpstreamFailures(goneChecks),true);
+  assert.match(goneChecks[0].error??'',/HTTP 404/);
+
+  const badUrlBook={...copyBook,upstream_url:'https://gitlab.com/other/repo'};
+  const badChecks=await checkSkillBookUpstreams([badUrlBook],async()=>new Response('should not run'));
+  assert.equal(hasUpstreamFailures(badChecks),true);
+  assert.match(badChecks[0].error??'',/Invalid GitHub repository URL/);
+});
+
+test('weekly check reads originals only and omits org copy install report section',async()=>{
+  // p3-o2: repository_url is the original; the workshop copy's address lives in fork_url.
+  const copyBook=communityCatalog.skill_books.find(item=>distinctCopyUrl(item.fork_url,item.repository_url))!;
+  const origSlug=copyBook.upstream_url.replace('https://github.com/','');
+  const requested:string[]=[];
+  const checks=await checkSkillBookUpstreams([copyBook],async input=>{
+    const url=String(input);requested.push(url);
+    return new Response('missing',{status:404});
+  });
+  assert.equal(requested.length,1);
+  assert.equal(requested[0],`https://api.github.com/repos/${origSlug}/commits?per_page=1`);
+  assert.equal(hasUpstreamFailures(checks),true);
+  const report=formatSkillBookUpstreamReport(checks);
+  assert.doesNotMatch(report,/installing from org copy|Books still installing from organization copy/);
 });

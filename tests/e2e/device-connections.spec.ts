@@ -6,7 +6,7 @@ test.beforeAll(async()=>{portal=await startDevicePortal();harness=await startDev
 test.afterAll(async()=>{await portal?.close();await harness?.close();});
 const code=(page:Page)=>page.getByRole('textbox',{name:'裝置配對代碼'});
 const approve=(page:Page)=>page.getByRole('button',{name:'核准裝置',exact:true});
-const consent=(page:Page)=>page.getByRole('checkbox',{name:'我確認這是我正在配對的裝置，並核准讀取 bootstrap 狀態。'});
+const consent=(page:Page)=>page.getByRole('checkbox',{name:'我確認這是我正在配對的裝置，並核准讀取初始連線狀態。'});
 const decisions=(calls:DeviceWire[])=>calls.filter(call=>call.path.endsWith('/decide'));
 const revokes=(calls:DeviceWire[])=>calls.filter(call=>call.path.endsWith(':revoke'));
 async function inspect(page:Page){await code(page).fill(deviceCode);await page.getByRole('button',{name:'讀取配對請求',exact:true}).click();await expect(page.getByText('Synthetic owner device',{exact:true})).toBeVisible();}
@@ -40,7 +40,7 @@ test('frontend only: replacing client unlocks old inflight operation and fences 
   let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);let held=false;
   const calls=await installDeviceApi(page,async(route,request,wire)=>{if(wire.path.endsWith('/decide')&&wire.csrf==='first-client-fixture'){held=true;await gate;const body=request.postDataJSON();await route.fulfill({json:{authorizationId:body.authorizationId,requestDigest:body.requestDigest,state:'approved',operational_authority:false}});return true;}return false;});
   await page.goto(harness.origin);await inspect(page);await consent(page).check();await approve(page).click();await expect.poll(()=>held).toBe(true);await expect(code(page)).toBeDisabled();
-  await page.getByRole('button',{name:'Replace client fixture'}).click();await expect(code(page)).toBeEnabled();await expect(code(page)).toHaveValue('');const oldResponse=page.waitForResponse(response=>response.url().endsWith('/decide'));release();await oldResponse;await expect(page.getByLabel('Parent change count')).toHaveText('0');await expect(page.getByText('已核准此裝置讀取 bootstrap 狀態。',{exact:false})).toHaveCount(0);
+  await page.getByRole('button',{name:'Replace client fixture'}).click();await expect(code(page)).toBeEnabled();await expect(code(page)).toHaveValue('');const oldResponse=page.waitForResponse(response=>response.url().endsWith('/decide'));release();await oldResponse;await expect(page.getByLabel('Parent change count')).toHaveText('0');await expect(page.getByText('已核准此裝置讀取初始連線狀態。',{exact:false})).toHaveCount(0);
   await inspect(page);await consent(page).check();await approve(page).click();await expect(page.getByLabel('Parent change count')).toHaveText('1');expect(decisions(calls)).toHaveLength(2);expect(decisions(calls)[1].csrf).toBe('second-client-fixture');
 });
 

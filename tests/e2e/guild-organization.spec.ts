@@ -14,9 +14,9 @@ const names = ['測試平台公會', '測試影像與自動剪輯公會', '測�
 const keys = names.map((_, index) => `synthetic-guild-${index}`);
 const books = ['social-post', 'video-autopilot', 'security-scanner'].map(id => communityCatalog.skill_books.find(book => book.id === id)!);
 
-type Preferences = { primary_guild_key: string; secondary_guild_keys: string[]; aggregate_version: number };
-async function setupGuilds(page: Page, masterId?: string) {
-  let preferences: Preferences = { primary_guild_key: keys[0], secondary_guild_keys: [keys[1], keys[2]], aggregate_version: 7 };
+type Preferences = { primary_guild_key: string; secondary_guild_keys: string[]; aggregate_version: number; compatibility?: 'legacy_projection' };
+async function setupGuilds(page: Page, masterId?: string, compatibility?: 'legacy_projection') {
+  let preferences: Preferences = { primary_guild_key: keys[0], secondary_guild_keys: [keys[1], keys[2]], aggregate_version: 7, ...(compatibility ? { compatibility } : {}) };
   const writes: { body: unknown; headers: Record<string, string> }[] = [];
   let memberReads = 0, announcementReads = 0;
   const directory = () => names.map((name, index) => ({
@@ -77,14 +77,18 @@ test('six synthetic guilds partition featured, other joined and unjoined members
   await expect(primary.locator('.guild-book-list .skill-intro-trigger')).toHaveCount(1);
   await expect(primary.locator('.guild-book-list').getByRole('button', { name: books[0].title, exact: true })).toBeVisible();
   await expect(primary.locator('.guild-book-list').getByRole('button', { name: books[1].title, exact: true })).toHaveCount(0);
-  const openBooks = primary.getByRole('button', { name: '公會技能書庫 · 3', exact: true });
+  const openBooks = primary.getByRole('button', { name: '公會技能書庫 · 3 個原作資源', exact: true, includeHidden: true });
+  await openGuildSetting(openBooks);
   const initialHeight = (await primary.boundingBox())!.height;
   await openBooks.click();
   const library = primary.getByRole('dialog', { name: `${names[0]}技能書庫`, exact: true });
   await expect(library).toBeVisible(); await expect(library.locator('.guild-library-entry')).toHaveCount(3);
   await library.getByRole('button', { name: books[1].title, exact: true }).click();
   const introduction = page.getByRole('dialog', { name: books[1].title, exact: true });
-  await expect(introduction).toBeVisible(); await expect(introduction.getByRole('link', { name: '閱讀技能書 ↗', exact: true })).toBeVisible();
+  await expect(introduction).toBeVisible();
+  await introduction.locator('.skill-intro-usage-notes > summary').click();
+  await expect(introduction.getByRole('link', { name: '閱讀核對版本說明 ↗', exact: true })).toBeVisible();
+  await expect(introduction.getByRole('link', { name: '閱讀核對版本說明 ↗', exact: true })).toHaveAttribute('href', books[1].guide!.reading_url);
   await page.keyboard.press('Escape'); await expect(introduction).toBeHidden(); await expect(library).toBeVisible();
   await library.getByRole('button', { name: '關閉公會視窗', exact: true }).click();
   await expect(library).toBeHidden(); await expect(openBooks).toBeFocused();
@@ -231,7 +235,8 @@ test('a joined guild card sets or clears a secondary guild with the existing pre
 test('the joined guild overview connects existing sections lazily and keeps roster search across navigation', async ({ page }) => {
   const fixture = await setupGuilds(page); await login(page);
   const card = page.getByRole('article', { name: names[0], exact: true });
-  const entry = card.getByRole('button', { name: '查看公會介紹', exact: true });
+  const entry = card.getByRole('button', { name: '查看公會介紹', exact: true, includeHidden: true });
+  await openGuildSetting(entry);
   await entry.focus(); await page.keyboard.press('Enter');
   const dialog = card.locator('.guild-detail-dialog');
   await expect(dialog).toHaveAccessibleName(`${names[0]} · 社群總覽`);
@@ -262,9 +267,9 @@ test('the joined guild overview connects existing sections lazily and keeps rost
 test('guild overview chat hands off the exact guild after closing the modal; unjoined cards keep public detail only', async ({ page }) => {
   const fixture = await setupGuilds(page); await login(page);
   const unjoined = page.getByRole('article', { name: names[5], exact: true });
-  await expect(unjoined.getByRole('button', { name: '查看公會介紹', exact: true })).toHaveCount(0);
-  await expect(unjoined.getByRole('button', { name: '公會公告', exact: true })).toHaveCount(0);
-  await unjoined.getByRole('button', { name: /公會技能書庫/ }).click();
+  await expect(unjoined.getByRole('button', { name: '查看公會介紹', exact: true, includeHidden: true })).toHaveCount(0);
+  await expect(unjoined.getByRole('button', { name: '公會公告', exact: true, includeHidden: true })).toHaveCount(0);
+  await chooseGuildSetting(unjoined.getByRole('button', { name: /公會技能書庫/, includeHidden: true }));
   await expect(unjoined.getByRole('navigation', { name: '公會內容' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   expect(fixture.reads()).toEqual({ memberReads: 0, announcementReads: 0 });
@@ -278,7 +283,7 @@ test('guild overview chat hands off the exact guild after closing the modal; unj
     });
   });
   const card = page.getByRole('article', { name: names[0], exact: true });
-  await card.getByRole('button', { name: '查看公會介紹', exact: true }).click();
+  await chooseGuildSetting(card.getByRole('button', { name: '查看公會介紹', exact: true, includeHidden: true }));
   await card.locator('.guild-detail-dialog').getByRole('button', { name: '進入公會聊天室', exact: true }).click();
   await expect(card.locator('.guild-detail-dialog')).toBeHidden();
   expect(await page.evaluate(() => (window as unknown as { guildEntries: unknown[] }).guildEntries)).toEqual([
@@ -290,7 +295,7 @@ test('guild overview chat hands off the exact guild after closing the modal; unj
 test('guild overview navigation translates without remounting and fits narrow screens in every experience', async ({ page }) => {
   await setupGuilds(page); await login(page);
   const card = page.getByRole('article', { name: names[1], exact: true });
-  await card.getByRole('button', { name: '查看公會介紹', exact: true }).click();
+  await chooseGuildSetting(card.getByRole('button', { name: '查看公會介紹', exact: true, includeHidden: true }));
   const dialog = card.locator('.guild-detail-dialog');
   for (const [language, overview] of [['en', 'Community overview'], ['ja', 'コミュニティ概要'], ['ko', '커뮤니티 개요'], ['es', 'Vista de la comunidad'], ['zh-Hant', '社群總覽']]) {
     await page.evaluate(value => {
@@ -336,7 +341,7 @@ test('switching guild sections preserves a pending roster command and its unknow
   });
   await login(page);
   const card = page.getByRole('article', { name: names[0], exact: true });
-  await card.getByRole('button', { name: '查看公會介紹', exact: true }).click();
+  await chooseGuildSetting(card.getByRole('button', { name: '查看公會介紹', exact: true, includeHidden: true }));
   const dialog = card.locator('.guild-detail-dialog');
   const nav = dialog.getByRole('navigation', { name: '公會內容' });
   await nav.getByRole('button', { name: '成員', exact: true }).click();
@@ -438,7 +443,7 @@ test('directory discovery precedes optional controls with readable wrapping and 
 });
 
 for(const kind of ['set','leave'] as const)for(const denied of [403,412])test(`unknown category ${kind} retains its original command through ${denied} and a newer board read`,async({page})=>{
-  const fixture=await setupGuilds(page);
+  const fixture=await setupGuilds(page,undefined,'legacy_projection');
   await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),guild_launchpad_enabled:true}});});
   const categories=['internal','external','professional_industry'];
   let committed=false;
@@ -461,7 +466,7 @@ for(const kind of ['set','leave'] as const)for(const denied of [403,412])test(`u
   else{await chooseGuildSetting(card(0).getByRole('button',{name:`退出${names[0]}`,exact:true, includeHidden: true}));await root.getByRole('button',{name:'確認退出',exact:true}).click();}
   const retry=root.getByRole('button',{name:kind==='set'?'再試一次':'重試原退出',exact:true});
   await expect(retry).toBeVisible();await expect(card(2).getByRole('button',{name:'設為本類主力',exact:true, includeHidden: true})).toBeDisabled();
-  const booksButton=card(2).getByRole('button',{name:/^公會技能書庫/});await expect(booksButton).toBeEnabled();await booksButton.click();await card(2).getByRole('button',{name:'關閉公會視窗',exact:true}).click();
+  const booksButton=card(2).getByRole('button',{name:/^公會技能書庫/, includeHidden: true});await openGuildSetting(booksButton);await expect(booksButton).toBeEnabled();await booksButton.click();await card(2).getByRole('button',{name:'關閉公會視窗',exact:true}).click();
   await retry.click();await expect(root.getByRole('alert')).toBeVisible();await expect(retry).toBeVisible();
   await expect(root.getByRole('button',{name:'用新版本送出草稿',exact:true})).toHaveCount(0);
   await root.getByRole('alert').getByRole('button',{name:'重新載入公會',exact:true}).click();
@@ -474,7 +479,7 @@ for(const kind of ['set','leave'] as const)for(const denied of [403,412])test(`u
 
 
 test('a held fresh-version guild read cannot submit the old draft after logout and another login',async({page})=>{
-  const fixture=await setupGuilds(page);
+  const fixture=await setupGuilds(page,undefined,'legacy_projection');
   await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),guild_launchpad_enabled:true}});});
   const categories=['internal','external','professional_industry'];
   const view={aggregate_version:7,migration_state:'switched',invalidated:[],legacy:null,primaries:categories.map((category,index)=>({category,guild_key:index===0?keys[0]:null}))};

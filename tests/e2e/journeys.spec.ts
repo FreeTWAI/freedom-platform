@@ -1,13 +1,14 @@
 import { navigate, signOut } from './navigation.js';
+import { openWorkForm } from './sharing-authoring-fixture.js';
 import { test,expect,type Page } from './fixtures.js';
 
 async function login(page:Page,email:string) {
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
   await navigate(page, '任務協作');
-  await expect(page.getByRole('heading',{name:'任務協作',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'工作',exact:true,level:1})).toBeVisible();
 }
 async function switchAccount(page:Page,email:string) {await signOut(page);await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();await login(page,email);}
 const artifactLabel='成果引用（例如 artifact:template-v1）';
@@ -17,9 +18,9 @@ test('localhost alias permits browser login and logout',async({page,baseURL})=>{
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
   await navigate(page, '任務協作');
-  await expect(page.getByRole('heading',{name:'任務協作',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'工作',exact:true,level:1})).toBeVisible();
   await signOut(page);
   await expect(page.getByRole('heading',{name:'登入',exact:true})).toBeVisible();
 });
@@ -37,6 +38,7 @@ test('member completes work, reviewer accepts it, result survives reload and log
   await workCard.getByRole('button',{name:'提交成果',exact:true}).click();
   await expect(workCard.getByText('已提交，等待回饋。')).toBeVisible();
   await switchAccount(page,'reviewer@local.test');
+  await page.locator('.panels .place-view-picker select').selectOption('review');
   const reviewSection=page.locator('section.section').filter({has:page.getByRole('heading',{name:'待你回饋',exact:true})});
   const reviewCard=reviewSection.locator('article.card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await reviewCard.getByRole('button',{name:'開始回饋',exact:true}).click();
@@ -44,16 +46,22 @@ test('member completes work, reviewer accepts it, result survives reload and log
   await reviewCard.getByRole('button',{name:'送出決定',exact:true}).click();
   await expect(reviewCard).toHaveCount(0);
   await switchAccount(page,'maker@local.test');
+  await page.locator('.panels .place-view-picker select').selectOption('outcomes');
   const gainedSection=page.locator('section.section').filter({has:page.getByRole('heading',{name:'已獲得的成果',exact:true})});
   const gainedCard=gainedSection.locator('article.card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await expect(gainedCard.getByText('artifact:browser-result-v1',{exact:true})).toBeVisible();
-  await page.reload();await expect(gainedCard.getByText('artifact:browser-result-v1',{exact:true})).toBeVisible();
+  await page.reload();
+  await page.locator('.panels .place-view-picker select').selectOption('outcomes');
+  await expect(gainedCard.getByText('artifact:browser-result-v1',{exact:true})).toBeVisible();
   await page.screenshot({path:'test-results/workbench-desktop.png',fullPage:true});
   expect(errors).toEqual([]);
 });
 
 test('showcase and opportunity become a bilateral cooperation and attributed receipt report',async({page})=>{
+  // 25.8-28.1 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+  test.setTimeout(60_000);
   await login(page,'maker@local.test');await navigate(page, '作品與合作');
+  await openWorkForm(page);
   await page.getByLabel('作品標題',{exact:true}).fill('瀏覽器驗證的週報模板');
   await page.getByLabel('一句話介紹',{exact:true}).fill('用合成資料產生可重用週報。');
   await page.getByText('連接既有成果紀錄（進階選填）',{exact:true}).click();

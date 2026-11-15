@@ -21,6 +21,9 @@ export async function startClientPairing(pool:Pool,raw:unknown,platformOrigin:st
  const userCode=randomBytes(10).toString('hex').toUpperCase().match(/.{1,5}/g)!.join('-');
  const origin=new URL(platformOrigin);requireCondition(origin.protocol==='https:'||origin.hostname==='127.0.0.1'||origin.hostname==='localhost',500,'platform_origin_invalid','平台連線網址尚未設定。');
  await pool.query('INSERT INTO client_pairing_requests(pairing_id,device_secret_hash,user_code_hash,kind,client_name) VALUES($1,$2,$3,$4,$5)',[randomUUID(),tokenHash(deviceSecret),tokenHash(normalizeCode(userCode)),body.kind,body.client_name]);
+ // Pinned storefront and supplier clients accept only /#account; it opens 我的 → 設定, whose
+ // 「連結 GitHub 與其他工具」 leads to 工具連線. The library here also accepts the new address,
+ // so the answer can move once every consumer has re-vendored it.
  return {device_secret:deviceSecret,user_code:userCode,verification_uri:origin.origin+'/#account',expires_in:300,interval:5,scope:body.kind+':read'};
 }
 export async function pollClientPairing(pool:Pool,raw:unknown,network:string){
@@ -103,7 +106,7 @@ export async function approveClientPairing(pool:Pool,input:Command,code:string){
  });
 }
 export async function listClientConnections(db:Pool|PoolClient,actor:Actor){
- return (await db.query(`SELECT ${approvedFields} FROM member_client_connections WHERE community_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`,[actor.community_id,actor.user_id])).rows.map(row=>({...row,read_only:true}));
+ return (await db.query(`SELECT ${approvedFields} FROM member_client_connections WHERE community_id=$1 AND user_id=$2 AND kind<>'agent' ORDER BY created_at DESC LIMIT 100`,[actor.community_id,actor.user_id])).rows.map(row=>({...row,read_only:true}));
 }
 export async function revokeClientConnection(pool:Pool,input:Command,id:string){
  z.object({}).strict().parse(input.body);z.uuid().parse(id);
@@ -120,19 +123,19 @@ type ClientResource='connection'|'catalog'|'stores'|'listings'|'products'|'reque
 // Authentication, authorization and reads share a transaction. No browser Actor/session is fabricated.
 async function assertClientConnectionClock(q:PoolClient,connectionId:string){
  // The connection is already locked. Check after the final projection, not inside a waiting SELECT.
- requireCondition((await q.query('SELECT 1 FROM member_client_connections WHERE connection_id=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[connectionId])).rowCount===1,401,'client_token_invalid','讀取連線已失效，請重新配對。');
+ requireCondition((await q.query("SELECT 1 FROM member_client_connections WHERE connection_id=$1 AND kind<>'agent' AND revoked_at IS NULL AND expires_at>clock_timestamp()",[connectionId])).rowCount===1,401,'client_token_invalid','讀取連線已失效，請重新配對。');
 }
 export async function readClientResource(pool:Pool,authorization:string|undefined,resource:ClientResource,requestedStoreId?:string){
  // Only the HTTP scheme is case-insensitive; keep the opaque credential's exact bytes.
  requireCondition(authorization&&/^[Bb][Ee][Aa][Rr][Ee][Rr] +fw_read_[A-Za-z0-9_-]{43}$/.test(authorization),401,'client_token_invalid','讀取連線已失效，請重新配對。');
  return transaction(pool,async q=>{
    const credentialHash=tokenHash(authorization.slice(authorization.lastIndexOf(' ')+1));
-   const owner=(await q.query('SELECT user_id,community_id FROM member_client_connections WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[credentialHash])).rows[0];
+   const owner=(await q.query("SELECT user_id,community_id FROM member_client_connections WHERE kind<>'agent' AND token_hash=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp()",[credentialHash])).rows[0];
    requireCondition(owner,401,'client_token_invalid','讀取連線已失效，請重新配對。');
    // Member → connection is the same lock order as administrative deactivation.
    requireCondition((await q.query('SELECT 1 FROM users WHERE user_id=$1 AND community_id=$2 AND active AND onboarding_completed_at IS NOT NULL FOR SHARE',[owner.user_id,owner.community_id])).rowCount===1,401,'client_token_invalid','讀取連線已失效，請重新配對。');
    const client=(await q.query(`SELECT connection_id,community_id,user_id,kind,scope,store_id,expires_at FROM member_client_connections
-      WHERE token_hash=$1 AND user_id=$2 AND community_id=$3 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,[credentialHash,owner.user_id,owner.community_id])).rows[0];
+      WHERE kind<>'agent' AND token_hash=$1 AND user_id=$2 AND community_id=$3 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE`,[credentialHash,owner.user_id,owner.community_id])).rows[0];
    requireCondition(client,401,'client_token_invalid','讀取連線已失效，請重新配對。');
    if(resource==='connection'){
      await assertClientConnectionClock(q,client.connection_id);

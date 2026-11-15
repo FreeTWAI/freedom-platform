@@ -157,6 +157,7 @@ test('synthetic restricted runtime role saves, reads, replays and revokes public
   // UPDATE is required by PostgreSQL SELECT ... FOR SHARE, even on auth rows.
   await admin.query(`GRANT SELECT,UPDATE ON ${schema}.users,${schema}.sessions TO ${role}`);
   await admin.query(`GRANT SELECT,INSERT,UPDATE ON ${schema}.member_profile_publications TO ${role}`);
+  await admin.query(`GRANT SELECT,UPDATE ON ${schema}.member_card_shares TO ${role}`);
   await admin.query(`GRANT SELECT,INSERT ON ${schema}.command_receipts,${schema}.transition_journal TO ${role}`);
   await admin.query(`GRANT SELECT ON ${['member_account_classification','member_profile_cover_versions','assets','resource_scopes','principals'].map(table=>schema+'.'+table).join(',')} TO ${role}`);
   runtime=new Pool({connectionString:database,options:`-c search_path=${schema} -c role=${role}`,max:3});
@@ -172,4 +173,48 @@ test('synthetic restricted runtime role saves, reads, replays and revokes public
   await assert.rejects(()=>runtime!.query('ALTER TABLE member_profile_publications ADD COLUMN forbidden boolean'),(error:any)=>error.code==='42501');
   await assert.rejects(()=>runtime!.query('TRUNCATE member_profile_publications'),(error:any)=>error.code==='42501');
  }finally{await runtime?.end();await admin.query(`DROP OWNED BY ${role}`);await admin.query(`DROP ROLE ${role}`);}
+});
+test('public publication syncs member_card_shares.headline (60 code points trimmed or cleared); members/private and missing card row leave it unchanged',async()=>{
+ const noCard=await member('No card owner');
+ const noCardSaved=await request('/me/profile-publication',noCard,{...draft,visibility:'public',confirm_public:true,bio:'尚未建立名片'});
+ assert.equal(noCardSaved.status,200);
+ assert.equal((await pool.query('SELECT 1 FROM member_card_shares WHERE user_id=$1',[noCard.id])).rowCount,0);
+
+ const owner=await member('Card owner');
+ const share=await request('/me/member-card-share',owner,{enabled:true,include_avatar:false,design:'calm',headline:'原本名片介紹',links:[]});
+ assert.equal(share.status,200);
+ const token=String(share.data.share_path).split('/').pop()!;
+ const cardRow=async()=>((await pool.query('SELECT headline,aggregate_version::text AS version FROM member_card_shares WHERE user_id=$1',[owner.id])).rows[0]);
+
+ let saved=await request('/me/profile-publication',owner,{...draft,visibility:'private',bio:'私人介紹'});
+ assert.equal(saved.status,200);
+ assert.equal((await cardRow()).headline,'原本名片介紹');
+
+ saved=await request('/me/profile-publication',owner,{...draft,visibility:'members',bio:'會員介紹'},saved.data.aggregate_version);
+ assert.equal(saved.status,200);
+ assert.equal((await cardRow()).headline,'原本名片介紹');
+
+ saved=await request('/me/profile-publication',owner,{...draft,visibility:'public',confirm_public:true,bio:'公開頁介紹'},saved.data.aggregate_version);
+ assert.equal(saved.status,200);
+ assert.equal((await cardRow()).headline,'公開頁介紹');
+ assert.equal((await request(`/public/member-cards/${token}`)).data.headline,'公開頁介紹');
+
+ const longEmoji='🚀'.repeat(59)+' '+'字'.repeat(5);
+ saved=await request('/me/profile-publication',owner,{...draft,visibility:'public',confirm_public:true,bio:longEmoji},saved.data.aggregate_version);
+ assert.equal(saved.status,200);
+ assert.equal((await cardRow()).headline,'🚀'.repeat(59));
+
+ const over60='字'.repeat(61);
+ saved=await request('/me/profile-publication',owner,{...draft,visibility:'public',confirm_public:true,bio:over60},saved.data.aggregate_version);
+ assert.equal(saved.status,200);
+ assert.equal((await cardRow()).headline,'字'.repeat(60));
+
+ saved=await request('/me/profile-publication',owner,{...draft,visibility:'public',confirm_public:true,bio:''},saved.data.aggregate_version);
+ assert.equal(saved.status,200);
+ assert.equal((await cardRow()).headline,null);
+ assert.equal((await request(`/public/member-cards/${token}`)).data.headline,null);
+
+ saved=await request('/me/profile-publication',owner,{...draft,visibility:'private',bio:'切回私人'},saved.data.aggregate_version);
+ assert.equal(saved.status,200);
+ assert.equal((await cardRow()).headline,null);
 });

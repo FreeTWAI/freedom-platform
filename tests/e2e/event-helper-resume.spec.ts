@@ -49,7 +49,7 @@ for(const variant of variants)test(`helper ${variant.action} resumes interrupted
   });
   try{
     await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
-    await navigate(page,'社群活動');await page.getByRole('link',{name:'活動專頁',exact:true}).click();
+    await navigate(page,'社群活動');await page.evaluate(id=>{window.location.hash=`events/${id}`;},eventId);
     const panel=page.getByRole('region',{name:variant.organizer?'管理幫手':'申請幫忙',exact:true});
     await panel.getByRole('button',{name:variant.button,exact:true}).click();await held;
     await lifecycle(page,'hidden');await lifecycle(page,'visible');await lifecycle(page,'hidden');await lifecycle(page,'visible');

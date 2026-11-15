@@ -5,7 +5,14 @@ import {fileURLToPath} from 'node:url';
 import {communityCatalog, type SkillBook} from '../modules/community/catalog.js';
 
 const shaPattern=/^[a-f0-9]{40}$/;
-export type UpstreamCheck={id:string;repository:string;pinned:string;latest?:string;error?:string};
+export type UpstreamCheck={
+  id:string;
+  repository:string;
+  pinned:string;
+  latest?:string;
+  pinned_in_original?:boolean;
+  error?:string;
+};
 
 export function githubRepository(url:string):string {
   const parsed=new URL(url);
@@ -23,24 +30,48 @@ export function validateSkillBookPin(book:SkillBook):void {
   }
 }
 
-export async function checkSkillBookUpstreams(books:SkillBook[],fetcher:typeof fetch=fetch):Promise<UpstreamCheck[]> {
+export function hasUpstreamFailures(checks:readonly UpstreamCheck[]):boolean {
+  return checks.some(check=>Boolean(check.error));
+}
+
+export async function checkSkillBookUpstreams(
+  books:SkillBook[],
+  fetcher:typeof fetch=fetch,
+):Promise<UpstreamCheck[]> {
   const results:UpstreamCheck[]=Array(books.length);
   let next=0;
   const workers=Array.from({length:Math.min(4,books.length)},async()=>{
     while(next<books.length){
       const index=next++,book=books[index];
-      const result:UpstreamCheck={id:book.id,repository:book.upstream_url,pinned:book.source_commit??''};
+      const result:UpstreamCheck={
+        id:book.id,
+        repository:book.upstream_url,
+        pinned:book.source_commit??'',
+      };
       results[index]=result;
       try{
         validateSkillBookPin(book);
         const repository=githubRepository(book.upstream_url);
         const token=process.env.GITHUB_TOKEN??process.env.GH_TOKEN;
-        const response=await fetcher(`https://api.github.com/repos/${repository}/commits?per_page=1`,{headers:{Accept:'application/vnd.github+json',...(token?{Authorization:`Bearer ${token}`}:{})}});
+        const headers={Accept:'application/vnd.github+json',...(token?{Authorization:`Bearer ${token}`}:{})};
+        const response=await fetcher(`https://api.github.com/repos/${repository}/commits?per_page=1`,{headers});
+        if(response.status===404)throw new Error('Original repository not found (HTTP 404)');
         if(!response.ok)throw new Error(`GitHub API returned HTTP ${response.status}`);
         const commits:unknown=await response.json();
         const sha=Array.isArray(commits)?commits[0]?.sha:undefined;
         if(typeof sha!=='string'||!shaPattern.test(sha))throw new Error('GitHub API returned no default-branch commit');
         result.latest=sha;
+        if(sha===result.pinned){
+          result.pinned_in_original=true;
+        }else{
+          const pinResponse=await fetcher(`https://api.github.com/repos/${repository}/commits/${result.pinned}`,{headers});
+          if(pinResponse.status===404){
+            result.pinned_in_original=false;
+            throw new Error(`Pinned commit ${result.pinned.slice(0,12)} not found in original repository`);
+          }
+          if(!pinResponse.ok)throw new Error(`GitHub API returned HTTP ${pinResponse.status} while verifying pinned commit`);
+          result.pinned_in_original=true;
+        }
       }catch(error){result.error=error instanceof Error?error.message:String(error);}
     }
   });
@@ -75,5 +106,5 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const report=formatSkillBookUpstreamReport(checks);
   process.stdout.write(report);
   if(process.env.GITHUB_STEP_SUMMARY)await appendFile(process.env.GITHUB_STEP_SUMMARY,report);
-  if(checks.some(check=>check.error||check.latest!==check.pinned))process.exitCode=1;
+  if(hasUpstreamFailures(checks))process.exitCode=1;
 }

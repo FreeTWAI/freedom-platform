@@ -778,7 +778,7 @@ test('B10 and valid missing orders return after real login; disabled checkout pr
     await offPage.goto('/?return_to=' + encodeURIComponent(`/shops/${closed.slug}/order-access`));
     await expect(offPage.getByText('登入後會返回原本的商店頁面。', {exact: true})).toHaveCount(0);
     await login(offPage);
-    await expect(offPage.getByRole('heading', {name: '會員首頁', exact: true})).toBeVisible();
+    await expect(offPage.getByRole('heading', {name: '動態', exact: true})).toBeVisible();
     expect(new URL(offPage.url()).pathname).toBe('/');
     await expect(offPage.getByRole('heading', {name: '找回訂單', exact: true})).toHaveCount(0);
   } finally {await context.close(); await offContext.close(); await store.close(); await closed.close();}

@@ -11,7 +11,7 @@ test('virtual commerce: approved text, viewer boundary, invalidation and manual 
   const login=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/auth/login' && response.request().method()==='POST');
   await page.getByRole('button',{name:'登入',exact:true}).click();
   expect((await login).status()).toBe(200);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await page.goto('/#virtual-commerce');
   const work=page.getByRole('region',{name:'虛擬導購文字彩排'});
   await expect(work).toBeVisible();

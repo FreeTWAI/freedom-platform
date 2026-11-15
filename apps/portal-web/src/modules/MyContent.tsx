@@ -1,9 +1,8 @@
-import {useLanguage} from '../language';
+import {currentLegacyHash} from '../portal-route';
 import {personalPostPath} from './personal-space-model';
-import { lazy, useCallback, useEffect, useRef, useState } from 'react';
-import { requireItems } from '../api';
+import { lazy, useEffect, useRef, useState } from 'react';
 import { accessAwareFetch } from '../access-fetch';
-import { client, describeError, usePortal } from '../portal-session';
+import { client, describeError } from '../portal-session';
 import { PageLoadBoundary } from '../LazyPage';
 import './WorkSharing.css';
 
@@ -11,11 +10,8 @@ import './WorkSharing.css';
 const ShowcaseDraftEditor = lazy(() => import('./ShowcasePanel').then(module => ({default: module.ShowcaseDraftEditor})));
 
 export type PersonalContentItem = { kind: 'showcase' | 'skill_submission' | 'event' | 'social_post'; id: string; title: string; status: string; version: string | number | null; path: string; manage_path?: string; visibility: string; actions: string[] };
-const kinds: Record<PersonalContentItem['kind'], string> = { showcase: '作品', skill_submission: '技能投稿', event: '活動', social_post: '動態' };
-const statuses: Record<string, string> = { draft: '私人草稿', withdrawn: '已撤下', awaiting_upload: '等待上傳', ready_for_review: '準備發布', revoked: '已撤銷', pending: '待審核', rejected: '需補充／已退回', cancelled: '已取消', published: '已發布', active: '已發布', hidden: '已隱藏', deleted: '已刪除' };
-const visibility: Record<string, string> = { private: '僅本人可見', community: '本社群會員可見', public: '公開可索引', workshop: '工坊會員可見', guild: '指定公會可見', referral: '活動頁公開；報名需推薦連結', open: '公開活動頁' };
 const actionLabels: Record<string, string> = { manage: '管理作品', continue: '繼續', edit: '編輯', view: '查看', withdraw: '撤下', cancel: '取消活動', cancel_review: '取消審核', publish: '檢查並發布' };
-const selectedShowcase = () => /^#my-content\/showcases\/([^/?]+)$/.exec(window.location.hash)?.[1] ?? null;
+const selectedShowcase = () => /^#my-content\/showcases\/([^/?]+)$/.exec(currentLegacyHash())?.[1] ?? null;
 export function personalContentActionPath(item: PersonalContentItem, action: string): string | null {
   if (item.kind === 'social_post') return action === 'view' ? personalPostPath(item) : null;
   const id = encodeURIComponent(item.id);
@@ -27,46 +23,24 @@ export function personalContentActionPath(item: PersonalContentItem, action: str
 }
 
 export function MyContent() {
-  const {t}=useLanguage();
-  const { session } = usePortal();
-  const [items, setItems] = useState<PersonalContentItem[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState('');
-  const [selected, setSelected] = useState<string | null>(selectedShowcase), [creating, setCreating] = useState(false);
-  const [filter, setFilter] = useState('all');
-  const generation = useRef(0);
-  const load = useCallback(async () => {
-    const current = ++generation.current;
-    const sessionGeneration = client.sessionGeneration;
-    const live = () => generation.current === current && sessionGeneration === client.sessionGeneration;
-    setLoading(true); setError('');
-    try {
-      const rows = requireItems<PersonalContentItem>(await client.get('/me/content'), '我的內容');
-      if (live()) setItems(rows);
-    } catch (cause) { if (live()) setError(describeError(cause).message); }
-    finally { if (live()) setLoading(false); }
-  }, []);
-  useEffect(() => { setItems([]); setFilter('all'); setCreating(false); void load(); return () => { generation.current++; }; }, [load, session.user.user_id, client.sessionGeneration]);
-  useEffect(() => { const change = () => { setSelected(selectedShowcase()); setCreating(false); }; window.addEventListener('hashchange', change); return () => window.removeEventListener('hashchange', change); }, []);
-  const close = () => { setCreating(false); setSelected(null); window.location.hash = 'my-content'; };
-  if (creating || selected) return <PageLoadBoundary label="私人作品編輯" resetKey={selected ?? 'new'}><ShowcaseDraftEditor key={selected ?? 'new'} id={selected} onChanged={() => void load()} onClose={close}/></PageLoadBoundary>;
-  const shown = items.filter(item => filter === 'all' || item.kind === filter);
-  return <div className="stack personal-content">
-    <div><a className="btn btn-secondary btn-small" href="#profile">{t('space.back')}</a></div>
-    <section className="card stack"><div className="section-head"><h2>草稿與已發布內容</h2><div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => setCreating(true)}>新增私人作品草稿</button><a className="btn btn-secondary btn-small" href="#opensource">投稿技能</a><a className="btn btn-secondary btn-small" href="#events">建立活動</a></div></div>
-      <p className="hint">狀態、可見範圍與操作由原始作品、投稿及活動紀錄提供。保存草稿不會發布。</p>
-      <label className="field">內容類型<select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">全部</option>{Object.entries(kinds).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-    </section>
-    {loading && <p role="status">載入我的內容…</p>}
-    {error && <div className="banner banner-error" role="alert">{error}<div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => void load()}>重新載入</button></div></div>}
-    {!loading && !error && shown.length === 0 && <p className="empty">目前沒有這類內容。</p>}
-    {!error && shown.map(item => <article className="card stack" key={`${item.kind}:${item.id}`} aria-label={`${kinds[item.kind]}：${item.title}`}>
-      <div className="card-head"><h3 className="work-sharing-preview">{item.title || '未命名內容'}</h3><span className="pill">{kinds[item.kind]}</span></div>
-      <dl className="meta"><div><dt>狀態</dt><dd>{statuses[item.status] ?? item.status}</dd></div><div><dt>可見範圍</dt><dd>{visibility[item.visibility] ?? item.visibility}</dd></div>{item.version !== null && <div><dt>來源版本</dt><dd>{item.version}</dd></div>}</dl>
-      <div className="actions">{item.actions.map(action => { if (item.kind === 'social_post' && action === 'withdraw') return <SocialWithdrawal key={action} item={item} onChanged={() => void load()}/>; const path = personalContentActionPath(item, action); return path && actionLabels[action] ? <a className="btn btn-secondary btn-small" key={action} href={path}>{actionLabels[action]}</a> : null; })}</div>
-    </article>)}
-  </div>;
+  const [selected, setSelected] = useState<string | null>(selectedShowcase);
+  useEffect(() => { const change = () => setSelected(selectedShowcase()); window.addEventListener('hashchange', change); return () => window.removeEventListener('hashchange', change); }, []);
+  if (!selected) return null;
+  return <PageLoadBoundary label="私人作品編輯" resetKey={selected}><ShowcaseDraftEditor key={selected} id={selected === 'new' ? null : selected} onChanged={id => {
+    if (selected === 'new' && id) window.history.replaceState(window.history.state, '', '#me/content/showcases/' + encodeURIComponent(id));
+  }} onClose={() => { window.location.hash = 'me'; }}/></PageLoadBoundary>;
 }
 
-function SocialWithdrawal({ item, onChanged }: { item: PersonalContentItem; onChanged: () => void }) {
+export function ContentItemActions({item, omit, onChanged}:{item:PersonalContentItem;omit?:string;onChanged:()=>void}) {
+  const actions=item.actions.filter(action=>action!==omit&&(item.kind==='social_post'&&action==='withdraw'||personalContentActionPath(item,action)&&actionLabels[action]));
+  if (!actions.length) return null;
+  return <details className="personal-space-more"><summary>更多</summary><div className="actions">{actions.map(action => {
+    if (item.kind === 'social_post' && action === 'withdraw') return <SocialWithdrawal key={action} item={item} onChanged={onChanged}/>;
+    return <a className="btn btn-secondary btn-small" key={action} href={personalContentActionPath(item,action)!}>{actionLabels[action]}</a>;
+  })}</div></details>;
+}
+
+export function SocialWithdrawal({ item, onChanged }: { item: PersonalContentItem; onChanged: () => void }) {
   const [confirm, setConfirm] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const key = useRef<string | null>(null), mounted = useRef(true), locked = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);

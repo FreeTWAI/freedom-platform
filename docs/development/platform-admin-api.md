@@ -10,12 +10,20 @@
 這是當下的導覽提示，不授予管理權；撤權後即使尚未刷新導覽，後端仍逐次拒絕操作。
 獨立 `/admin` 登入通路保留，仍要求 Cloudflare Access 與有效管理名單，不要求先有會員帳號。
 
-## 管理工作區（2026-10-18）
+## 管理工作區（2026-11-13）
 
-後台先呈現真實會員／公會摘要與可直接開啟的待審入口。桌面用固定側欄，
-手機以單一原生對話框切換管理功能，支援功能搜尋、Escape、焦點返回與瀏覽器返回。
-`?view=` 只接受既有管理頁名稱，網址不放會員搜尋、Email 或私人審核內容。
-頁面工具沿用既有元件，以收合入口呈現；品牌使用原始工坊圖。
+`/admin` 預設進入「待處理」，另有「人員與公會」、「系統」兩處。
+待處理合併公會申請、社群認證、作者／主辦認領、檢舉分享、商店准入、工具檢舉、舊待審活動與 PR；
+依等待時間由舊到新排序，先選種類，再開啟單一物件，沿用原決策 API 與權限。
+清單跟隨既有分頁；來源讀取失敗會顯示錯誤與重試，404 或未安裝能力則隱藏。
+手機一次顯示三列，以分頁保留所有項目。重複的頂部摘要計數已移除。
+
+人員與公會以單一搜尋尋找會員、公會及技能書；會員資格、平台管理權、公會職務與技能書維護任命
+仍是各自獨立的控制與伺服器授權。原「會長與維護者」改稱「技能書維護者」。
+系統保留 GitHub、憑證、錯誤及稽核；到期警示帶 `object=<credential_key>` 並聚焦該憑證。
+所有舊 `?view=` 保留；待審類別對應清單篩選、人員類別對應搜尋、系統類別對應原畫面。
+`object` 指定物件，`manage=1` 開啟既有紀錄與設定工作區；網址不放搜尋字詞、Email 或私人審核內容。
+手機以原生對話框切換三處，保留 Escape、焦點返回與瀏覽器返回。頁面工具與品牌沿用原元件。
 
 公會申請預設呼叫既有 `state=pending` API；已核准、未核准與全部各自查詢並分頁。
 每列先呈現名稱、申請人、專業與狀態，第一次展開時才掛載完整內容與審核表單；
@@ -27,12 +35,20 @@
 
 憑證細節放在管理工作區之後；正常狀態預設收合，需要處理或無法確認時顯示狀態。
 選單提供「系統憑證」直達入口；到期／失敗警示也在頁面上方提供入口，
-開啟時將焦點移至憑證摘要，續期仍由本人明確按下原按鈕。
+開啟時將焦點移至警示所指的憑證，續期仍由本人明確按下原按鈕。
 修改後重新整理目前正在操作的工作區；較早的查詢結果不覆蓋新的功能或篩選。
 
 公會設定、會長工作區、作者認領、GitHub 設定與 PR 審核以既有錯誤／載入邊界按需載入。
 模組歸屬由 `apps/admin/freedom.module.json` 列出實際後台檔案及既有完整 runtime／UI 義務，
 主應用宣告此組合依賴；本機 context 不代表可信 CI、獨立 review 或發布授權。
+
+`bootstrap` 的 `store_admissions_enabled`、`community_certification_enabled`、`github_setup_enabled`、
+`tool_reports_enabled` 只描述現有部署能力，不切換旗標或授予權限。
+`GET /guild-tools?reported=true` 只列當前版本尚未由管理員處理的檢舉工具，附筆數與最早檢舉時間，
+不附檢舉者或聯絡資料。`GET /event-organizer-claims?state=pending` 依時間排序，僅投影認領與佐證欄位；
+兩者與 `/shares/held`、`/events` 都接受 `limit`（1–100）／`offset`，回傳 `next_offset`。
+主辦認領沿用 `/event-organizer-claims/:id/review` 的版本、CSRF 與冪等契約；核實僅記錄署名及貢獻，
+不移轉活動所有權，也不授予活動編輯權。
 
 以下 API 與身分、CSRF、版本及稽核契約繼續適用。
 
@@ -46,6 +62,8 @@
 
 | 方法與路徑（前綴 `/admin/api`） | 用途與回傳 |
 | --- | --- |
+| `GET /shares/held` | `{items,next_offset}`；接受 `limit`／`offset`；同社群尚未確認的隱藏分享，有未結案檢舉才列出，排除驗證帳號。每筆只有 `share_id,kind,title,public_url,open_reports,reasons,hidden_at`；理由最多三則，不附檢舉人身分。依第三則有效檢舉時間（`hidden_at`）由舊到新，最多100筆；舊資料沒有三則有效檢舉時時間為 null 並排最後。標題取已分享快照，連結僅限已有公開入口。 |
+| `POST /shares/:id/restore`、`POST /shares/:id/confirm` | `{reason}`，3–1000字，沿用 Access、CSRF、冪等與稽核。恢復會結清檢舉並恢復仍有分享者的內容；確認下架保留隱藏並沖回 credit，兩者均移出待處理清單。Agent token 禁用。被檢舉暫停的活動只在「檢舉處理」處理，不列入一般活動審核；一般審核命令回409及處理入口提示。 |
 | `GET /bootstrap` | `{admin, csrf_token, summary, available_skill_books, pending_guild_appointments}`；admin 包含 `admin_id, community_id, email, display_name, role`。summary 包含會員數、有效會員數、待審公會數、公會數、有效管理員數。 |
 | `POST /link-member` | `{}`；需要 Access 管理員驗證，加上同社群、同 email 的有效會員 cookie，且會員已完成加入（選定主要公會）。本人確認後才綁定信箱與預先指定的公會長任命。 |
 | `GET /members?limit=25&offset=0&q=` | `{items,next_offset}`；limit 1–100、offset 0–100000、q 最多100字。管理專用欄位包含 email、active、onboarding_required、onboarding_completed_at、onboarding_entry_mode、email_verified_at、aggregate_version、目前公會。`onboarding_entry_mode` 為 `assessment` 或 `quick`（既有會員預設 `assessment`，不因此被重新封鎖）。名單把加入方式顯示成「已完成定位」、「已加入（未做定位）」、「尚未完成加入」或「既有會員」：還沒選定主要公會是「尚未完成加入」；已用快速加入、定位測驗還沒做完是「已加入（未做定位）」；定位測驗已做完是「已完成定位」；`onboarding_required=false` 的舊帳號是「既有會員」。 |

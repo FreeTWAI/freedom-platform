@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { canonicalHash } from '../../apps/portal-web/src/portal-route.js';
 import { test, expect, type Page } from './fixtures.js';
-import { navigate, signOut } from './navigation.js';
+import { navigate, openGuildCardMore, signOut } from './navigation.js';
 import { quickJoin } from './quick-join.js';
 import { DEMO_COMMUNITY, DEMO_PASSWORD } from '../../packages/testing/seed.js';
 import { hashPassword } from '../../modules/identity-membership/service.js';
@@ -13,13 +14,13 @@ async function register(page: Page, nickname: string) {
   await page.route(url => !['127.0.0.1','localhost'].includes(url.hostname),route => route.abort());
   const email = `merchant-journey-${randomUUID()}@example.test`;
   await page.goto('/');
-  await page.getByRole('button', {name: '建立帳號', exact: true}).click();
+  await page.getByRole('button', {name: '免費加入', exact: true}).click();
   await page.getByLabel('社群顯示名稱', {exact: true}).fill(nickname);
   await page.getByLabel('電子郵件', {exact: true}).fill(email);
   await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
   await page.getByRole('button', {name: '建立帳號，先逛工坊', exact: true}).click();
   await quickJoin(page, guild);
-  await expect(page.getByRole('heading', {name: '會員首頁', level: 1})).toBeVisible();
+  await expect(page.getByRole('heading', {name: '動態', level: 1})).toBeVisible();
   return email;
 }
 async function login(page: Page, email: string) {
@@ -50,7 +51,7 @@ async function createStore(page:Page,name:string) {
   await flow.getByRole('button',{name:'產生啟動方案',exact:true}).click();
   await flow.getByRole('button',{name:'確認啟動',exact:true}).click();
   await flow.getByRole('button',{name:'設定我的商店',exact:true}).click();
-  await expect(page).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
   const hash=new URL(page.url()).hash,slug='shared-'+randomUUID().slice(0,8);
   const setup=page.getByRole('form',{name:'建立商店',exact:true});
   await setup.getByLabel('商店名稱',{exact:true}).fill(name);await setup.getByLabel('商店網址',{exact:true}).fill(slug);
@@ -91,6 +92,7 @@ test('ordinary A/B/C members open stores, agree supply, opt in, race shared stoc
       const email=await register(page,nickname);
       await officer.goto('/#guilds');
       const card=officer.getByRole('article').filter({has:officer.getByRole('heading',{name:/電商/})});
+      await openGuildCardMore(card);
       await card.getByRole('button',{name:'查看成員',exact:true}).click();
       const dialog=officer.getByRole('dialog');await dialog.getByRole('searchbox',{name:'搜尋公會成員'}).fill(nickname);
       await dialog.getByRole('button',{name:'搜尋成員',exact:true}).click();
@@ -246,7 +248,7 @@ test('supplier-only A accepts B, explicitly opens reservations, reads only its o
     await expect(customer.getByRole('region', {name: '我的預留'})).toContainText('預留中');
     const orderId = await customer.getByLabel('預留編號', {exact: true}).inputValue();
     await a.getByRole('link', {name: '供貨訂單', exact: true}).click();
-    await expect(a).toHaveURL(new RegExp('#' + supplierStore.hash + '/supply-orders$'));
+    await expect(a).toHaveURL(new RegExp(canonicalHash('#' + supplierStore.hash + '/supply-orders') + '$'));
     const orders = a.locator('.hosted-store');
     await expect(orders).toContainText('零售 B'); await expect(orders).toContainText(title + ' × 3');
     await expect(orders).not.toContainText(otherTitle); await expect(orders).not.toContainText(buyer.email);
@@ -266,7 +268,7 @@ test('supplier-only A accepts B, explicitly opens reservations, reads only its o
       }
     }
     await a.getByRole('link', {name: '返回供貨商品庫', exact: true}).click();
-    await expect(a).toHaveURL(new RegExp('#' + supplierStore.hash + '/supply$'));
+    await expect(a).toHaveURL(new RegExp(canonicalHash('#' + supplierStore.hash + '/supply') + '$'));
     await expect(a.getByRole('button', {name: '新增供貨商品', exact: true})).toBeVisible();
     await a.getByRole('navigation', {name: '供貨工作區'}).getByRole('button', {name: '預留與訂單', exact: true}).click();
     await a.getByRole('button', {name: '停止接受新預留', exact: true}).click();

@@ -66,7 +66,7 @@ test('updated kit executes the central shared member workspace through its own p
   const client = await login();
   const workspace = await kit.loadMemberWorkspace(client);
   assert.equal(workspace.member.email, 'maker@local.test');
-  assert.equal(workspace.guilds.length, 18); assert(Array.isArray(workspace.work));
+  assert.equal(workspace.guilds.length, 20); assert(Array.isArray(workspace.work));
   assert.equal(workspace.agent_execution_grant, false);
   assert.equal(Object.hasOwn(workspace, 'csrf_token'), false);
   await client.call('logout', { body: {} });

@@ -53,6 +53,8 @@ test('native main composition verifies every private JWK before enforcing signer
         b.onResolve({filter:/^pg$/},()=>({path:'pg',namespace:'forbidden-sql'}));
         b.onLoad({filter:/.*/,namespace:'forbidden-sql'},()=>({contents:"export class Pool {constructor(){throw Error('No SQL in key review');}}"}));
         b.onResolve({filter:/model-step-node-transport\.js$/},()=>({path:resolve('modules/agent-execution/model-step-worker-transport-unavailable.ts')}));
+      // The Worker build aliases sharp the same way: native libvips is unavailable in workerd.
+      b.onResolve({filter:/^sharp$/},()=>({path:resolve('packages/shared/sharp-unavailable.ts')}));
       }}]});
     mf=new Miniflare(convertV4MiniflareOptions({workers:cases.map(entry=>({name:entry.name,modules:true,scriptPath:join(directory,'worker.mjs'),
       compatibilityDate:'2026-09-21',compatibilityFlags:['nodejs_compat'],bindings:entry.bindings}))}));

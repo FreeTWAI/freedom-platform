@@ -102,7 +102,7 @@ const frame=(fn:()=>void)=>queueMicrotask(fn);
 const bundled=buildSync({stdin:{contents:`export {EventsPanel,blankEvent,eventPayload} from './apps/portal-web/src/modules/EventsPanel'; export {ApiError} from './apps/portal-web/src/api';`,resolveDir:process.cwd(),sourcefile:'event-clipboard-ui-entry.ts'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external',jsx:'automatic',loader:{'.css':'empty'}});
 const clipboard:any={language:'zh-TW',languages:['zh-TW'],clipboard:{writeText:noNetwork}};
 const production={exports:{} as any};
-runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:clipboard,fetch:noNetwork,requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='zod')return require('zod');throw Error(name);}});
+runInNewContext(bundled.outputFiles[0].text,{module:production,exports:production.exports,crypto:webcrypto,Intl,URL,URLSearchParams,AbortController,Error,Event,CustomEvent:class{constructor(public type:string){}},Blob,console,window,document,HTMLElement:HostNode,HTMLDetailsElement:class{},navigator:clipboard,fetch:noNetwork,requestAnimationFrame:frame,localStorage:{getItem(){return null;},setItem(){}},setTimeout,clearTimeout,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='react-dom')return require('react-dom');if(name==='qrcode')return require('qrcode');if(name==='zod')return require('zod');throw Error(name);}});
 const {EventsPanel,ApiError}=production.exports;
 const OWNER='30000000-0000-4000-8000-000000000001',ID='10000000-0000-4000-8000-000000000001';
 const stored=(patch:any={})=>({help_need:null,event_id:ID,organizer_ref:OWNER,organizer_name:'合成主辦',title:'合成活動',description:'合成說明',starts_at:'2099-01-01T12:00:00.000Z',ends_at:'2099-01-01T13:00:00.000Z',mode:'online',location:'合成場地',capacity:null,state:'published',visibility:'workshop',event_kind:'other',topic:null,online_url:null,guild_key:null,review_guild_key:null,can_review:false,review_reason:null,banner_url:null,banner_orientation:null,video_url:null,video_mime:null,attending_count:0,my_rsvp:null,aggregate_version:1,registration_policy:'community_member',prize_details:[],...patch});
@@ -110,12 +110,13 @@ const propsOf=(node:HostNode)=>node[Object.keys(node).find(k=>k.startsWith('__re
 function host(t:TestContext,component:any,initial:any){
  const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container as unknown as HTMLElement);let props=initial,mounted=true;
  const render=()=>flush(()=>root.render(React.createElement(component,props)));render();
- const nodes=()=>descendants(container),button=(text:string)=>nodes().find(n=>n.nodeName==='BUTTON'&&n.textContent===text)!;
+ const nodes=()=>descendants(document.body),button=(text:string)=>nodes().find(n=>n.nodeName==='BUTTON'&&n.textContent===text)!;
+ const buttons=(text:string)=>nodes().filter(n=>n.nodeName==='BUTTON'&&n.textContent===text);
  const click=(node:HostNode)=>{assert(node,'mounted button');assert(!propsOf(node).disabled);let thrown:unknown;flush(()=>{try{propsOf(node).onClick({type:'click',button:0,currentTarget:node});}catch(error){thrown=error;}});if(thrown)throw thrown;};
  const field=(text:string)=>{const label=nodes().find(n=>n.nodeName==='LABEL'&&(n.textContent===text||n.textContent.startsWith(text)));assert(label,`label ${text}`);return label.attributes.for?nodes().find(n=>n.attributes.id===label.attributes.for)!:descendants(label).find(n=>['INPUT','TEXTAREA','SELECT'].includes(n.nodeName))!;};
  const change=(label:string,value:string)=>{const node=field(label);flush(()=>propsOf(node).onChange({target:{value},currentTarget:{value}}));};
  const unmount=()=>{if(mounted){flush(()=>root.unmount());document.body.removeChild(container);mounted=false;}};t.after(unmount);
- return {container,nodes,button,click,field,change,render,unmount,setProps(next:any){props=next;render();},text:()=>container.textContent};
+ return {container,nodes,button,buttons,click,field,change,render,unmount,setProps(next:any){props=next;render();},text:()=>document.body.textContent};
 }
 function panel(t:TestContext){
  const requests:any[]=[],client:any={sessionGeneration:1,csrfToken:'synthetic'};for(const method of ['get','post','patch'])client[method]=(path:string,body?:any,options?:any)=>new Promise((resolve,reject)=>requests.push({method,path,body,options,resolve,reject}));
@@ -125,44 +126,52 @@ function panel(t:TestContext){
  const settle=async(r:any,value:any,reject=false)=>{assert(r);await React.act(async()=>{r[reject?'reject':'resolve'](value);await new Promise(resolve=>setImmediate(resolve));});};
  const ready=async(items:any[]=[])=>{for(const r of reads().filter(r=>!r.done)){r.done=true;await settle(r,{items:r.path==='/events'?items:[]});}};
  const submit=()=>{const form=h.nodes().find(n=>n.nodeName==='FORM');assert(form);flush(()=>form.dispatchEvent({type:'submit'}));};
- return {...h,props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
+ const urlText=()=>h.nodes().find(n=>(n.attributes.class??'').split(' ').includes('skill-share-url'))?.textContent??'';
+ const manualTextarea=()=>h.field('手動複製分享內容');
+ return {...h,props,client,requests,reads,writes,settle,ready,submit,urlText,manualTextarea,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
 }
 
 const ID2='10000000-0000-4000-8000-000000000002';
-const link=(id=ID)=>`https://fixture.invalid/events/${id}?ref=synthetic_referral`;
+const codeFor=(id=ID)=>`code${id.slice(-6)}`;
+const link=(id=ID)=>`https://fixture.invalid/go/${codeFor(id)}`;
 const drain=async()=>React.act(async()=>{await new Promise(resolve=>setImmediate(resolve));});
 const deferred=()=>{let resolve!:()=>void,reject!:(error:Error)=>void;const promise=new Promise<void>((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
 async function openShare(h:ReturnType<typeof panel>,id=ID){
  const article=h.nodes().find(n=>n.nodeName==='ARTICLE'&&n.textContent.includes(id===ID?'合成活動':'第二場活動'));assert(article);
  const button=descendants(article).find(n=>n.nodeName==='BUTTON'&&n.textContent==='分享活動')!;h.click(button);
- const request=h.writes().at(-1);assert.equal(request.path,'/promotion/links');assert.equal(request.body.target,id);
- await h.settle(request,{path:`/events/${id}?ref=synthetic_referral`});
+ const request=h.writes().at(-1);assert.equal(request.path,'/promotion/links');assert.equal(request.body.kind,'event');assert.equal(request.body.target,id);
+ await h.settle(request,{path:`/go/${codeFor(id)}`});
  return request;
 }
-for(const kind of ['missing','throw','reject'])test(`copy link recovers from ${kind} clipboard and keeps a selectable URL`,async t=>{
+for(const kind of ['missing','throw','reject'])test(`copy link recovers from ${kind} clipboard and keeps a selectable manual box`,async t=>{
  const h=panel(t);await h.ready([stored()]);await openShare(h);let calls=0;
  clipboard.clipboard=kind==='missing'?undefined:{writeText(){calls++;if(kind==='throw')throw Error('synthetic denied');return Promise.reject(Error('synthetic denied'));}};
  const copy=h.button('複製連結');assert(copy);assert.equal(propsOf(copy).type,'button');
  let thrown:unknown;try{h.click(copy);}catch(e){thrown=e;}await drain();
  assert.equal(thrown,undefined,'click must contain synchronous Clipboard failures');
- assert.match(h.text(),/請選取上方連結手動複製/);assert.doesNotMatch(h.text(),/已複製/);
- const input=h.field('分享連結');assert.equal(propsOf(input).value,link());assert.equal(propsOf(input).readOnly,true);
- let selected=0;flush(()=>propsOf(input).onFocus({target:{select(){selected++;}}}));assert.equal(selected,1);
+ assert.match(h.text(),/請手動複製下面的內容。/);assert.doesNotMatch(h.text(),/已複製/);
+ const textarea=h.manualTextarea()!;assert(textarea);assert.equal(propsOf(textarea).value,link());assert.equal(propsOf(textarea).readOnly,true);
+ let selected=0;const target={select(){selected++;}};flush(()=>propsOf(textarea).onFocus({target,currentTarget:target}));assert.equal(selected,1);
  assert.equal(calls,kind==='missing'?0:1);assert.equal(h.writes().length,1,'copy never requests another referral link');
  clipboard.clipboard={writeText:async(value:string)=>{assert.equal(value,link());}};
- h.click(copy);await drain();assert.match(h.text(),/活動專頁連結已複製。/);assert.doesNotMatch(h.text(),/手動複製/);
+ h.click(copy);await drain();assert.match(h.text(),/已複製。/);assert.doesNotMatch(h.text(),/請手動複製下面的內容。/);
 });
-test('a pending retry clears prior success and only its latest completion may report',async t=>{
+test('a pending copy blocks concurrent click and retry clears prior success cleanly',async t=>{
  const h=panel(t);await h.ready([stored()]);await openShare(h);const first=deferred(),second=deferred();let calls=0;
  clipboard.clipboard={writeText(){return ++calls===1?first.promise:second.promise;}};
- h.click(h.button('複製連結'));assert.doesNotMatch(h.text(),/已複製/);
- h.click(h.button('複製連結'));second.reject(Error('latest denied'));await drain();assert.match(h.text(),/手動複製/);
- first.resolve();await drain();assert.match(h.text(),/手動複製/);assert.doesNotMatch(h.text(),/已複製/);
+ h.click(h.button('複製連結'));
+ assert.equal(propsOf(h.button('複製中…')).disabled,true,'pending copy prevents duplicate click');
+ assert.equal(calls,1);
+ first.resolve();await drain();assert.match(h.text(),/已複製。/);
+ h.click(h.button('複製連結'));
+ assert.doesNotMatch(h.text(),/已複製。/,'new attempt clears prior status while pending');
+ second.reject(Error('latest denied'));await drain();assert.match(h.text(),/請手動複製下面的內容。/);assert.doesNotMatch(h.text(),/已複製。/);
 });
-for(const outcome of ['resolve','reject'] as const)for(const change of ['event','route','account','client','generation','unmount'])test(`late clipboard ${outcome} is ignored after ${change}`,async t=>{
+for(const outcome of ['resolve','reject'] as const)for(const change of ['close','event','route','account','client','generation','unmount'])test(`late clipboard ${outcome} is ignored after ${change}`,async t=>{
  const h=panel(t);await h.ready([stored(),stored({event_id:ID2,title:'第二場活動'})]);await openShare(h);const pending=deferred();
  clipboard.clipboard={writeText:()=>pending.promise};h.click(h.button('複製連結'));
- if(change==='event'){clipboard.clipboard={writeText:async()=>{}};await openShare(h,ID2);assert.equal(propsOf(h.field('分享連結')).value,link(ID2));}
+ if(change==='close'){h.click(h.button('關閉'));assert.equal(Boolean(h.button('複製連結')),false);}
+ else if(change==='event'){h.click(h.button('關閉'));clipboard.clipboard={writeText:async()=>{}};await openShare(h,ID2);assert.equal(h.urlText(),link(ID2));}
  else if(change==='unmount')h.unmount();
  else {const props={...h.props};if(change==='route')props.locationHash=`#events/${ID2}`;
  else if(change==='account')props.session={user:{user_id:'new-owner'}};
@@ -170,44 +179,56 @@ for(const outcome of ['resolve','reject'] as const)for(const change of ['event',
  h.setProps(props);assert.equal(Boolean(h.button('複製連結')),false,'old scope share controls are cleared');}
  const before=h.text();if(outcome==='resolve')pending.resolve();else pending.reject(Error('old denied'));await drain();assert.equal(h.text(),before,'old completion cannot alter current notice or controls');
 });
-for(const kind of ['missing','throw','reject'])test(`initial sharing offers manual recovery for ${kind} clipboard`,async t=>{
- const h=panel(t);await h.ready([stored()]);clipboard.clipboard=kind==='missing'?undefined:{writeText(){if(kind==='throw')throw Error('synthetic denied');return Promise.reject(Error('synthetic denied'));}};
- await openShare(h);assert.equal(propsOf(h.field('分享連結')).value,link());assert.match(h.text(),/請選取上方連結手動複製/);assert.doesNotMatch(h.text(),/已複製/);
+test('failed link request falls back to public fallback URL without error or retry button',async t=>{
+ const h=panel(t);await h.ready([stored()]);
+ const article=h.nodes().find(n=>n.nodeName==='ARTICLE'&&n.textContent.includes('合成活動'))!;
+ h.click(descendants(article).find(n=>n.nodeName==='BUTTON'&&n.textContent==='分享活動')!);
+ await h.settle(h.writes().at(-1),new Error('unavailable'),true);
+ assert.equal(h.urlText(),`https://fixture.invalid/events/${ID}`);
+ assert.match(h.text(),/這是一般連結，不會記在你名下。/);
+ assert.equal(h.buttons('重試').length,0);
 });
 test('dismissed native share neither copies nor claims success',async t=>{
  const h=panel(t);await h.ready([stored()]);let copies=0;clipboard.share=async()=>{throw Object.assign(Error('dismissed'),{name:'AbortError'});};clipboard.clipboard={writeText:async()=>{copies++;}};
- await openShare(h);assert.equal(copies,0);assert.doesNotMatch(h.text(),/已複製|已開啟分享|手動複製/);assert.equal(propsOf(h.field('分享連結')).value,link());
+ await openShare(h);h.click(h.button('分享'));await drain();
+ assert.equal(copies,0);assert.doesNotMatch(h.text(),/已複製|已交給手機分享|手動複製/);assert.equal(h.urlText(),link());
 });
 test('late referral link does not reopen sharing after leaving the event',async t=>{
- const h=panel(t);await h.ready([stored()]);h.click(h.button('分享活動'));const request=h.writes().at(-1);h.setProps({...h.props,locationHash:`#events/${ID2}`});
- let copies=0;clipboard.clipboard={writeText:async()=>{copies++;}};await h.settle(request,{path:`/events/${ID}?ref=synthetic_referral`});
+ const h=panel(t);await h.ready([stored()]);
+ const article=h.nodes().find(n=>n.nodeName==='ARTICLE'&&n.textContent.includes('合成活動'))!;
+ h.click(descendants(article).find(n=>n.nodeName==='BUTTON'&&n.textContent==='分享活動')!);
+ const request=h.writes().at(-1);h.setProps({...h.props,locationHash:`#events/${ID2}`});
+ let copies=0;clipboard.clipboard={writeText:async()=>{copies++;}};await h.settle(request,{path:`/go/${codeFor(ID)}`});
  assert.equal(copies,0);assert.equal(Boolean(h.button('複製連結')),false);assert.doesNotMatch(h.text(),/已複製/);
 });
-
 for(const outcome of ['resolve','reject'] as const)test(`late native share ${outcome} cannot report or fall back after scope change`,async t=>{
  const h=panel(t);await h.ready([stored()]);const pending=deferred();let copies=0;
- clipboard.share=()=>pending.promise;clipboard.clipboard={writeText:async()=>{copies++;}};await openShare(h);
- h.setProps({...h.props,locationHash:'#events/10000000-0000-4000-8000-000000000002'});const before=h.text();
+ clipboard.share=()=>pending.promise;clipboard.clipboard={writeText:async()=>{copies++;}};await openShare(h);h.click(h.button('分享'));
+ h.setProps({...h.props,locationHash:`#events/${ID2}`});const before=h.text();
  if(outcome==='resolve')pending.resolve();else pending.reject(Error('native unavailable'));await drain();
  assert.equal(copies,0);assert.equal(h.text(),before);assert.equal(Boolean(h.button('複製連結')),false);
 });
 test('a native share success reports sharing without claiming to have copied',async t=>{
  const h=panel(t);await h.ready([stored()]);let copies=0;
- clipboard.share=async(value:any)=>{assert.equal(value.url,link());};clipboard.clipboard={writeText:async()=>{copies++;}};
- await openShare(h);assert.match(h.text(),/已開啟分享/);assert.doesNotMatch(h.text(),/已複製/);assert.equal(copies,0);
+ clipboard.share=async(value:any)=>{assert.equal(value.url,link());assert.equal(value.title,'合成活動');};clipboard.clipboard={writeText:async()=>{copies++;}};
+ await openShare(h);h.click(h.button('分享'));await drain();assert.match(h.text(),/已交給手機分享。/);assert.doesNotMatch(h.text(),/已複製/);assert.equal(copies,0);
 });
 test('latest referral request owns its link even if the older request completes last',async t=>{
- const h=panel(t);await h.ready([stored(),stored({event_id:ID2,title:'第二場活動'})]);h.click(h.button('分享活動'));const first=h.writes()[0];
- await openShare(h,ID2);const before=h.text();await h.settle(first,{path:`/events/${ID}?ref=synthetic_referral`});
- assert.equal(h.text(),before);assert.equal(propsOf(h.field('分享連結')).value,link(ID2));
+ const h=panel(t);await h.ready([stored(),stored({event_id:ID2,title:'第二場活動'})]);
+ const firstArticle=h.nodes().find(n=>n.nodeName==='ARTICLE'&&n.textContent.includes('合成活動'))!;
+ h.click(descendants(firstArticle).find(n=>n.nodeName==='BUTTON'&&n.textContent==='分享活動')!);
+ const first=h.writes()[0];
+ h.click(h.button('關閉'));
+ await openShare(h,ID2);const before=h.text();await h.settle(first,{path:`/go/${codeFor(ID)}`});
+ assert.equal(h.text(),before);assert.equal(h.urlText(),link(ID2));
 });
-
-for(const denied of [false,true])test(`current native share rejection falls back to clipboard ${denied?'rejection':'success'}`,async t=>{
+test('current native share rejection opens manual copy without pretending to copy',async t=>{
  const h=panel(t);await h.ready([stored()]);let copies=0;
  clipboard.share=async()=>{throw Error('native share unavailable');};
- clipboard.clipboard={writeText:async(value:string)=>{copies++;assert.equal(value,link());if(denied)throw Error('clipboard denied');}};
- await openShare(h);assert.equal(copies,1);assert.equal(h.writes().length,1);assert.equal(propsOf(h.field('分享連結')).value,link());
- if(denied){assert.match(h.text(),/請選取上方連結手動複製/);assert.doesNotMatch(h.text(),/已複製/);}
- else {assert.match(h.text(),/活動專頁連結已複製，分享碼已包含在連結中。/);assert.doesNotMatch(h.text(),/手動複製/);}
- assert.doesNotMatch(h.text(),/已開啟分享/);
+ clipboard.clipboard={writeText:async()=>{copies++;}};
+ await openShare(h);h.click(h.button('分享'));await drain();
+ assert.equal(copies,0);assert.equal(h.writes().length,1);assert.equal(h.urlText(),link());
+ assert.equal(propsOf(h.manualTextarea()!).value,link());
+ assert.match(h.text(),/請手動複製下面的內容。/);
+ assert.doesNotMatch(h.text(),/已複製|已交給手機分享/);
 });
