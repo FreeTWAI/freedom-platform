@@ -78,7 +78,7 @@ export function HostedStoreProductsArea({
   copyAction, copyLink, copyFeedback, manualUrl, manualField, tenantId, instanceId,
   galleries, hasFormDraft, media,
 }: HostedStoreProductsAreaProps) {
-  return <section id="store-products-panel" hidden={area!=='products'} className="hosted-supply-panel stack" aria-labelledby="store-products-title"><h3 id="store-products-title">商品</h3>
+  return <section id="store-products-panel" tabIndex={-1} hidden={area!=='products'} className="hosted-supply-panel stack" aria-labelledby="store-products-title"><h3 id="store-products-title">商品</h3>
           {can('store:publish') && <div className="hosted-store-publication stack">
             <h4>儲存商品 → 確認上架</h4>
             <p>先儲存商品資料{photosEnabled && photoUploadsEnabled && !galleryEnabled ? '，選圖後會自動儲存照片' : ''}。儲存不會自動更新公開商店，確認內容後再上架。</p>
