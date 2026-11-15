@@ -84,6 +84,15 @@ test('one oldest-first list includes every available kind and a filter opens one
  await expect(page.getByText('核實只記錄署名與貢獻，不移轉活動所有權。')).toBeVisible();await expect(page.getByRole('button',{name:'確認',exact:true})).toBeDisabled();await page.getByLabel('審核理由',{exact:true}).fill('來源佐證已核對');await page.getByRole('button',{name:'確認',exact:true}).click();
  await expect.poll(()=>calls.length).toBe(1);expect(calls[0].body).toEqual({decision:'verify',reason:'來源佐證已核對'});expect(calls[0].headers['if-match']).toBe('"1"');expect(calls[0].headers['x-admin-csrf']).toBe('synthetic-csrf');expect(calls[0].headers['idempotency-key']).toBeTruthy();
 });
+test('a kind filter in 待處理 survives reload and Back, and a view link without manage still opens its management screen',async({page})=>{
+ const {ids}=await fixture(page);await page.goto('/admin');const list=page.locator('.admin-place-list'),kind=page.getByLabel('種類',{exact:true});
+ await kind.selectOption('held-shares');await expect(list.getByRole('button')).toHaveCount(1);await expect(page).toHaveURL(/\/admin\?view=held-shares&manage=0$/);
+ await page.reload();await expect(kind).toHaveValue('held-shares');await expect(list.getByRole('button')).toHaveCount(1);
+ await list.getByRole('button').click();await expect(page).toHaveURL(new RegExp(`object=${ids['held-shares']}`));await expect(page.locator('.admin-content h2').first()).toHaveText('檢舉處理');
+ await page.reload();await expect(page.locator('.admin-content h2').first()).toHaveText('檢舉處理');await expect(kind).toHaveCount(0);
+ await page.goBack();await expect(kind).toHaveValue('held-shares');await expect(list.getByRole('button')).toHaveCount(1);
+ await page.goto('/admin?view=held-shares');await expect(page.locator('.admin-content h2').first()).toHaveText('檢舉處理');await expect(kind).toHaveCount(0);
+});
 test('organizer rejection uses the same reason and version protected API',async({page})=>{
  const {calls}=await fixture(page);await page.goto('/admin?view=organizer-claims');await page.getByLabel('決定',{exact:true}).selectOption('reject');await page.getByLabel('審核理由',{exact:true}).fill('佐證不足，駁回申請');await page.getByRole('button',{name:'確認',exact:true}).click();await expect.poll(()=>calls.length).toBe(1);expect(calls[0].body.decision).toBe('reject');
 });

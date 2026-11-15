@@ -79,8 +79,12 @@ export function AdminPanel({memberClient}:{memberClient?:PortalClient}={}){
   const [githubParameters]=useState(()=>window.location.pathname==='/admin/github/callback'?new URLSearchParams(window.location.search):null);
   const githubCompletion=useRef<{owner:string;promise:Promise<SetupStatus>}|null>(null);
   const [objectId,setObjectId]=useState<string|null>(()=>new URLSearchParams(window.location.search).get('object'));
-  const directView=()=>!(['inbox','people','system'] as AdminTab[]).includes(locationTab());
-  const [manage,setManage]=useState(()=>new URLSearchParams(window.location.search).get('manage')==='1'||directView());
+  const placeView=(tab:AdminTab)=>(['inbox','people','system'] as AdminTab[]).includes(tab);
+  // A kind filter or an opened item writes manage=0 and a management screen manage=1. A view link without
+  // manage predates the places, so it still opens its management screen.
+  const manageOf=(params:URLSearchParams)=>params.get('manage')==='1'||params.get('manage')!=='0'&&!placeView(locationTab());
+  const writeManage=(url:URL,tab:AdminTab,management:boolean)=>{if(management)url.searchParams.set('manage','1');else if(placeView(tab))url.searchParams.delete('manage');else url.searchParams.set('manage','0');};
+  const [manage,setManage]=useState(()=>manageOf(new URLSearchParams(window.location.search)));
   const place=placeOf(tab),detail=objectId!==null||manage,screen=detail||place==='system'?(tab==='system'?'credentials':tab):null;
   const [applicationState,setApplicationState]=useState<ApplicationState>('pending');
   const [navQuery,setNavQuery]=useState(''),[navOpen,setNavOpen]=useState(false),[mobileNav,setMobileNav]=useState(()=>window.matchMedia('(max-width: 960px)').matches);
@@ -98,7 +102,7 @@ export function AdminPanel({memberClient}:{memberClient?:PortalClient}={}){
   useEffect(()=>{const unload=(event:BeforeUnloadEvent)=>{if(moderationPending.current){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',unload);return()=>window.removeEventListener('beforeunload',unload);},[]);
   useEffect(()=>{let active=true;setGithubAvailable(false);if(!bootstrap||bootstrap.github_setup_enabled===false)return;void client.request<SetupStatus>('/github-app').then(status=>{if(active)setGithubAvailable(status.configured===true||status.setup_available!==false);}).catch(error=>{if(active&&!(error instanceof AdminRequestError&&error.status===404))setGithubAvailable(true);});return()=>{active=false;};},[client,bootstrap?.admin.admin_id,bootstrap?.admin.community_id,bootstrap?.github_setup_enabled]);
   const lock=useRef(false),keys=useRef(new Map<string,string>()),loadSequence=useRef(0),appliedQuery=useRef(''),startSequence=useRef(0),bootstrapOwner=useRef(''),reviewDrafts=useRef(new Map<string,GuildReviewDraft>());
-  const start=useCallback(async()=>{const sequence=++startSequence.current;setBooting(true);setBootError('');try{const value=await client.request<Bootstrap>('/bootstrap');if(sequence!==startSequence.current)return;const owner=`${value.admin.admin_id}:${value.admin.community_id}:${value.admin.role}`;if(bootstrapOwner.current&&bootstrapOwner.current!==owner){++loadSequence.current;keys.current.clear();reviewDrafts.current.clear();setObjectId(null);view.current.objectId=null;setManage(new URLSearchParams(window.location.search).get('manage')==='1'||directView());setMembers([]);setApplications([]);setApplicationOffset(null);setNextOffset(null);setGuilds([]);setAdmins([]);setAudit([]);setClientErrors([]);setErrorLimit(20);setPendingEvents([]);setHeldShares([]);heldFocus.current=null;setNotice('');setError('');setQuery('');appliedQuery.current='';setIncludeTest(false);setApplicationState('pending');view.current.includeTest=false;view.current.applicationState='pending';setNavQuery('');setCredentialAlert('');}bootstrapOwner.current=owner;client.csrf=value.csrf_token;
+  const start=useCallback(async()=>{const sequence=++startSequence.current;setBooting(true);setBootError('');try{const value=await client.request<Bootstrap>('/bootstrap');if(sequence!==startSequence.current)return;const owner=`${value.admin.admin_id}:${value.admin.community_id}:${value.admin.role}`;if(bootstrapOwner.current&&bootstrapOwner.current!==owner){++loadSequence.current;keys.current.clear();reviewDrafts.current.clear();setObjectId(null);view.current.objectId=null;setManage(manageOf(new URLSearchParams(window.location.search)));setMembers([]);setApplications([]);setApplicationOffset(null);setNextOffset(null);setGuilds([]);setAdmins([]);setAudit([]);setClientErrors([]);setErrorLimit(20);setPendingEvents([]);setHeldShares([]);heldFocus.current=null;setNotice('');setError('');setQuery('');appliedQuery.current='';setIncludeTest(false);setApplicationState('pending');view.current.includeTest=false;view.current.applicationState='pending';setNavQuery('');setCredentialAlert('');}bootstrapOwner.current=owner;client.csrf=value.csrf_token;
     // Start before publishing the shell: lazy navigation must not own the callback.
     if(githubParameters&&!githubCompletion.current){
       window.history.replaceState(null,'','/admin');
@@ -133,7 +137,7 @@ export function AdminPanel({memberClient}:{memberClient?:PortalClient}={}){
     return()=>{document.body.style.overflow=previous;};
   },[navOpen,mobileNav]);
   useEffect(()=>{if(focusContent.current){focusContent.current=false;content.current?.focus({preventScroll:true});content.current?.scrollIntoView({block:'start'});}},[tab,objectId,manage]);
-  useEffect(()=>{const changed=()=>selectTab(locationTab(),false,new URLSearchParams(window.location.search).get('object'),new URLSearchParams(window.location.search).get('manage')==='1'||directView());window.addEventListener('popstate',changed);return()=>window.removeEventListener('popstate',changed);},[mobileNav,objectId,manage]);
+  useEffect(()=>{const changed=()=>selectTab(locationTab(),false,new URLSearchParams(window.location.search).get('object'),manageOf(new URLSearchParams(window.location.search)));window.addEventListener('popstate',changed);return()=>window.removeEventListener('popstate',changed);},[mobileNav,objectId,manage]);
   function closeNavigation(){setNavOpen(false);navDialog.current?.close();navTrigger.current?.focus();}
   function trapNavDialogFocus(event:KeyboardEvent<HTMLDialogElement>){
     if(event.key!=='Tab'||!navDialog.current)return;
@@ -146,9 +150,9 @@ export function AdminPanel({memberClient}:{memberClient?:PortalClient}={}){
   function openCredentials(){selectTab('credentials',true,credentialKey||null);}
   function selectTab(next:AdminTab,push=true,id:string|null=null,management=false){
     const changed=next!==view.current.tab||id!==objectId||management!==manage;
-    if(changed&&(moderationPending.current||[...certificationGuards.current].some(guard=>!guard()))){setError('請先確認尚未完成的審核結果，再切換工作區。');if(!push){const url=new URL(window.location.href);url.searchParams.set('view',view.current.tab);if(objectId)url.searchParams.set('object',objectId);else url.searchParams.delete('object');if(manage)url.searchParams.set('manage','1');else url.searchParams.delete('manage');window.history.replaceState(null,'',url);}return;}
+    if(changed&&(moderationPending.current||[...certificationGuards.current].some(guard=>!guard()))){setError('請先確認尚未完成的審核結果，再切換工作區。');if(!push){const url=new URL(window.location.href);url.searchParams.set('view',view.current.tab);if(objectId)url.searchParams.set('object',objectId);else url.searchParams.delete('object');writeManage(url,view.current.tab,manage);window.history.replaceState(null,'',url);}return;}
     if(changed){setObjectId(id);view.current.objectId=id;setManage(management);++loadSequence.current;view.current.tab=next;setTab(next);setError('');setNotice('');focusContent.current=true;}
-    if(push&&changed){const url=new URL(window.location.href);url.pathname='/admin';url.searchParams.set('view',next);if(id)url.searchParams.set('object',id);else url.searchParams.delete('object');if(management)url.searchParams.set('manage','1');else url.searchParams.delete('manage');window.history.pushState(null,'',url);}
+    if(push&&changed){const url=new URL(window.location.href);url.pathname='/admin';url.searchParams.set('view',next);if(id)url.searchParams.set('object',id);else url.searchParams.delete('object');writeManage(url,next,management);window.history.pushState(null,'',url);}
     if(mobileNav)closeNavigation();setNavQuery('');
   }
   function filterApplications(next:ApplicationState){if(view.current.applicationState===next)return;++loadSequence.current;view.current.applicationState=next;setApplicationState(next);setApplications([]);setApplicationOffset(null);setError('');setNotice('');}
