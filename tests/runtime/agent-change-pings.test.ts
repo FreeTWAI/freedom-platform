@@ -24,8 +24,8 @@ import {
 import { AgentPingError, verifyAgentPing } from '../../packages/sdk/agent-client.mjs';
 
 test('isProviderHostedUrl with AGENT_PING_SUFFIXES enforces provider-hosted HTTPS URLs', () => {
-  assert.equal(PROVIDER_HOSTING_SUFFIXES.includes('github.io'), true);
-  assert.equal(AGENT_PING_SUFFIXES.includes('github.io'), false);
+  assert.deepEqual([...PROVIDER_HOSTING_SUFFIXES].sort(), ['github.io', 'netlify.app', 'pages.dev', 'vercel.app', 'workers.dev']);
+  assert.deepEqual([...AGENT_PING_SUFFIXES].sort(), ['netlify.app', 'pages.dev', 'vercel.app', 'workers.dev']);
 
   for (const accepted of [
     'https://my-agent.example-user.workers.dev/ping',

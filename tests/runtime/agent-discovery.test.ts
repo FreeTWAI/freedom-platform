@@ -39,6 +39,7 @@ test('agentDiscovery returns public machine-readable discovery metadata without 
     'api_base',
     'authentication',
     'change_feed_url',
+    'change_ping',
     'development_map_url',
     'format',
     'guide_url',
@@ -57,6 +58,13 @@ test('agentDiscovery returns public machine-readable discovery metadata without 
   assert.equal(doc.guide_url, `${origin}/agent.md`);
   assert.equal(doc.mcp_url, `${origin}/api/v1/mcp`);
   assert.equal(doc.change_feed_url, `${origin}/api/v1/agent/events`);
+  assert.deepEqual(doc.change_ping, {
+    format: 'freedom.agent-ping/v1',
+    signature: 'hmac-sha256',
+    key: 'sha256-hex-of-agent-token',
+    settings: '#automation/agent',
+    guide_url: `${origin}/agent.md#change-ping`,
+  });
   assert.equal(doc.development_map_url, `${origin}/.well-known/freedom-development.json`);
 
   assert.deepEqual(doc.authentication, {
@@ -131,10 +139,18 @@ test('GET /.well-known/freedom-agent.json returns 200 JSON discovery metadata fo
   const body = (await response.json()) as {
     format?: string;
     api_base?: string;
+    change_ping?: { format: string; signature: string; key: string; settings: string; guide_url: string };
     sdk?: { client_url: string; operations_url: string; types: string };
   };
   assert.equal(body.format, 'freedom.agent-discovery/v1');
   assert.equal(body.api_base, `${reqOrigin}/api/v1`);
+  assert.deepEqual(body.change_ping, {
+    format: 'freedom.agent-ping/v1',
+    signature: 'hmac-sha256',
+    key: 'sha256-hex-of-agent-token',
+    settings: '#automation/agent',
+    guide_url: `${reqOrigin}/agent.md#change-ping`,
+  });
   assert.deepEqual(body.sdk, {
     client_url: `${reqOrigin}/agent/sdk/v1/agent-client.mjs`,
     operations_url: `${reqOrigin}/agent/sdk/v1/agent-operations.mjs`,

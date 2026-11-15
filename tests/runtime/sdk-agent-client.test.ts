@@ -254,6 +254,22 @@ test('agentGuide includes JavaScript SDK snippet with env var token and no secre
   assert.equal(/fw_agent_/.test(guide), false);
 });
 
+test('agentGuide documents change-ping section, anchor, headers, and Worker verifyAgentPing snippet without secrets', () => {
+  const origin = 'https://freetwai.com';
+  const guide = agentGuide(origin);
+  assert.equal(guide.includes('## 變更通知（選用）'), true);
+  assert.equal(guide.includes('id="change-ping"'), true);
+  assert.equal(guide.includes('Freedom-Ping-Timestamp'), true);
+  assert.equal(guide.includes('Freedom-Ping-Signature'), true);
+  assert.equal(guide.includes('Freedom-Ping-Id'), true);
+  assert.equal(guide.includes('freedom.agent-ping/v1'), true);
+  assert.equal(guide.includes(`${origin}/agent/sdk/v1/agent-client.mjs`), true);
+  assert.equal(guide.includes("import { AgentPingError, verifyAgentPing } from './agent-client.mjs';"), true);
+  assert.equal(guide.includes('await request.text()'), true);
+  assert.equal(guide.includes('GET /api/v1/agent/events'), true);
+  assert.equal(/fw_agent_/.test(guide), false);
+});
+
 test('F1: writes require a valid idempotencyKey before any fetch, GET needs none, newIdempotencyKey returns UUID', async () => {
   const k1 = newIdempotencyKey();
   const k2 = newIdempotencyKey();

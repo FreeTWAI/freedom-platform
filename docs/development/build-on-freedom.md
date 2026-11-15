@@ -58,7 +58,8 @@ const guilds = await agent.call('guilds.list');
 const feed = await agent.events();
 ```
 
-- **Webhook 現況**：目前沒有對外發送的 webhook，所有變更通知請透過上述 `GET /api/v1/agent/events` 輪詢。
+- **變更通知（選填）**：可在「自動化 → 我的 Agent」為有效的 `read` 金鑰設定通知網址（支援 `workers.dev`、`pages.dev`、`netlify.app`、`vercel.app` 的 HTTPS 網址），平台有新變更時會在約 10 分鐘內送出 `freedom.agent-ping/v1` 簽章 `POST` 喚醒通知（規格見 [/.well-known/freedom-agent.json](https://freetwai.com/.well-known/freedom-agent.json) 與 [/agent.md#change-ping](https://freetwai.com/agent.md#change-ping)）。
+- **驗證與準則**：接收端可用 SDK 的 `verifyAgentPing({ token, body, headers })` 驗證簽章後快速回覆 `2xx`；通知可能重複送達，收到後仍請呼叫 `GET /api/v1/agent/events` 讀取變更清單，清單本身才是唯一準則。
 
 ## 修改平台本身
 

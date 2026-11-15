@@ -13,6 +13,13 @@ export interface AgentDiscoveryDocument {
   guide_url: string;
   mcp_url: string;
   change_feed_url: string;
+  change_ping: {
+    format: 'freedom.agent-ping/v1';
+    signature: 'hmac-sha256';
+    key: 'sha256-hex-of-agent-token';
+    settings: '#automation/agent';
+    guide_url: string;
+  };
   authentication: {
     scheme: 'bearer';
     header: 'Authorization';
@@ -59,6 +66,13 @@ export function agentDiscovery(origin: string): AgentDiscoveryDocument {
     guide_url: `${base}/agent.md`,
     mcp_url: `${base}/api/v1/mcp`,
     change_feed_url: `${base}/api/v1/agent/events`,
+    change_ping: {
+      format: 'freedom.agent-ping/v1',
+      signature: 'hmac-sha256',
+      key: 'sha256-hex-of-agent-token',
+      settings: '#automation/agent',
+      guide_url: `${base}/agent.md#change-ping`,
+    },
     authentication: {
       scheme: 'bearer',
       header: 'Authorization',
