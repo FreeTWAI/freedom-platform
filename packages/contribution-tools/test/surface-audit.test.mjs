@@ -51,12 +51,14 @@ test('actual avatar/private routes and real mounts map twelve baseline+candidate
   // Five existing promotion/service/guide delegates, twelve feature registrar calls,
   // three public-social delegates, three public-works sharing delegates
   // (registerPublicWorks, registerPublicWorkPage, registerMemberWorkSharing) and
-  // two MCP adapter receiver accesses (app.routes and app.request inside /api/v1/mcp)
+  // two MCP adapter receiver accesses (app.routes and app.request inside /api/v1/mcp) and
+  // one share-attachment delegate (registerShareAttachments: after-response middleware on
+  // POST /api/v1/opensource/projects and /api/v1/me/skill-submissions/:id/publish, no new route)
   // remain explicitly unaudited receiver escapes.
   // This narrow avatar/private-work syntax profile never claims their authorization has been audited.
-  assert.equal(report.issues.filter(x => x.revision === 'candidate' && x.code === 'registration_receiver_escape').length, 25);
+  assert.equal(report.issues.filter(x => x.revision === 'candidate' && x.code === 'registration_receiver_escape').length, 26);
   const withoutProfile = run(changed(root, source => source.replace('  registerPublicMemberProfiles(app, featureContext);', '')));
-  assert.equal(withoutProfile.issues.filter(x => x.revision === 'candidate' && x.code === 'registration_receiver_escape').length, 24);
+  assert.equal(withoutProfile.issues.filter(x => x.revision === 'candidate' && x.code === 'registration_receiver_escape').length, 25);
   assert.equal(withoutProfile.status, 'unavailable');
   assert.equal(withoutProfile.behavior_checked, false);
   assert.equal(withoutProfile.merge_authorized, false); assert.equal(withoutProfile.execution_authorized, false);
