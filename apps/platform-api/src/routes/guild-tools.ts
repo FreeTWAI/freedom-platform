@@ -14,10 +14,14 @@ import type {PreviewFetch} from '../../../../modules/community/link-preview.js';
 const PREVIEW_SCRIPT=`const t=JSON.parse(document.getElementById('preview-data').textContent),f=document.querySelector('iframe');let ready=false,count=0,start=Date.now();const bounded=(v,n)=>{if(!v||typeof v!=='object'||Array.isArray(v))return false;let c=0;for(const k in v)if(++c>n)return false;return true};f.src=t.entry_url;f.onload=()=>{t.nonce=crypto.randomUUID();f.contentWindow.postMessage({version:'freedom.guild-launchpad/v2',type:'init',tool_id:t.tool_id,guild_key:t.guild_key,nonce:t.nonce},t.profile==='origin'?t.origin:'*')};addEventListener('message',e=>{if(e.source!==f.contentWindow||e.origin!==(t.profile==='origin'?t.origin:'null'))return;if(Date.now()-start>=60000){start=Date.now();count=0}if(++count>120)return;const m=e.data;if(!bounded(m,8)||!bounded(m.payload,0)||typeof m.operation!=='string'||m.operation.length>40||m.version!=='freedom.guild-launchpad/v2'||m.tool_id!==t.tool_id||m.guild_key!==t.guild_key||m.nonce!==t.nonce||m.type!=='request'||typeof m.request_id!=='string'||!/^[a-zA-Z0-9_-]{1,64}$/.test(m.request_id))return;const ok=m.operation==='context.get';f.contentWindow.postMessage({version:m.version,type:'response',tool_id:t.tool_id,guild_key:t.guild_key,nonce:t.nonce,request_id:m.request_id,ok,...(ok?{result:{guild:t.guild_key,tool:t.tool_id,theme:'light',locale:'zh-TW',signed_in:false,preview:true,platform_origin:t.platform_origin}}:{error:{code:'preview_only',message:'加入後才能使用'}})},t.profile==='origin'?t.origin:'*');if(ok&&!ready){ready=true;parent.postMessage({type:'guild-tool-preview-ready',id:t.preview_id},t.platform_origin)}});`;
 const PREVIEW_SCRIPT_HASH=createHash('sha256').update(PREVIEW_SCRIPT).digest('base64');
 const dataJson=(value:unknown)=>JSON.stringify(value).replaceAll('<','\\u003c').replaceAll('>','\\u003e').replaceAll('&','\\u0026');
+// A tool's own backend calls the status check server to server, so the request carries no Origin.
+// platform-app.ts admits a missing Origin for this one route; an Origin that is present must still match.
+export const GUILD_TOOL_STATUS_PATH='/api/v1/public/guild-tool-token/status';
+export const isGuildToolStatusPath=(method:string,path:string)=>method==='POST'&&path===GUILD_TOOL_STATUS_PATH;
 export function createPublicGuildToolRoutes(pool:Pool,origin:string,signer?:ToolSigner){
  const app=new Hono();
  app.get('/.well-known/guild-tool-jwks.json',c=>{c.header('Cache-Control','no-store');return c.json(toolJwks(signer));});
- app.post('/api/v1/public/guild-tool-token/status',async c=>{c.header('Cache-Control','no-store');return c.json(await toolTokenStatus(pool,await c.req.json(),origin,signer));});
+ app.post(GUILD_TOOL_STATUS_PATH,async c=>{c.header('Cache-Control','no-store');return c.json(await toolTokenStatus(pool,await c.req.json(),origin,signer));});
  app.get('/api/v1/public/guilds/:guild/tools',async c=>c.json(await listTools(pool,c.req.param('guild'))));
  app.get('/guild-tool-preview/:id',async c=>{
  requireCondition(/^[0-9a-f-]{36}$/.test(c.req.param('id')),404,'not_found','找不到預覽。');

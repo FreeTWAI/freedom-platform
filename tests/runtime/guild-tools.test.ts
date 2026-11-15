@@ -19,6 +19,9 @@ type Session={cookie:string;csrf:string;user:string};
 async function req(path:string,session?:Session,body?:unknown,version?:number,key=randomUUID()){
  const r=await app.request(origin+path,{method:body===undefined?'GET':'POST',headers:{Origin:origin,...(session?{Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{}),...(body===undefined?{}:{'Content-Type':'application/json','Idempotency-Key':key,...(version?{'If-Match':`"${version}"`}:{})})},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,data:await r.json() as any};
 }
+// A tool's backend calls status as the guide documents: JSON {token,audience} with no Origin, Cookie,
+// Authorization or CSRF header. req() always sends the platform Origin, so it cannot stand in for that call.
+async function toolStatus(body:unknown,headers:Record<string,string>={}){const r=await app.request(origin+'/api/v1/public/guild-tool-token/status',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:typeof body==='string'?body:JSON.stringify(body)});return {status:r.status,data:await r.json() as any};}
 async function login(index:number):Promise<Session>{const r=await app.request(origin+'/api/v1/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({email:DEMO_USERS[index].email,password:DEMO_PASSWORD})});const d=await r.json() as any;assert.equal(r.status,200);return {cookie:r.headers.get('set-cookie')!.split(';')[0],csrf:d.csrf_token,user:d.user.user_id};}
 async function lead(s:Session,guild:string){await pool.query("INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier) VALUES($1,$2,$3,$4,'active','full') ON CONFLICT(community_id,user_id,guild_key) DO UPDATE SET state='active'",[randomUUID(),DEMO_COMMUNITY,s.user,guild]);await pool.query('INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,$2,$3) ON CONFLICT(community_id,guild_key) DO UPDATE SET user_id=$3',[DEMO_COMMUNITY,guild,s.user]);}
 before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);await seedLocal(pool);});
@@ -87,7 +90,15 @@ test('origin proof binds registrant/guild/origin; browser and agent exchange use
  const token=await req(base+'/origin-tool/token',leader,{});assert.equal(token.status,200,JSON.stringify(token));const claims=await verifyToolToken(token.data.access_token,jwk,origin,registered.data.id);const {verifyGuildToolToken}=await import('../../apps/portal-web/public/guild-tool/v2/verify-token.mjs');const config={issuer:origin,audience:registered.data.id,jwks:{keys:[{...jwk,kid,alg:'ES256',use:'sig'}]}};assert.equal((await verifyGuildToolToken(token.data.access_token,config)).sub,claims.sub);await assert.rejects(verifyGuildToolToken(token.data.access_token,{...config,audience:randomUUID()}));assert.equal(claims.exp!-claims.iat!,600);assert.equal(claims.aud,registered.data.id);assert.notEqual(claims.sub,leader.user);assert.equal(claims.email,undefined);assert.deepEqual(claims.scopes,['context:read']);
  await assert.rejects(verifyToolToken(token.data.access_token,jwk,origin,randomUUID()));
  const oldPurpose=await new SignJWT({...claims}).setProtectedHeader({alg:'ES256',typ:'freedom-execution-text+jwt'}).sign(pair.privateKey);await assert.rejects(verifyToolToken(oldPurpose,jwk,origin,registered.data.id));
- const state=()=>req('/api/v1/public/guild-tool-token/status',undefined,{token:token.data.access_token,audience:registered.data.id});assert.deepEqual((await state()).data,{active:true});
+ const state=()=>toolStatus({token:token.data.access_token,audience:registered.data.id});assert.deepEqual((await state()).data,{active:true});
+ // The platform's own pages may still call it. A foreign browser Origin is refused before the handler runs.
+ assert.deepEqual((await toolStatus({token:token.data.access_token,audience:registered.data.id},{Origin:origin})).data,{active:true});
+ const foreign=await toolStatus({token:token.data.access_token,audience:registered.data.id},{Origin:'https://tools.example.test'});assert.equal(foreign.status,403);assert.equal(foreign.data.code,'origin_rejected');
+ // Without an Origin the bounded JSON reader and the strict body still apply, and a bad token or audience is only inactive.
+ assert.equal((await toolStatus(JSON.stringify({token:token.data.access_token,audience:registered.data.id}),{'Content-Type':'text/plain'})).status,415);
+ assert.equal((await toolStatus({token:token.data.access_token,audience:registered.data.id,extra:true})).status,422);
+ assert.deepEqual((await toolStatus({token:'not-a-token',audience:registered.data.id})).data,{active:false});
+ assert.deepEqual((await toolStatus({token:token.data.access_token,audience:randomUUID()})).data,{active:false});
  assert.equal((await req(base+'/other/token',leader,{})).status,403); // sandboxed cannot receive a token
  const noCsrf=await app.request(origin+base+'/origin-tool/token',{method:'POST',headers:{Origin:origin,Cookie:leader.cookie,'Content-Type':'application/json'},body:'{}'});assert.equal(noCsrf.status,403);
  await pool.query('UPDATE users SET onboarding_completed_at=now() WHERE user_id=$1',[leader.user]);
@@ -119,7 +130,7 @@ test('delegates can add a first revision but cannot replace an enabled tool, and
  const challenge=await req(base+'/origin-challenges',leader,{entry_url:original.entry_url});assert.equal(challenge.status,201);proof=challenge.data.contents;
  const target=await req(base,leader,{...original,origin_challenge_id:challenge.data.challenge_id});assert.equal(target.status,201);assert.equal((await req(base+'/delegate-token-target/accept',leader,{},1)).status,200);
  const token=await req(base+'/delegate-token-target/token',leader,{});assert.equal(token.status,200);
- const status=()=>req('/api/v1/public/guild-tool-token/status',undefined,{token:token.data.access_token,audience:target.data.id});assert.equal((await status()).data.active,true);
+ const status=()=>toolStatus({token:token.data.access_token,audience:target.data.id});assert.equal((await status()).data.active,true);
  const attack=await req(base,delegate,{...input,tool_id:original.tool_id,entry_url:'https://attacker.example.test/'},1);assert.equal(attack.status,403);
  const loaded=(await req('/api/v1/public/guilds/guild_games/tools')).data.items.find((item:any)=>item.tool_id===original.tool_id);assert.equal(loaded.state,'enabled');assert.equal(loaded.revision,1);assert.equal(loaded.entry_url,original.entry_url);
  assert.equal((await req(base+'/delegate-token-target/context',leader)).status,200);assert.equal((await status()).data.active,true);

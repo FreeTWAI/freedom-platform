@@ -486,5 +486,7 @@ test('workerd registers a hosted tool, proves its origin and exchanges identity 
     assert.equal(jwks.keys.length,1);assert.equal(jwks.keys[0].d,undefined);
     assert.equal((await verifyToolToken(token.access_token,jwks.keys[0],origin,registered.id)).tool_origin,'https://tool.pages.dev');
     assert.deepEqual(await (await post('/api/v1/public/guild-tool-token/status',{token:token.access_token,audience:registered.id})).json(),{active:true});
+    // A tool's backend makes the documented call with no Origin, Cookie or CSRF header.
+    assert.deepEqual(await (await send('/api/v1/public/guild-tool-token/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token.access_token,audience:registered.id})})).json(),{active:true});
   }finally{await hosted.dispose();}
 });

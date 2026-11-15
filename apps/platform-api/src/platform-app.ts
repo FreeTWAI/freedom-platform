@@ -1,6 +1,6 @@
 import {agentMcp} from './agent-mcp.js';
 import {createEventPageRoutes} from './routes/event-pages.js';
-import {createGuildToolRoutes,createPublicGuildToolRoutes} from './routes/guild-tools.js';
+import {createGuildToolRoutes,createPublicGuildToolRoutes,isGuildToolStatusPath} from './routes/guild-tools.js';
 import {frameOrigins} from '../../../modules/guild-tools/service.js';
 import {safeFrameOrigins} from '../../../modules/guild-tools/validation.js';
 import {createAgentFeedRoutes} from './routes/agent-feed.js';
@@ -289,8 +289,11 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
       // without Origin. Browser requests keep the normal same-origin checks.
       const shopMachine=c.req.path.startsWith('/shop-api/v1/');
       const maintainerWebhook=isMaintainerWebhookPath(c.req.method,c.req.path);
-      // GitHub sends no Origin. A browser Origin that is present must still match.
-      if(!commerceProviderEntry&&((!c.get('actor')?.agent&&!agentUpload&&!shopMachine&&!maintainerWebhook)||c.req.header('Origin')!==undefined))requireCondition(allowedOrigins.has(c.req.header('Origin')??''),403,'origin_rejected',freedomEnv==='local'?'操作來源不正確，請從本機工作台操作。':'操作來源不正確，請從自由工坊網站操作。');
+      // A tool's backend checks a guild tool token server to server. That JSON body carries no session
+      // and still goes through the bounded JSON reader below.
+      const toolStatus=isGuildToolStatusPath(c.req.method,c.req.path);
+      // GitHub and tool backends send no Origin. A browser Origin that is present must still match.
+      if(!commerceProviderEntry&&((!c.get('actor')?.agent&&!agentUpload&&!shopMachine&&!maintainerWebhook&&!toolStatus)||c.req.header('Origin')!==undefined))requireCondition(allowedOrigins.has(c.req.header('Origin')??''),403,'origin_rejected',freedomEnv==='local'?'操作來源不正確，請從本機工作台操作。':'操作來源不正確，請從自由工坊網站操作。');
       if(commerceProviderEntry) {
         // The signed provider route owns form parsing and its bounded byte stream.
       } else if(agentUpload) {
