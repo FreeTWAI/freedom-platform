@@ -350,6 +350,80 @@ test('link post opens one dialog with tracked link and QR code; backdrop and unm
   assert.equal(h.button('分享貼文連結'), undefined);
 });
 
+for (const [kind, outcome] of [['link', 'resolve'], ['link', 'reject'], ['note', 'resolve']] as const) {
+  test(`a tracked link keeps copy pending from the scope read until the link settles (${kind} post, ${outcome})`, async t => {
+    // The scope read and the tracked link are two requests. Between them the copy control must stay
+    // pending: a keyboard user who focuses it in that gap would lose focus when it is disabled again.
+    const h = harness(t, false);
+    const author = {display_name: '作者'};
+    h.render({post: kind === 'link'
+      ? {post_id: 'post-link', mine: false, kind: 'link', title: '推薦工具', revision: 1, note: '補充說明', author}
+      : {post_id: 'post-link', mine: false, kind: 'note', revision: 1, note: '公開的貼文', author}});
+    await h.click('分享貼文連結');
+    const copy = () => h.button('複製連結')!;
+    assert.equal(propsOf(copy()).disabled, true);
+    const changes: string[] = [];
+    const setAttribute = HostNode.prototype.setAttribute, removeAttribute = HostNode.prototype.removeAttribute;
+    HostNode.prototype.setAttribute = function (this: HostNode, key: string, value: unknown) {if (key === 'disabled' && this === copy()) changes.push('disabled'); return setAttribute.call(this, key, value);};
+    HostNode.prototype.removeAttribute = function (this: HostNode, key: string) {if (key === 'disabled' && this === copy()) changes.push('enabled'); return removeAttribute.call(this, key);};
+    t.after(() => {HostNode.prototype.setAttribute = setAttribute; HostNode.prototype.removeAttribute = removeAttribute;});
+    // A link post is tracked even when it is not public; a text post only once it is public.
+    if (kind === 'link') h.reads.at(-1).reject(new ApiError({status: 404, message: 'not_found'}));
+    else h.reads.at(-1).resolve({});
+    await h.settle();
+    assert.equal(h.writes.at(-1).path, '/promotion/links');
+    assert.deepEqual(changes, [], 'the scope read alone must not make the copy control ready');
+    assert.equal(propsOf(copy()).disabled, true);
+    if (outcome === 'resolve') h.writes.at(-1).resolve({path: '/go/link123456'});
+    else h.writes.at(-1).reject(new Error('link service down'));
+    await h.settle();
+    assert.deepEqual(changes, ['enabled']);
+    assert.equal(propsOf(copy()).disabled, false);
+    const url = h.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent;
+    const note = h.all().find(n => n.getAttribute('class') === 'share-credit-note')?.textContent;
+    if (outcome === 'resolve') assert.deepEqual([url, note], ['https://workshop.example.test/go/link123456', '有人點開，會記在你名下。']);
+    // A failed link keeps a usable plain link.
+    else assert.deepEqual([url, note], ['https://workshop.example.test/?social-post=post-link#social', '這是一般連結，不會記在你名下。']);
+  });
+}
+
+test('a failed tracked link is not requested again when a save ends, so copy does not turn pending again', async t => {
+  // One link request per open dialog and link scope. A second request started only because a save
+  // ended would disable the ready copy control again. Reopening the dialog asks for a new link.
+  const h = harness(t);
+  h.render({post: {post_id: 'post-a', mine: true, kind: 'link', title: '推薦工具', revision: 1, note: '補充說明', author: {display_name: '作者'}}});
+  await h.open();
+  assert.equal(h.writes.at(-1).path, '/promotion/links');
+  h.writes.at(-1).reject(new Error('link service down'));
+  await h.settle();
+  const copy = () => h.button('複製連結')!;
+  assert.equal(propsOf(copy()).disabled, false);
+  const changes: string[] = [];
+  const setAttribute = HostNode.prototype.setAttribute, removeAttribute = HostNode.prototype.removeAttribute;
+  HostNode.prototype.setAttribute = function (this: HostNode, key: string, value: unknown) {if (key === 'disabled' && this === copy()) changes.push('disabled'); return setAttribute.call(this, key, value);};
+  HostNode.prototype.removeAttribute = function (this: HostNode, key: string) {if (key === 'disabled' && this === copy()) changes.push('enabled'); return removeAttribute.call(this, key);};
+  t.after(() => {HostNode.prototype.setAttribute = setAttribute; HostNode.prototype.removeAttribute = removeAttribute;});
+  await h.click('開放免登入閱讀');
+  const save = h.writes.at(-1);
+  assert.equal(save.path, '/social-posts/post-a/public-sharing');
+  const published = {...h.state, enabled: true, available: true, version: '2', public_path: '/posts/post-a'};
+  save.resolve(published);
+  await h.settle();
+  assert.equal(h.writes.length, 2, 'the end of the save must not start a second link request');
+  assert.deepEqual(changes, ['disabled', 'enabled']);
+  assert.equal(propsOf(copy()).disabled, false);
+  // The plain link now opens the public page.
+  const url = h.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent;
+  const note = h.all().find(n => n.getAttribute('class') === 'share-credit-note')?.textContent;
+  assert.deepEqual([url, note], ['https://workshop.example.test/posts/post-a', '這是一般連結，不會記在你名下。']);
+  await h.click('關閉分享');
+  await h.click('分享貼文連結');
+  h.reads.at(-1).resolve(published);
+  await h.settle();
+  assert.equal(h.writes.length, 3);
+  assert.equal(h.writes.at(-1).path, '/promotion/links');
+});
+
 test('stale promotion link ack after post replacement or close cannot overwrite replacement URL', async t => {
   const h = harness(t);
   h.render({post: {post_id: 'post-link-a', mine: true, kind: 'link', title: '舊連結', revision: 1, author: {display_name: '作者'}}});

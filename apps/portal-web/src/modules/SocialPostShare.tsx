@@ -32,7 +32,7 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
   const [sharing,setSharing]=useState<SharingState|null>(null),[publicAvailable,setPublicAvailable]=useState(false);
   const [loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[uncertain,setUncertain]=useState(false);
   const [refresh,setRefresh]=useState(0),[imageReady,setImageReady]=useState('');
-  const [linkPath,setLinkPath]=useState<string|null>(null),[tracked,setTracked]=useState(false),[linkBusy,setLinkBusy]=useState(false);
+  const [linkPath,setLinkPath]=useState<string|null>(null),[tracked,setTracked]=useState(false),[linkBusy,setLinkBusy]=useState(false),[settledTrackKey,setSettledTrackKey]=useState('');
   const [loadedClient,setLoadedClient]=useState<PortalClient|null>(null),[loadedScope,setLoadedScope]=useState('');
   const mounted=useRef(false),epoch=useRef(0),linkEpoch=useRef(0),fetchedTrackKey=useRef(''),isOpenRef=useRef(false),savingToken=useRef<symbol|null>(null),command=useRef<PublicationCommand|null>(null);
   const generation=client.sessionGeneration;
@@ -41,6 +41,10 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
   const shouldTrack=post.kind==='link'||publicAvailable;
   const currentScope=`${generation}:${post.post_id}:${post.revision}:${post.mine}:${refresh}`;
   const scopeLoading=open&&(loading||loadedClient!==client||loadedScope!==currentScope);
+  // The tracked link is requested only after the scope read. Until that request settles (with a link
+  // or, on failure, the plain fallback) the controls stay pending, so they never turn ready in between.
+  const trackKey=`${generation}:${post.post_id}:${shouldTrack}:${refresh}`;
+  const linkPending=open&&shouldTrack&&!scopeLoading&&!saving&&!uncertain&&settledTrackKey!==trackKey;
   const mediaKey=sharing?post.post_id+':'+sharing.media_version:'';
   const thumbnail=sharing?.image_url?new URL(sharing.image_url,window.location.origin):null;
   const shareControls=useShareControls({
@@ -50,7 +54,7 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
     fallbackUrl,
     linkPath,
     tracked,
-    busy:scopeLoading||linkBusy,
+    busy:scopeLoading||linkBusy||linkPending,
     disabled:saving||uncertain,
   });
   function closeDialog(returnFocus:boolean){
@@ -58,7 +62,7 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
     if(!isOpenRef.current)return;
     isOpenRef.current=false;
     if(mounted.current){
-      setOpen(false);setStatus('');setLinkPath(null);setTracked(false);setLinkBusy(false);setLoadedClient(null);setLoadedScope('');
+      setOpen(false);setStatus('');setLinkPath(null);setTracked(false);setLinkBusy(false);setSettledTrackKey('');setLoadedClient(null);setLoadedScope('');
       shareControls.resetUi();
     }
     if(dialog.current?.open)dialog.current.close();
@@ -69,7 +73,7 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
     isOpenRef.current=true;
     fetchedTrackKey.current='';
     setStatus('');setError('');setLoading(true);setLoadedClient(null);setLoadedScope('');
-    setSharing(null);setPublicAvailable(false);setImageReady('');setLinkPath(null);setTracked(false);setLinkBusy(false);
+    setSharing(null);setPublicAvailable(false);setImageReady('');setLinkPath(null);setTracked(false);setLinkBusy(false);setSettledTrackKey('');
     shareControls.resetUi();
     setOpen(true);
   }
@@ -93,11 +97,11 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
   },[client,generation,post.post_id,post.revision,post.mine,open,refresh]);
   useEffect(()=>{
     if(!open||!shouldTrack||scopeLoading){
-      linkEpoch.current++;fetchedTrackKey.current='';setLinkPath(null);setTracked(false);setLinkBusy(false);
+      linkEpoch.current++;fetchedTrackKey.current='';setLinkPath(null);setTracked(false);setLinkBusy(false);setSettledTrackKey('');
       return;
     }
     if(saving||uncertain)return;
-    const targetKey=`${generation}:${post.post_id}:${shouldTrack}:${refresh}`;
+    const targetKey=trackKey;
     if(fetchedTrackKey.current===targetKey)return;
     const current=++linkEpoch.current;
     fetchedTrackKey.current=targetKey;
@@ -106,10 +110,12 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
       if(!mounted.current||linkEpoch.current!==current||client.sessionGeneration!==generation)return;
       if(result?.path){setLinkPath(result.path);setTracked(true);}
     }).catch(()=>{
+      // A failed link keeps the plain link for this scope. It is not requested again when a save ends,
+      // which would turn the ready controls pending again; reopening the dialog asks for a new one.
       if(!mounted.current||linkEpoch.current!==current||client.sessionGeneration!==generation)return;
-      fetchedTrackKey.current='';setLinkPath(null);setTracked(false);
+      setLinkPath(null);setTracked(false);
     }).finally(()=>{
-      if(mounted.current&&linkEpoch.current===current&&client.sessionGeneration===generation)setLinkBusy(false);
+      if(mounted.current&&linkEpoch.current===current&&client.sessionGeneration===generation){setLinkBusy(false);setSettledTrackKey(targetKey);}
     });
   },[client,generation,post.post_id,open,scopeLoading,saving,uncertain,shouldTrack,refresh]);
   useEffect(()=>{
