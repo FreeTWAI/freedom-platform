@@ -24,6 +24,9 @@ const {PerspectiveCamera,Vector3}=createRequire(new URL('../../apps/portal-web/p
 // Isolated playable proposal, not a deployed portal route or a generated image.
 // Bundle the real preview and existing scoring domain, then exercise native input.
 for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD atelier real build ${width}x${height}: native stamp preview, pause, input and screenshot`,async({browser},info)=>{
+ // Bundling the real preview with esbuild, then drawing it in software WebGL, is slowest at 1440x1000:
+ // 26.4 s in Verify 43701950520 and 39.4 s on a slower runner (43707780287), against the 45 s default.
+ test.setTimeout(90_000);
  const context=await browser.newContext({viewport:{width,height},hasTouch:width<1000,isMobile:width<1000,deviceScaleFactor:1});const page=await context.newPage();
  try {
  const logo='data:image/png;base64,'+readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url)).toString('base64');
@@ -105,6 +108,9 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
 // pointer events, not a renderer mock or generated artwork. PHOTO uses a
 // controlled clock so scoring/timeout assertions do not depend on runner speed.
 for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD ${mode} atelier ${width}x${height}: direct input, interruption and original capture`,async({browser},info)=>{
+ // The cash atelier at 1440x1000 is the slowest case: 21.0 s in Verify 43701950520 and 31.2 s on a
+ // slower runner (43707780287), against the 45 s default.
+ test.setTimeout(90_000);
  const context=await browser.newContext({viewport:{width,height},hasTouch:width<1000,isMobile:width<1000,deviceScaleFactor:1});const page=await context.newPage();
  try{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));

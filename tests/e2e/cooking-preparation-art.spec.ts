@@ -507,11 +507,13 @@ test('immersive kitchen: 320x568 viewport fallback keeps controls separate',asyn
 // Additive native evidence for all nine operations. These recipes cover every
 // operation using normal controls; no saved-run injection or test-only renderer.
 for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const id of ['rice-balls','margherita-pizza','pearl-milk-tea','egg-fried-rice'])test(`front kitchen journey: ${id} at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
- // Measured budget: every 60 fps frame of each step runs under page.clock in software WebGL, plus
- // a screenshot per state. With software rasterizers at one pixel per CSS pixel the three heavier
- // dishes took 27-33 s locally at low load and up to 42 s under load; before the fix GitHub's runners
- // took 1.0-1.25 times the local time (rice-balls 15.8-20.5 s against 16.4-17.0 s locally).
- test.setTimeout(60_000);
+ // Measured budget (Verify 43707780287 hit the old 60 s). The 3D kitchen draws 30 frames per
+ // simulated second in software WebGL, and page.clock replays every frame of the journey. That drawing
+ // is nearly all of the time: locally, pearl milk tea took 29-31 s at each viewport and 8-9 s with the
+ // light illustration, and in a profiled 3D boil segment the page's scripts ran under 3% of the time.
+ // GitHub's runners take about 1.1-2.2 times the local time: pearl milk tea at 1440x900 took 35.6 s in
+ // Verify 43701950520 and 64.3 s in 43707780287. 120 s covers the slower runner almost twice over.
+ test.setTimeout(120_000);
  const recipe=recipeOf(id)!,errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.setViewportSize(viewport);await page.clock.install();
  await page.goto(`/play?game=kitchen&practice=1&recipe=${id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
