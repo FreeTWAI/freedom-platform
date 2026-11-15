@@ -4,7 +4,7 @@ import type { Actor } from '../identity-membership/service.js';
 import { mineTitles, type PromotionKind } from '../community/promotion.js';
 import { promotionPublicSocialJoins,promotionPublicSocialVisible } from '../community/public-social-posts.js';
 import { publishedWorkFrom,publishedWorkPayload } from '../skill-submissions/public.js';
-import { existingReadableSql,hiddenEventReadableSql } from './adapters/existing.js';
+import { existingReadableSql,feedShareSql,hiddenEventReadableSql } from './adapters/existing.js';
 import { PUBLIC_WORK_VISIBLE } from '../opportunity-project-work/public-sharing.js';
 import type { ShareKind } from './types.js';
 
@@ -53,13 +53,35 @@ const SHARE_RESULTS_SQL = `WITH links AS (
   FROM promotion_links l LEFT JOIN promotion_clicks c ON c.link_id = l.link_id
   WHERE l.community_id = $1 AND l.user_id = $2 AND l.revoked_at IS NULL
   GROUP BY l.link_id
-), link_rows AS (
-  SELECT links.*, coalesce(share_target.share_id,event_target.share_id) AS share_id
+), resolved AS (
+  -- A link joins the share its clicks credit (share_promotion_credit, migration 212), so the share and its
+  -- links are one row: a share link joins its share; an event, post or service link joins the share of that
+  -- original; a skill book link joins the repository share that carries the book. A link whose original was
+  -- never shared keeps its own row. So do platform and member-card links: their shares only anchor click
+  -- credit (see credit below). Shares match in any state, so a stopped share keeps its links in its row;
+  -- a skill book link matches only a published share (share_legacy_promotion_targets), as click credit does.
+  SELECT links.*, coalesce(share_target.share_id,original_target.share_id,book_target.share_id) AS share_id
   FROM links
   LEFT JOIN shares share_target ON links.kind='share' AND share_target.community_id=$1
     AND share_target.share_id=CASE WHEN links.target_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN links.target_key::uuid END
-  LEFT JOIN shares event_target ON links.kind='event' AND event_target.community_id=$1 AND event_target.kind='event'
-    AND event_target.ref_id=CASE WHEN links.target_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN links.target_key::uuid END
+  LEFT JOIN LATERAL (SELECT s.share_id FROM shares s
+    WHERE links.kind IN ('event','social_post','member_service') AND s.community_id=$1
+      AND s.kind=CASE links.kind WHEN 'event' THEN 'event' WHEN 'social_post' THEN 'post' ELSE 'service' END
+      AND s.ref_id=CASE WHEN links.target_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN links.target_key::uuid END
+    ORDER BY s.share_id LIMIT 1) original_target ON true
+  LEFT JOIN LATERAL (SELECT t.share_id FROM share_legacy_promotion_targets t
+    WHERE links.kind='skill_book' AND t.community_id=$1 AND t.target_key=links.target_key
+    ORDER BY t.share_id LIMIT 1) book_target ON true
+), link_rows AS (
+  SELECT share_id, kind, target_key, code, created_at, clicks, last_click FROM resolved WHERE share_id IS NULL
+  UNION ALL
+  -- Several links can credit one share (a repository's share link and its skill book links). The row counts
+  -- the clicks of all of them and offers the share's own link, else the newest one.
+  (SELECT DISTINCT ON (share_id) share_id, kind, target_key, code, max(created_at) OVER per_share,
+          (sum(clicks) OVER per_share)::int, max(last_click) OVER per_share
+   FROM resolved WHERE share_id IS NOT NULL
+   WINDOW per_share AS (PARTITION BY share_id)
+   ORDER BY share_id, kind<>'share', created_at DESC, link_id)
 ), credit AS (
   SELECT e.share_id,
          coalesce(sum(e.units) FILTER (WHERE e.basis = 'star_confirmed'), 0)::int AS stars,
@@ -69,6 +91,9 @@ const SHARE_RESULTS_SQL = `WITH links AS (
   WHERE e.community_id = $1 AND e.user_id = $2
   GROUP BY e.share_id
   HAVING sum(e.units) > 0
+    -- Platform and member-card shares only anchor click credit; they are not feed items (feedShareSql). The
+    -- member's own links already show those clicks, one row per link, so an anchor adds no row.
+    AND EXISTS(SELECT 1 FROM shares credited WHERE credited.share_id = e.share_id AND credited.community_id = $1 AND ${feedShareSql('credited')})
 ), page AS (
  SELECT coalesce(lr.share_id, cr.share_id)::text AS share_id, lr.kind AS link_kind, lr.target_key, lr.code,
        coalesce(lr.clicks, 0)::int AS clicks, coalesce(cr.stars, 0)::int AS stars,
@@ -107,13 +132,14 @@ FROM page
 LEFT JOIN shares s ON s.community_id=$1 AND s.share_id=page.share_id::uuid
 LEFT JOIN community_events event ON page.share_id IS NULL AND page.link_kind='event' AND event.community_id=$1
  AND event.event_id=CASE WHEN page.target_key ~* '^${UUID}$' THEN page.target_key::uuid END
-LEFT JOIN community_social_posts post ON page.share_id IS NULL AND page.link_kind='social_post' AND post.community_id=$1
+-- Posts, services and skill submissions are read for share rows too: the link's own rule decides whether it is offered.
+LEFT JOIN community_social_posts post ON page.link_kind='social_post' AND post.community_id=$1
  AND post.post_id=CASE WHEN page.target_key ~* '^${UUID}$' THEN page.target_key::uuid END
-LEFT JOIN member_services service ON page.share_id IS NULL AND page.link_kind='member_service' AND service.community_id=$1
+LEFT JOIN member_services service ON page.link_kind='member_service' AND service.community_id=$1
  AND service.service_id=CASE WHEN page.target_key ~* '^${UUID}$' THEN page.target_key::uuid END
 LEFT JOIN users service_user ON service_user.user_id=service.owner_user_id
 LEFT JOIN LATERAL (SELECT (${publishedWorkPayload})->>'title' AS title ${publishedWorkFrom}
- AND s.community_id=$1 AND s.submission_id=CASE WHEN page.share_id IS NULL AND page.link_kind='skill_book'
+ AND s.community_id=$1 AND s.submission_id=CASE WHEN page.link_kind='skill_book'
   AND page.target_key ~* '^submission:${UUID}$' THEN substring(page.target_key FROM 12)::uuid END) book ON true
 LEFT JOIN member_card_shares card ON page.share_id IS NULL AND page.link_kind='member_card' AND card.community_id=$1 AND card.user_id=$2
 LEFT JOIN users card_user ON card_user.user_id=card.user_id AND card_user.community_id=card.community_id
@@ -131,13 +157,16 @@ export async function myShareResults(
   const pageRows = rows.slice(0, 50);
   // Catalog/platform labels are in memory; all database-backed labels and
   // current visibility were read with the results in the query above.
-  const staticTargets = pageRows
-    .filter((r): r is SqlResultRow & { link_kind: PromotionKind; target_key: string } => !r.share_id && Boolean(r.target_key)
-      && (r.link_kind==='platform'||r.link_kind==='skill_book'&&r.target_key!.startsWith('book:')))
-    .map(r => ({ kind: r.link_kind, target_key: r.target_key }));
+  const isStatic = (r: SqlResultRow): r is SqlResultRow & { link_kind: PromotionKind; target_key: string } => Boolean(r.target_key)
+    && (r.link_kind==='platform'||r.link_kind==='skill_book'&&r.target_key!.startsWith('book:'));
+  const staticTargets = pageRows.filter(isStatic).map(r => ({ kind: r.link_kind, target_key: r.target_key }));
   const resolveStaticTitle = staticTargets.length
     ? await mineTitles(q, actor, staticTargets, publicCommunity)
     : null;
+  // A link's own title and state, by the rule `/go` applies to it.
+  const linkTarget = (r: SqlResultRow) => isStatic(r)
+    ? resolveStaticTitle!({ kind: r.link_kind, target_key: r.target_key })
+    : { title: r.target_title ?? '已無法開啟', available: r.target_available ?? false };
 
   const items: ShareResult[] = [];
   for (const row of pageRows) {
@@ -160,7 +189,11 @@ export async function myShareResults(
         });
         continue;
       }
-      const link = row.link_kind && row.target_key && row.code
+      // The share decides the row. Its link is offered only while the link opens by its own rule, the one `/go`
+      // applies: a post that is no longer public, a paused service or a withdrawn skill offers none, so a share
+      // that members can still read may have no link. A share link and an event link open with their share.
+      const linkOpen = row.link_kind === 'share' || row.link_kind === 'event' || linkTarget(row).available;
+      const link = linkOpen && row.link_kind && row.target_key && row.code
         ? { kind: row.link_kind, target: row.target_key, path: `/go/${row.code}` }
         : null;
       items.push({
@@ -180,9 +213,7 @@ export async function myShareResults(
 
     const kind = row.link_kind!;
     const target = row.target_key!;
-    const resolved = kind==='platform'||kind==='skill_book'&&target.startsWith('book:')
-      ? resolveStaticTitle!({kind,target_key:target})
-      : {title:row.target_title??'已無法開啟',available:row.target_available??false};
+    const resolved = linkTarget(row);
     if (!resolved.available) {
       items.push({
         key: `${kind}:${target}`,

@@ -245,7 +245,9 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await openBoards(page);
   await expect(board(page, '連結')).toContainText(new RegExp(`我的名次：第 \\d+ 名・${weekBefore + 1} 分`));
   // 我的貢獻 presents results once; reuse the existing personal link through 再分享.
+  // The click also credited the community's platform share, which only anchors that credit: it adds no row.
   const existing = page.getByRole('region', { name: '我的貢獻', exact: true }).getByRole('article').filter({ has: page.getByText('自由工坊', { exact: true }) });
+  await expect(existing).toHaveCount(1);
   await existing.getByRole('button', { name: '再分享', exact: true }).click();
   const reshare = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
   await expect(reshare.locator('.skill-share-url')).toHaveText(platformGo);

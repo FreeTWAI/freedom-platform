@@ -537,3 +537,156 @@ test('CONF-4: myShareResults withholds work share results when public sharing is
   assert.equal(staleRow.open_path, null);
   assert.equal(staleRow.clicks, 0);
 });
+
+test('S3: a published post or service and its tracked link are one result row, before and after pause and removal', async () => {
+  // The normal publication paths create the share and the author's credit; shareLink then makes a
+  // social_post or member_service link. The results must join them instead of listing the item twice.
+  const saved = app;
+  app = createApp(pool, origin, 'local', {
+    registrationCommunityId: DEMO_COMMUNITY,
+    linkPreviewFetch: async () => new Response('<meta property="og:title" content="頁面標題">', { status: 200, headers: { 'content-type': 'text/html' } }),
+  });
+  try {
+    const author = await createNonTestUser('original-author@example.test', '原創作者');
+    const post = await req('/social-posts', author, { url: 'https://example.com/original-post', title: '原創貼文' });
+    assert.equal(post.status, 201, post.text);
+    const service = await req('/member-services', author, {
+      title: '原創服務', category: 'hair_beauty', summary: '客製造型', description: '線上討論。',
+      price_text: '每堂 NT$800 起', area_text: '線上', service_mode: 'online',
+      contacts: [{ label: '官方網站', url: 'https://example.com/service' }],
+    });
+    assert.equal(service.status, 201, service.text);
+    const shareOf = async (kind: string, ref: string) =>
+      (await pool.query('SELECT share_id::text AS id FROM shares WHERE community_id=$1 AND kind=$2 AND ref_id=$3', [DEMO_COMMUNITY, kind, ref])).rows[0]?.id as string;
+    // A note is public only while its author shares it publicly (the rule `/go` applies to its link).
+    const note = await req('/social-posts/notes', author, { text: '原創筆記' });
+    assert.equal(note.status, 201, note.text);
+    const publicSharing = async (enabled: boolean) => {
+      const current = await req(`/social-posts/${note.data.post_id}/public-sharing`, author);
+      assert.equal(current.status, 200, current.text);
+      const changed = await req(`/social-posts/${note.data.post_id}/public-sharing`, author,
+        { enabled, post_revision: current.data.post_revision, media_version: current.data.media_version }, 'POST', { 'If-Match': `"${current.data.version}"` });
+      assert.equal(changed.status, 200, changed.text);
+    };
+    await publicSharing(true);
+    const postShare = await shareOf('post', post.data.post_id), serviceShare = await shareOf('service', service.data.service_id), noteShare = await shareOf('post', note.data.post_id);
+    assert.ok(postShare && serviceShare && noteShare, 'publication creates every share');
+    const paths = new Map<string, string>();
+    for (const share of [postShare, serviceShare, noteShare]) {
+      const link = await req(`/shares/${share}/links`, author, {});
+      assert.ok(link.status === 200 || link.status === 201, link.text);
+      paths.set(share, link.data.path);
+      const clicked = await app.request(`${origin}/api/v1/promotion/clicks`, {
+        method: 'POST',
+        headers: { Origin: origin, 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36' },
+        body: JSON.stringify({ code: link.data.code }),
+      });
+      assert.ok(clicked.status < 300, await clicked.text());
+    }
+    assert.deepEqual((await pool.query('SELECT l.kind, count(c.link_id)::int AS clicks FROM promotion_links l LEFT JOIN promotion_clicks c USING(link_id) WHERE l.user_id=$1 GROUP BY l.kind ORDER BY l.kind', [author.actor.user_id])).rows,
+      [{ kind: 'member_service', clicks: 1 }, { kind: 'social_post', clicks: 2 }]);
+
+    const results = async () => {
+      const response = await req('/me/share-results', author);
+      assert.equal(response.status, 200, response.text);
+      return response.data.items as ShareResultItem[];
+    };
+    type ShareResultItem = { key: string; kind: string; title: string; available: boolean; link: { kind: string; path: string } | null; clicks: number };
+    const keys = [`share:${postShare}`, `share:${serviceShare}`, `share:${noteShare}`].sort();
+    const before = await results();
+    assert.deepEqual(before.map(i => i.key).sort(), keys, JSON.stringify(before));
+    for (const [share, kind, linkKind] of [[postShare, 'post', 'social_post'], [serviceShare, 'service', 'member_service'], [noteShare, 'post', 'social_post']]) {
+      const row = before.find(i => i.key === `share:${share}`)!;
+      assert.equal(row.kind, kind); assert.equal(row.available, true);
+      assert.equal(row.clicks, 1); assert.deepEqual(row.link && { kind: row.link.kind, path: row.link.path }, { kind: linkKind, path: paths.get(share) });
+    }
+    assert.equal(before.find(i => i.key === `share:${postShare}`)!.title, '原創貼文');
+    assert.equal(before.find(i => i.key === `share:${serviceShare}`)!.title, '原創服務');
+
+    // Withdrawing public sharing keeps the note readable to members: one row with its real count, and
+    // no public link to offer.
+    await publicSharing(false);
+    const withdrawn = await results();
+    assert.deepEqual(withdrawn.map(i => i.key).sort(), keys, JSON.stringify(withdrawn));
+    const noteRow = withdrawn.find(i => i.key === `share:${noteShare}`)!;
+    assert.deepEqual({ available: noteRow.available, link: noteRow.link, clicks: noteRow.clicks }, { available: true, link: null, clicks: 1 });
+
+    assert.equal((await req(`/member-services/${service.data.service_id}/pause`, author, {}, 'POST', { 'If-Match': '"1"' })).status, 200);
+    assert.equal((await req(`/social-posts/${post.data.post_id}`, author, {}, 'DELETE')).status, 200);
+    const after = await results();
+    assert.deepEqual(after.map(i => i.key).sort(), keys, JSON.stringify(after));
+    for (const row of after.filter(i => i.key !== `share:${noteShare}`)) assert.deepEqual({ title: row.title, available: row.available, link: row.link, clicks: row.clicks }, { title: '已停止分享', available: false, link: null, clicks: 0 });
+  } finally {
+    app = saved;
+  }
+});
+
+test('S3: platform, member-card and skill-book links stay one row each once their clicks credit a share', async () => {
+  const member = await createNonTestUser('links-once@example.com', '連結分享者');
+  const chrome = { 'User-Agent': 'Mozilla/5.0 Chrome/128.0.0.0 Safari/537.36' };
+  // A repository share that carries a catalog skill book, as the share backfill attaches it.
+  const repo = randomUUID(), repoShare = randomUUID();
+  await pool.query(
+    `INSERT INTO canonical_repositories(repo_id,provider,provider_repo_id,full_name,current_url)
+     VALUES($1,'github','997702','org/book-repo','https://github.com/org/book-repo')`, [repo]);
+  await pool.query(
+    `INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,repo_id,title,first_sharer_user_id,state,legacy_ref)
+     VALUES($1,$2,'repository','github:org/book-repo','https://github.com/org/book-repo',$3,'技能書專案',$4,'published',$5::jsonb)`,
+    [repoShare, DEMO_COMMUNITY, repo, member.actor.user_id, JSON.stringify([{ kind: 'book', id: 'social-post' }])]);
+  await pool.query('INSERT INTO member_card_shares(user_id,community_id,share_token,enabled,include_avatar) VALUES($1,$2,$3,true,false)',
+    [member.actor.user_id, DEMO_COMMUNITY, randomBytes(32).toString('base64url')]);
+  const click = async (code: string) => {
+    const res = await req('/promotion/clicks', undefined, { code }, 'POST', chrome);
+    assert.equal(res.status, 200, res.text);
+  };
+  for (const [kind, target] of [['platform', 'workshop'], ['platform', 'tester-map'], ['member_card', member.actor.user_id], ['skill_book', 'book:social-post']]) {
+    const link = await req('/promotion/links', member, { kind, target });
+    assert.equal(link.status, 200, link.text);
+    await click(link.data.code);
+  }
+  // Each click credited a share: the platform's and the member card's anchors, and the repository share.
+  const credited = (await pool.query(
+    `SELECT DISTINCT s.kind,s.canonical_key FROM share_credit_events e JOIN shares s USING (share_id,community_id)
+     WHERE e.user_id=$1 AND e.basis='qualified_click_day' ORDER BY s.canonical_key`, [member.actor.user_id])).rows;
+  assert.deepEqual(credited, [
+    { kind: 'repository', canonical_key: 'github:org/book-repo' },
+    { kind: 'link', canonical_key: `member-card:${member.actor.user_id}` },
+    { kind: 'link', canonical_key: 'platform' },
+  ].sort((a, b) => a.canonical_key < b.canonical_key ? -1 : 1));
+  const codes = new Map((await pool.query('SELECT kind,target_key,code FROM promotion_links WHERE user_id=$1', [member.actor.user_id])).rows
+    .map(row => [`${row.kind}:${row.target_key}`, row.code as string]));
+  const card = [...codes.keys()].find(key => key.startsWith('member_card:'))!;
+  const results = async () => {
+    const res = await req('/me/share-results', member);
+    assert.equal(res.status, 200, res.text);
+    return res.data.items as { key: string; kind: string; title: string; available: boolean; link: { kind: string; path: string } | null; clicks: number }[];
+  };
+  const byKey = (items: Awaited<ReturnType<typeof results>>, key: string) => items.find(item => item.key === key)!;
+
+  // The anchors add no row; the repository share and its skill book link are one row.
+  const first = await results();
+  assert.deepEqual(first.map(item => item.key).sort(), ['platform:workshop', 'platform:tester-map', card, `share:${repoShare}`].sort(), JSON.stringify(first));
+  for (const key of ['platform:workshop', 'platform:tester-map', card]) {
+    const row = byKey(first, key);
+    assert.deepEqual({ available: row.available, clicks: row.clicks, path: row.link?.path }, { available: true, clicks: 1, path: `/go/${codes.get(key)}` });
+  }
+  const book = byKey(first, `share:${repoShare}`);
+  assert.deepEqual({ kind: book.kind, title: book.title, clicks: book.clicks, link: book.link && { kind: book.link.kind, path: book.link.path } },
+    { kind: 'repository', title: '技能書專案', clicks: 1, link: { kind: 'skill_book', path: `/go/${codes.get('skill_book:book:social-post')}` } });
+
+  // The repository's own share link joins the same row: both links' clicks, and the share link is offered.
+  const own = await req(`/shares/${repoShare}/links`, member, {});
+  assert.equal(own.status, 200, own.text);
+  await click(own.data.code);
+  const second = await results();
+  assert.equal(second.filter(item => item.key === `share:${repoShare}`).length, 1, JSON.stringify(second));
+  const both = byKey(second, `share:${repoShare}`);
+  assert.deepEqual({ clicks: both.clicks, link: both.link && { kind: both.link.kind, path: both.link.path } },
+    { clicks: 2, link: { kind: 'share', path: own.data.path } });
+
+  // A member card that is turned off stops by its own rule, and its anchor still adds no row.
+  await pool.query('UPDATE member_card_shares SET enabled=false WHERE user_id=$1', [member.actor.user_id]);
+  const third = await results();
+  assert.deepEqual(third.map(item => item.key).sort(), ['platform:workshop', 'platform:tester-map', card, `share:${repoShare}`].sort(), JSON.stringify(third));
+  assert.deepEqual({ available: byKey(third, card).available, link: byKey(third, card).link }, { available: false, link: null });
+});
