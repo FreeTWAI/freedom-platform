@@ -9,10 +9,12 @@ const sections: { kind: PublicDiscoverySection['kind']; title: string; empty: st
   { kind: 'highlights', title: '活動回顧', empty: '目前沒有可公開探索的活動回顧。' },
   { kind: 'services', title: '會員服務', empty: '目前沒有可公開探索的會員服務。' },
 ];
-// Only content routes, never referral codes, tokens, hashes or arbitrary destinations.
+// Only content routes, never referral codes, tokens, hashes or arbitrary destinations. Like
+// publicDiscoveryPath, the path is rebuilt from a constant route prefix, so it stays on this origin.
 export function publicShareReturnPath(value: string | null): string | null {
   const match = value?.match(/^\/(services|works)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
-  return match ? `/${match[1]}/${match[2]}` : null;
+  if (!match) return null;
+  return match[1] === 'services' ? `/services/${match[2]}` : `/works/${match[2]}`;
 }
 
 export function publicDiscoveryPath(value: string | null): string | null {
