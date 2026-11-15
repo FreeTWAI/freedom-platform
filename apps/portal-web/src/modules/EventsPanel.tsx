@@ -49,6 +49,9 @@ function localTime(iso:string) {
 }
 const fromEvent=(item:CommunityEvent):EventDraft=>({source_cover_url:item.source_cover_url,prize_details:eventPrizeDrafts((item.prize_details===undefined?[]:item.prize_details)),registration_policy:item.registration_policy??'guest_allowed',help_need:item.help_need??'',title:item.title,description:item.description,starts_at:localTime(item.starts_at),ends_at:localTime(item.ends_at),mode:item.mode,event_kind:item.event_kind??'other',topic:item.topic??'',location:item.location,online_url:item.online_url??'',capacity:item.capacity===null?'':String(item.capacity),guild_key:item.guild_key??'',visibility:item.visibility??'workshop'});
 export const eventPayload=(value:EventDraft):EventPayload=>({...value,description:value.description.trim()||value.title,prize_details:value.prize_details===undefined?undefined:eventPrizePayload(value.prize_details),...(value.help_need!==undefined?{help_need:value.help_need.trim()||null}:{}),starts_at:localInputToIso(value.starts_at),ends_at:localInputToIso(value.ends_at),topic:value.topic.trim()||null,online_url:value.online_url.trim()||null,capacity:value.capacity===''?null:Number(value.capacity),guild_key:value.guild_key||null});
+// The server stores a cover URL trimmed and normalized (eventSourceUrl in modules/community/events.ts:
+// lowercase host, no fragment or tracking parameters), so a receipt carries that form, not the typed text.
+const storedCoverUrl=(value:string|null)=>{if(value===null)return null;const typed=value.trim(),cover=normalizeShareUrl(typed);return cover.ok?cover.url:typed;};
 // The HTTP boundary serializes aggregate_version as a safe integer. Confirm
 // this original command's snapshot, never a newer list row or today's clock.
 function eventSaveReceipt(value:unknown,attempt:EventSaveAttempt):CommunityEvent {
@@ -64,7 +67,7 @@ function eventSaveReceipt(value:unknown,attempt:EventSaveAttempt):CommunityEvent
     ||!sameTime(item.starts_at,body.starts_at)||!sameTime(item.ends_at,body.ends_at)
     ||item.mode!==body.mode||item.event_kind!==body.event_kind||item.visibility!==body.visibility
     ||item.topic!==(body.topic?.trim()??null)||item.online_url!==(body.online_url?.trim()??null)||item.guild_key!==body.guild_key||item.capacity!==body.capacity
-    ||body.source_cover_url!==undefined&&item.source_cover_url!==body.source_cover_url
+    ||body.source_cover_url!==undefined&&item.source_cover_url!==storedCoverUrl(body.source_cover_url)
     ||item.help_need!==helpNeed||item.registration_policy!==(body.registration_policy??attempt.registrationPolicy??'guest_allowed')
     ||!['banner_url','video_url','review_guild_key','review_reason'].every(key=>nullableText(item[key as keyof CommunityEvent]))
     ||![null,'landscape','portrait'].includes(item.banner_orientation)||![null,'video/mp4','video/webm'].includes(item.video_mime)

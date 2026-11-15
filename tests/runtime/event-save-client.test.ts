@@ -106,6 +106,29 @@ test('update retry accepts the original historical snapshot after its start time
   const h=harness();await ready(h,[stored({aggregate_version:9})]);h.props.locationHash='#events/'+id+'/manage';h.view();h.click('編輯活動');h.fill({title:'  Trimmed title  ',description:'  Trimmed description  ',location:'  Trimmed location  ',help_need:'  Help needed  '});h.submit();const first=h.writes[0];assert.equal(first.options.ifMatch,9);first.reject(unknown());await settle();t.mock.method(Date,'now',()=>Date.UTC(2031,0,1));h.submit();assert.equal(tuple(h.writes[1]),tuple(first));
   h.writes[1].resolve(ack(first,{starts_at:'2030-01-01T20:00:00+08:00',ends_at:'2030-01-01T21:00:00+08:00',help_need:'Help needed'}));await settle();assert.match(text(h.view()),/活動已更新，仍待審核/);h.cleanup();
 });
+// The server stores a cover URL normalized (eventSourceUrl: lowercase host, no fragment or tracking
+// parameters), so the receipt for a typed, noncanonical cover URL carries a different string.
+async function editCover(h:ReturnType<typeof harness>,typed:string){
+  await ready(h,[stored({aggregate_version:9})]);h.props.locationHash='#events/'+id+'/manage';h.view();h.click('編輯活動');
+  const field=find(h.form(),node=>node.type==='label'&&text(node).startsWith('封面網址'));assert.ok(field,'cover field');
+  find(field.props.children,node=>node.type==='input')!.props.onChange({target:{value:typed}});h.submit();
+  const first=h.writes[0];assert.equal(first.body.source_cover_url,typed);assert.equal(first.options.ifMatch,9);return first;
+}
+for(const [typed,canonical] of [['https://example.org/cover.png?utm_source=copy','https://example.org/cover.png'],['https://Example.ORG/cover.png','https://example.org/cover.png'],
+  ['https://example.org/cover.png#poster','https://example.org/cover.png'],['https://example.org/cover.png?name=a%20b','https://example.org/cover.png?name=a+b']])
+  test(`a cover URL typed as ${typed} is confirmed by the stored ${canonical}`,async()=>{
+    const h=harness();const first=await editCover(h,typed);first.resolve(ack(first,{source_cover_url:canonical}));await settle();
+    assert.match(text(h.view()),/活動已更新，仍待審核/);assert.equal(h.fields(),undefined);assert.equal(h.leave(),true);assert.equal(h.beforeUnload(),false);h.cleanup();
+  });
+test('after a lost ACK, the same-key retry of a noncanonical cover URL accepts the stored form',async()=>{
+  const h=harness();const first=await editCover(h,'https://Example.ORG/cover.png?utm_source=copy#poster');first.reject(unknown());await settle();
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);h.submit();assert.equal(tuple(h.writes[1]),tuple(first));
+  h.writes[1].resolve(ack(first,{source_cover_url:'https://example.org/cover.png'}));await settle();assert.match(text(h.view()),/活動已更新，仍待審核/);assert.equal(h.leave(),true);h.cleanup();
+});
+test('a receipt carrying another cover URL still leaves the save unconfirmed',async()=>{
+  const h=harness();const first=await editCover(h,'https://example.org/cover.png?utm_source=copy');first.resolve(ack(first,{source_cover_url:'https://example.org/other.png'}));await settle();
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);assert.equal(h.beforeUnload(),true);assert.doesNotMatch(text(h.view()),/活動已更新/);h.cleanup();
+});
 
 for(const change of ['client','user'] as const)test(`committed ${change} replacement revokes the old save before passive cleanup`,async()=>{
   const h=harness({deferPassiveCleanup:true});await create(h);h.choose('video');h.submit();const first=h.writes[0];
