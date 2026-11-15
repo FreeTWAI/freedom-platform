@@ -449,6 +449,8 @@ test('UX-2: secondary pointers cannot release or cancel a real cooking hold, and
 });
 
 for(const width of [320,1440])for(const kind of ['knead','pour'] as const)test(`UX-2: native Tab cancels the keyboard ${kind} hold without scoring or losing the dish at ${width}px`,async({page})=>{
+  // The 1440 pour case took 19.1-30.5 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+  test.setTimeout(75_000);
   await page.setViewportSize({width,height:900});await openKitchen(page,'margherita-pizza');
   const game=page.locator('.ck-game'),recipe=recipeOf('margherita-pizza')!;
   if(kind==='pour'){
@@ -536,7 +538,8 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
 }
 
 test('UX-1/5: a completed cooking run can replay the same seed or move to the next real recipe',async({page})=>{
-  test.setTimeout(120000);await openKitchen(page,'egg-fried-rice');await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'換一道料理 →',exact:true}).click();await expect(page.locator('.ck-game h1')).toHaveText('滷肉飯');expect(new URL(page.url()).searchParams.get('recipe')).toBe('braised-pork-rice');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
+  // 48.3-86.6 s in Verify 43701950520, 43707780287 and 43715862147.
+  test.setTimeout(180_000);await openKitchen(page,'egg-fried-rice');await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'換一道料理 →',exact:true}).click();await expect(page.locator('.ck-game h1')).toHaveText('滷肉飯');expect(new URL(page.url()).searchParams.get('recipe')).toBe('braised-pork-rice');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
 });
 
 test('UX-4: all six 3D scenes keep bounded real draw calls and avoid unchanged diagnostic mutations',async({page})=>{
@@ -746,6 +749,8 @@ test('PT-light: context loss pauses the same run, fallback is explicit, retry pr
 });
 
 for(const light of [false,true])test(`PT-light: ${light?'light':'native'} cells reject held pointer/Space/Enter across waves and retain assistive clicks`,async({page})=>{
+  // Native took 18.7-28.9 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+  if(!light)test.setTimeout(60_000);
   if(light)await openLightHoliday(page);else await openParty(page,'holiday');
   for(const [index,key]of ['Space','Enter','pointer'].entries()){
     const round=index*3;await partyAdvance(page,round*PT.holidayRoundMs+300);
@@ -1575,7 +1580,8 @@ test('UX-9: corn dog coating cancels native animation frames on touch release an
 });
 
 for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as MarketId[])test(`UX-9: ${id} cooks through actual controls to its own inspectable, downloadable and shareable result`,async({page},testInfo)=>{
- test.setTimeout(120000);const errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await marketOpen(page,id);
+ // Corn dog, the slowest, took 42.6-82.0 s in Verify 43701950520, 43707780287 and 43715862147.
+ test.setTimeout(165_000);const errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await marketOpen(page,id);
  if(id==='corn-dog'){await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');await marketTime(page,24000);await marketButton(page,'翻這一面');await marketTime(page,24000);await marketButton(page,'起鍋瀝油');await marketTime(page,4000);}
  if(id==='steak-dinner'){await marketAdd(page,'牛排');await marketAdd(page,'薯條');await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('0');await marketTime(page,23000);await marketButton(page,'翻這一面');await marketTime(page,23000);}
  if(id==='shawarma'){await marketAdd(page,'餅皮');await marketTime(page,6000);for(let i=0;i<4;i++)await marketButton(page,'削一刀');await marketAdd(page,'生菜');await marketAdd(page,'番茄');for(let i=0;i<3;i++)await marketButton(page,`包一折 · ${i}/3`);}
@@ -1602,7 +1608,8 @@ test('UX-1/9: lobby can cold-open both a legacy game and a free kitchen without 
 
 // UX-11: the visible food, rather than a stale selected dropdown, owns a direct touch.
 test('UX-11: touching a real corn dog selects and flips that piece; lifted food moves to the dressing tray with its own sauce',async({page},testInfo)=>{
- test.setTimeout(120000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await marketOpen(page,'corn-dog');
+ // 43.6-84.9 s in Verify 43701950520, 43707780287 and 43715862147.
+ test.setTimeout(180_000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await marketOpen(page,'corn-dog');
  for(let i=0;i<2;i++){await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');}
  await marketTime(page,22000);await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('1');
  const surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const b=(await surface.boundingBox())!,cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});

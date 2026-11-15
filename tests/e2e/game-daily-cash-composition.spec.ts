@@ -73,7 +73,9 @@ async function inspect(page:Page){
 for(const light of [false,true])for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375}])for(const scale of [1,2])test(`CASH world ${light?'light':'native'} ${viewport.width} ${scale*100}%: whole card, floating controls, actual sorting and interruption`,async({page},testInfo)=>{
  // These native landscape journeys include 30 real sorts and multiple full-scene captures.
  // Both take 38–39s locally and exceeded the 45s case budget on the hosted renderer.
- if(!light&&viewport.width===667)test.setTimeout(90_000);
+ // Measured since, in Verify 43701950520, 43707780287 and 43715862147: native 667 took up to 62.3 s,
+ // and native 320 and 390 up to 33.5 s against the 45 s default.
+ if(!light)test.setTimeout(viewport.width===667?135_000:75_000);
  await page.setViewportSize(viewport);await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});Element.prototype.requestFullscreen=async()=>{throw new DOMException('Controlled fullscreen rejection','NotAllowedError');};});
  await page.clock.install({time:new Date('2026-11-09T12:00:00Z')});await page.goto('/play?game=cash&seed=42');await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15000});await page.clock.pauseAt(new Date('2026-11-09T12:01:00Z'));
  await overlayContrast(page);await page.getByRole('button',{name:'開始這一局',exact:true}).click();
@@ -105,7 +107,8 @@ for(const light of [false,true])for(const viewport of [{width:320,height:568},{w
 
 for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375}])test(`CASH dynamic recovery ${viewport.width}: 200% two-action sheet scrolls after completed capture and real context loss`,async({page},testInfo)=>{
  // Includes the completed run, genuine context loss, recovery geometry and export.
- if(viewport.width===667)test.setTimeout(90_000);
+ // 320 took up to 28.0 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+ test.setTimeout(viewport.width===667?90_000:60_000);
  await page.setViewportSize(viewport);await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
  await page.clock.install({time:new Date('2026-11-09T12:00:00Z')});await page.goto('/play?game=cash&seed=42');await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15000});await page.clock.pauseAt(new Date('2026-11-09T12:01:00Z'));
  await page.getByRole('button',{name:'開始這一局',exact:true}).click();await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();

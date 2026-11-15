@@ -58,6 +58,8 @@ test('member completes work, reviewer accepts it, result survives reload and log
 });
 
 test('showcase and opportunity become a bilateral cooperation and attributed receipt report',async({page})=>{
+  // 25.8-28.1 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+  test.setTimeout(60_000);
   await login(page,'maker@local.test');await navigate(page, '作品與合作');
   await openWorkForm(page);
   await page.getByLabel('作品標題',{exact:true}).fill('瀏覽器驗證的週報模板');

@@ -558,6 +558,8 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
 // above. Record real intermediate frames through normal controls, not injected
 // run state. Frame times are requested virtual offsets, not a claimed video FPS.
 for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440,height:900}])test(`native rice scoop intermediate evidence at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
+ // 13.3-27.9 s in Verify 43701950520, 43707780287 and 43715862147, against the 45 s default.
+ test.setTimeout(60_000);
  const recipe=recipeOf('egg-fried-rice')!,slice=recipe.steps[0],pan=recipe.steps.find(s=>s.kind==='pan')!,errors:string[]=[];
  page.on('pageerror',error=>errors.push(error.message));await page.setViewportSize(viewport);await page.clock.install();
  await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);
