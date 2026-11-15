@@ -5,11 +5,12 @@ import {createWorkerHandler,type WorkerEnv} from '../../apps/platform-api/src/wo
 // These scheduler tests isolate job boundaries; real offline expiry runs in its own PG tests.
 const leaseQuery=async(sql:string)=>{if(sql.includes('INSERT INTO github_feed_state'))return {rows:[{}]};if(sql.includes('DELETE FROM github_feed_state'))return {rows:[]};throw Error('unexpected query');};
 const idleDueWork=async()=>({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0});
+const idlePings=async()=>({claimed:0,sent:0,failed:0});
 for(const settings of [{},{FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false'},{FREEDOM_COMMERCE_CHECKOUT_ENABLED:'true',FREEDOM_COMMERCE_CONSOLE_ENABLED:'true',FREEDOM_GUILD_LAUNCHPAD_ENABLED:'true',FREEDOM_SUPPLIER_CONSOLE_ENABLED:'true'},{FREEDOM_COMMERCE_QUARANTINE:'true'},{FREEDOM_COMMERCE_QUARANTINE:'synthetic-secret'}])test(`scheduler commerce settings ${JSON.stringify(settings)}`,async()=>{
   const calls:string[]=[],logs:string[]=[],pending:Promise<unknown>[]=[];const original=console.error;console.error=(...args)=>logs.push(args.join(' '));
   const pool={query:leaseQuery,connect:async()=>({on(){},removeListener(){},release(){},query:async()=>({rows:[]})}),end:async()=>{calls.push('end');}} as unknown as Pool;
   try {
-    const handler=createWorkerHandler({createPool:()=>pool,commerceRetention:async(given)=>{assert.equal(given,pool);calls.push('retention');return idleDueWork();},commerceApplyDeferred:async(given,options)=>{assert.equal(given,pool);assert.deepEqual(options,{limit:200});calls.push('payments');return {applied:0,failed:0,skipped:0};},commerceSweep:async(given,options)=>{assert.equal(given,pool);assert.deepEqual(options,{limit:200});calls.push('commerce');return 0;},sharesRefresh:async(_pool,options,limit)=>{assert.equal(limit,2);assert.equal(options?.token,undefined);calls.push('shares');return 0;},syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
+    const handler=createWorkerHandler({createPool:()=>pool,commerceRetention:async(given)=>{assert.equal(given,pool);calls.push('retention');return idleDueWork();},commerceApplyDeferred:async(given,options)=>{assert.equal(given,pool);assert.deepEqual(options,{limit:200});calls.push('payments');return {applied:0,failed:0,skipped:0};},commerceSweep:async(given,options)=>{assert.equal(given,pool);assert.deepEqual(options,{limit:200});calls.push('commerce');return 0;},sharesRefresh:async(_pool,options,limit)=>{assert.equal(limit,2);assert.equal(options?.token,undefined);calls.push('shares');return 0;},syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0}),agentPings:idlePings});
     await handler.scheduled({},{...settings,FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv,{waitUntil:p=>pending.push(p)});await Promise.all(pending);
     const skipped='FREEDOM_COMMERCE_QUARANTINE' in settings;
     assert.deepEqual(calls,skipped?['retention','shares','github','end']:['retention','payments','commerce','shares','github','end']);assert.deepEqual(logs,settings.FREEDOM_COMMERCE_QUARANTINE==='synthetic-secret'?['commerce_settings_invalid']:[]);
@@ -19,7 +20,7 @@ test('commerce sweep failure logs a fixed name, continues later jobs and ends th
   const calls:string[]=[],logs:string[]=[],pending:Promise<unknown>[]=[];const original=console.error;console.error=(...args)=>logs.push(args.join(' '));
   try {
     const pool={query:leaseQuery,end:async()=>{calls.push('end');}} as unknown as Pool;
-    const handler=createWorkerHandler({createPool:()=>pool,commerceRetention:async(given)=>{assert.equal(given,pool);calls.push('retention');return idleDueWork();},commerceDueWork:idleDueWork,commerceApplyDeferred:async()=>{calls.push('payments');return {applied:0,failed:0,skipped:0};},commerceSweep:async()=>{calls.push('holds');throw Error('synthetic-secret');},commerceEmailSweep:async()=>({expired:0,deleted:0}),sharesRefresh:async(_pool,options,limit)=>{assert.equal(limit,2);assert.equal(options?.token,undefined);calls.push('shares');return 0;},syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
+    const handler=createWorkerHandler({createPool:()=>pool,commerceRetention:async(given)=>{assert.equal(given,pool);calls.push('retention');return idleDueWork();},commerceDueWork:idleDueWork,commerceApplyDeferred:async()=>{calls.push('payments');return {applied:0,failed:0,skipped:0};},commerceSweep:async()=>{calls.push('holds');throw Error('synthetic-secret');},commerceEmailSweep:async()=>({expired:0,deleted:0}),sharesRefresh:async(_pool,options,limit)=>{assert.equal(limit,2);assert.equal(options?.token,undefined);calls.push('shares');return 0;},syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0}),agentPings:idlePings});
     await handler.scheduled({},{FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv,{waitUntil:p=>pending.push(p)});await Promise.all(pending);assert.deepEqual(logs,['commerce_sweep_failed']);assert.deepEqual(calls,['retention','payments','holds','shares','github','end']);
   }finally{console.error=original;}
 });
@@ -59,6 +60,7 @@ test('contact retention failure logs only its fixed name, continues later jobs w
         assert.equal(given, pool); calls.push('auth');
         return { sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 };
       },
+      agentPings: idlePings,
     });
     await handler.scheduled({}, {FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv, { waitUntil: p => pending.push(p) });
     await Promise.all(pending);
@@ -76,7 +78,7 @@ test('each commerce backfill has its own failure boundary and quarantine skips a
     const env={FREEDOM_COMMERCE_CONTACT_RETENTION:'all',FREEDOM_ENV:'local',FREEDOM_COMMERCE_PROVIDER_PROFILES:'ecpay.aio.credit.v1',COMMERCE_CREDENTIAL_KEYS:'test:'+randomBytes(32).toString('base64'),COMMERCE_JOURNAL:{put:async()=>null,get:async()=>null},FREEDOM_COMMERCE_QUARANTINE:String(quarantine)} as unknown as WorkerEnv;
     const pool={query:leaseQuery,end:async()=>{calls.push('end');}} as unknown as Pool;
     try{
-      const handler=createWorkerHandler({createPool:()=>pool,commerceRetention:async(given)=>{assert.equal(given,pool);calls.push('retention');return idleDueWork();},commerceDueWork:async()=>{calls.push('queries');throw Error('synthetic-secret');},commerceSweep:async()=>{calls.push('holds');throw Error('synthetic-secret');},commerceEmailSweep:async()=>({expired:0,deleted:0}),commerceApplyDeferred:async(given,options)=>{assert.equal(given,pool);assert.deepEqual(options,{limit:200});calls.push('payments');throw Error('synthetic-secret');},commerceFlushJournal:async(given,journal,options)=>{assert.equal(given,pool);assert.equal(journal.environment,'local');assert.deepEqual(options,{limit:2});calls.push('journal');throw Error('synthetic-secret');},sharesRefresh:async(_pool,options,limit)=>{assert.equal(limit,2);assert.equal(options?.token,undefined);calls.push('shares');return 0;},syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0})});
+      const handler=createWorkerHandler({createPool:()=>pool,commerceRetention:async(given)=>{assert.equal(given,pool);calls.push('retention');return idleDueWork();},commerceDueWork:async()=>{calls.push('queries');throw Error('synthetic-secret');},commerceSweep:async()=>{calls.push('holds');throw Error('synthetic-secret');},commerceEmailSweep:async()=>({expired:0,deleted:0}),commerceApplyDeferred:async(given,options)=>{assert.equal(given,pool);assert.deepEqual(options,{limit:200});calls.push('payments');throw Error('synthetic-secret');},commerceFlushJournal:async(given,journal,options)=>{assert.equal(given,pool);assert.equal(journal.environment,'local');assert.deepEqual(options,{limit:2});calls.push('journal');throw Error('synthetic-secret');},sharesRefresh:async(_pool,options,limit)=>{assert.equal(limit,2);assert.equal(options?.token,undefined);calls.push('shares');return 0;},syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0}),agentPings:idlePings});
       await handler.scheduled({},env,{waitUntil:p=>pending.push(p)});await Promise.all(pending);
       assert.deepEqual(calls,quarantine?['retention','shares','github','end']:['retention','payments','holds','queries','journal','shares','github','end']);assert.deepEqual(logs,quarantine?[]:['commerce_payment_deferred_failed','commerce_sweep_failed','commerce_due_work_failed','commerce_control_journal_failed']);
     }finally{console.error=original;}
@@ -95,7 +97,8 @@ test('review 3: quarantine recovery applies verified payments before sweeping ho
     commerceEmailSweep: async () => ({ expired: 0, deleted: 0 }),
     sharesRefresh: async () => 0,
     syncGitHub: async () => ({ requests: 0, repositories: 0, items_upserted: 0, not_modified: 0, stop_reason: 'completed' }),
-    authPrune: async () => ({ sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 })
+    authPrune: async () => ({ sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 }),
+    agentPings: idlePings,
   });
   await handler.scheduled({}, {FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv, { waitUntil: p => pending.push(p) });
   await Promise.all(pending);
@@ -115,7 +118,8 @@ test('review 8: deferred partial failure logs only its fixed name and counts bef
       commerceEmailSweep: async () => ({ expired: 0, deleted: 0 }),
       sharesRefresh: async () => 0,
       syncGitHub: async () => ({ requests: 0, repositories: 0, items_upserted: 0, not_modified: 0, stop_reason: 'completed' }),
-      authPrune: async () => ({ sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 })
+      authPrune: async () => ({ sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 }),
+      agentPings: idlePings,
     });
     await handler.scheduled({}, {FREEDOM_COMMERCE_CONTACT_RETENTION:'all'} as WorkerEnv, { waitUntil: p => pending.push(p) });
     await Promise.all(pending);
@@ -137,6 +141,7 @@ test('scheduled runs commerceEmailSweep with { limit: 500 } outside quarantine a
       sharesRefresh: async () => 0,
       syncGitHub: async () => ({ requests: 0, repositories: 0, items_upserted: 0, not_modified: 0, stop_reason: 'completed' }),
       authPrune: async () => ({ sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0 }),
+      agentPings: idlePings,
     });
     await handler.scheduled({}, { FREEDOM_COMMERCE_CONTACT_RETENTION:'all', FREEDOM_COMMERCE_QUARANTINE: String(quarantine) } as WorkerEnv, { waitUntil: p => pending.push(p) });
     await Promise.all(pending);
@@ -159,7 +164,7 @@ for(const mode of [undefined,'off','orders','all','','true','ALL',' all','all ',
    commerceRetention:async(_pool,received)=>{assert.equal(received,mode);calls.push('retention');return idleDueWork();},
    commerceDueWork:idleDueWork,commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),commerceSweep:async()=>0,commerceEmailSweep:async()=>({expired:0,deleted:0}),
    sharesRefresh:async(_pool,options,limit)=>{assert.equal(limit,2);assert.equal(options?.token,undefined);calls.push('shares');return 0;},syncGitHub:async()=>{calls.push('github');return {requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'};},
-   authPrune:async()=>{calls.push('auth');return {sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0};}});
+   authPrune:async()=>{calls.push('auth');return {sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0};},agentPings:idlePings});
   const pending:Promise<unknown>[]=[];
   await handler.scheduled({},{FREEDOM_COMMERCE_CONTACT_RETENTION:mode,FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false',FREEDOM_COMMERCE_QUARANTINE:'true'} as WorkerEnv,{waitUntil:p=>{pending.push(p);}});await Promise.all(pending);
   const active=mode==='all',valid=mode===undefined||mode==='off'||active;

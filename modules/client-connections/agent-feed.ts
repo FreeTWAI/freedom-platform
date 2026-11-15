@@ -10,6 +10,24 @@ export type AgentChangeKind='event.updated'|'event.approved'|'rsvp.confirmed'|'r
 export async function recordAgentChange(q:PoolClient,input:{community_id:string;user_id:string;kind:AgentChangeKind;source_key:string;resource_id:string}){
  await q.query('SELECT record_agent_change($1,$2,$3,$4,$5)',[input.community_id,input.user_id,input.kind,input.source_key,input.resource_id]);
 }
+/** Ensure and lock the member's cursor row for update, returning its last_cursor. */
+export async function lockAgentChangeCursor(q:PoolClient,userId:string):Promise<string>{
+ await q.query('INSERT INTO agent_change_cursors(user_id) VALUES($1) ON CONFLICT DO NOTHING',[userId]);
+ const row=(await q.query('SELECT last_cursor FROM agent_change_cursors WHERE user_id=$1 FOR UPDATE',[userId])).rows[0];
+ return String(row.last_cursor);
+}
+/** Assign sequential cursors to up to 1000 unassigned change events and advance last_cursor. */
+export async function assignAgentChangeCursors(q:PoolClient,userId:string,communityId:string,last:string):Promise<{end:string;assigned:number}>{
+ const result=await q.query(`WITH pending AS (
+    SELECT event_id,row_number() OVER(ORDER BY created_at,event_id) AS ordinal FROM (
+     SELECT event_id,created_at FROM agent_change_events WHERE user_id=$1 AND community_id=$3 AND cursor IS NULL ORDER BY created_at,event_id LIMIT 1000
+    ) batch
+   ) UPDATE agent_change_events e SET cursor=$2::bigint+p.ordinal FROM pending p WHERE e.event_id=p.event_id RETURNING e.cursor`,[userId,last,communityId]);
+ const assigned=result.rowCount??0;
+ const end=(BigInt(last)+BigInt(assigned)).toString();
+ if(assigned)await q.query('UPDATE agent_change_cursors SET last_cursor=$2 WHERE user_id=$1',[userId,end]);
+ return {end,assigned};
+}
 export async function readAgentFeed(pool:Pool,actor:Actor,raw:unknown){
  const {after}=z.object({after:z.string().max(64).optional()}).strict().parse(raw);
  let position='0';
@@ -41,19 +59,12 @@ export async function readAgentFeed(pool:Pool,actor:Actor,raw:unknown){
   }
  }
  return readWithMemberSession(pool,actor,async q=>{
-  await q.query('INSERT INTO agent_change_cursors(user_id) VALUES($1) ON CONFLICT DO NOTHING',[actor.user_id]);
-  const row=(await q.query('SELECT last_cursor FROM agent_change_cursors WHERE user_id=$1 FOR UPDATE',[actor.user_id])).rows[0];
-  requireCondition(BigInt(position)<=BigInt(row.last_cursor),400,'invalid_cursor','變更游標不正確。');
-  const assigned=await q.query(`WITH pending AS (
-    SELECT event_id,row_number() OVER(ORDER BY created_at,event_id) AS ordinal FROM (
-     SELECT event_id,created_at FROM agent_change_events WHERE user_id=$1 AND community_id=$3 AND cursor IS NULL ORDER BY created_at,event_id LIMIT 1000
-    ) batch
-   ) UPDATE agent_change_events e SET cursor=$2::bigint+p.ordinal FROM pending p WHERE e.event_id=p.event_id RETURNING e.cursor`,[actor.user_id,row.last_cursor,actor.community_id]);
-  const end=BigInt(row.last_cursor)+BigInt(assigned.rowCount??0);
-  if(assigned.rowCount)await q.query('UPDATE agent_change_cursors SET last_cursor=$2 WHERE user_id=$1',[actor.user_id,end.toString()]);
+  const last=await lockAgentChangeCursor(q,actor.user_id);
+  requireCondition(BigInt(position)<=BigInt(last),400,'invalid_cursor','變更游標不正確。');
+  const {assigned}=await assignAgentChangeCursors(q,actor.user_id,actor.community_id,last);
   const rows=(await q.query(`SELECT event_id,kind,resource_id,created_at,cursor FROM agent_change_events
    WHERE user_id=$1 AND community_id=$2 AND cursor>$3 ORDER BY cursor LIMIT 101`,[actor.user_id,actor.community_id,position])).rows;
   const items=rows.slice(0,100),next=items.at(-1)?.cursor??position;
-  return {items:items.map(({cursor,...item})=>({...item,cursor:`${actor.user_id}:${cursor}`})),next_cursor:`${actor.user_id}:${next}`,has_more:rows.length>100||assigned.rowCount===1000};
+  return {items:items.map(({cursor,...item})=>({...item,cursor:`${actor.user_id}:${cursor}`})),next_cursor:`${actor.user_id}:${next}`,has_more:rows.length>100||assigned===1000};
  });
 }

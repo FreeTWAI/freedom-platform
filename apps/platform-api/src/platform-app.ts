@@ -647,7 +647,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createRepoMaintainerMemberRoutes(pool));
   app.route('/api/v1',createAvatarRoutes(pool,runtime.avatarAssetStore));
   app.route('/api/v1',createClientConnectionRoutes(pool));
-  app.route('/api/v1',createAgentTokenRoutes(pool));
+  app.route('/api/v1',createAgentTokenRoutes(pool,{origin,agentPingFetch:runtime.agentPingFetch,agentPingsDisabled:runtime.agentPingsDisabled===true}));
   app.route('/api/v1',createAgentFeedRoutes(pool));
   app.route('/api/v1',createJournalMemberRoutes(pool));
   registerShareAttachments(app, pool, {fetcher: options.githubSocial?.fetcher, get token(){return runtime.githubMetricsToken();}}, runtime.afterResponse);

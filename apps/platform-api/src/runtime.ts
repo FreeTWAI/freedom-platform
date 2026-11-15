@@ -1,3 +1,4 @@
+import type { AgentPingFetch } from '../../../modules/client-connections/agent-pings.js';
 import type { GuildToolFetch } from '../../../modules/guild-tools/transport.js';
 import type {GoogleLoginOptions} from '../../../modules/identity-membership/google/service.js';
 import type {StoreGalleryAssets} from '../../../modules/assets/storefront-gallery.js';
@@ -40,6 +41,10 @@ export type PlatformRuntime = {
   /** Registration-only HTTPS transport with host-specific destination policy; absent hides registration. */
   guildToolFetch?:GuildToolFetch;
   guildToolSigner?:import('../../../modules/guild-tools/tokens.js').ToolSigner;
+  /** Outbound signed wake-up ping transport for member agent connections; absent uses default fetch. */
+  agentPingFetch?: AgentPingFetch;
+  /** Kill switch for agent wake-up test pings and scheduled sweeps. */
+  agentPingsDisabled?: boolean;
   /** Optional Google login; false/absent is OFF. Secrets never enter public config. */
   googleLogin?: GoogleLoginOptions;
   afterResponse?:(work:()=>Promise<void>)=>void;

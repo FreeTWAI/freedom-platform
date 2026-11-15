@@ -46,6 +46,7 @@ test('the platform worker exposes scheduled and runs one bounded sync for events
       return empty;
     },
     authPrune: async given => { pruned = given; return {sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0}; },
+    agentPings: async () => ({claimed: 0, sent: 0, failed: 0}),
   });
   assert.equal(typeof handler.fetch, 'function');
   assert.equal(typeof handler.scheduled, 'function');
@@ -79,6 +80,7 @@ test('a scheduled sync failure is logged without the token and still ends the po
     sharesRefresh: async (given, options, limit) => { assert.equal(given, pool); assert.equal(options?.token, TOKEN); assert.equal(limit, 2); return 0; },
     syncGitHub: async () => { throw new Error('sync failed ' + TOKEN); },
     authPrune: async () => ({sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0}),
+    agentPings: async () => ({claimed: 0, sent: 0, failed: 0}),
   });
   const {ctx, pending} = context();
   const logged = await capture(async () => {
@@ -107,6 +109,7 @@ test('a failing auth prune logs one line and still ends the pool', async () => {
     sharesRefresh: async (given, options, limit) => { assert.equal(given, pool); assert.equal(options?.token, TOKEN); assert.equal(limit, 2); return 0; },
     syncGitHub: async () => empty,
     authPrune: async () => { throw new Error('prune failed ' + TOKEN); },
+    agentPings: async () => ({claimed: 0, sent: 0, failed: 0}),
   });
   const {ctx, pending} = context();
   const logged = await capture(async () => {
@@ -151,6 +154,7 @@ test('share refresh failure is redacted and does not stop GitHub sync or pool cl
     },
     syncGitHub: async (_given, options) => { assert.equal(options?.token, TOKEN); calls.push('github'); return empty; },
     authPrune: async () => { calls.push('auth'); return {sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0}; },
+    agentPings: async () => ({claimed: 0, sent: 0, failed: 0}),
   });
   const {ctx, pending} = context();
   const logged = await capture(async () => { await handler.scheduled({}, env(), ctx); await Promise.all(pending); });
@@ -175,6 +179,7 @@ test('overlapping scheduled runs are skipped and cleanup runs before refresh',as
     commerceDueWork:async()=>({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0}),commerceSweep:async()=>0,commerceEmailSweep:async()=>({expired:0,deleted:0}),commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),
     commerceRetention:async()=>({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0}),
     authPrune:async()=>{phases.push('cleanup');return {sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0};},
+    agentPings:async()=>({claimed:0,sent:0,failed:0}),
     sharesRefresh:async()=>{phases.push('refresh');refreshes++;if(refreshes===1){started();await gate;}return 0;},
     syncGitHub:async()=>empty});
   const first=handler.scheduled({},env(),context().ctx);
@@ -190,9 +195,67 @@ test('scheduled repository refresh has a bounded outbound budget',async()=>{
     commerceDueWork:async()=>({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0}),commerceSweep:async()=>0,commerceEmailSweep:async()=>({expired:0,deleted:0}),commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),
     commerceRetention:async()=>({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0}),
     authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0}),
+    agentPings:async()=>({claimed:0,sent:0,failed:0}),
     sharesRefresh:async(_pool,options,limit)=>{limitSeen=limit??0;for(let i=0;i<30;i++)try{await options!.fetcher!('https://api.github.com/repos/example/repo');}catch{}return 0;},
     syncGitHub:async()=>empty});
   await handler.scheduled({},env(),context().ctx);
   assert.ok(limitSeen<=3,`repository limit was ${limitSeen}`);
   assert.ok(outbound<=20,`scheduled GitHub requests were ${outbound}`);
+});
+
+test('scheduled runs agentPings after authPrune and logs agent_pings_failed on error', async () => {
+  const pool = {ended: 0, async query(sql:string){return {rows:sql.includes('INSERT INTO github_feed_state')?[{}]:[]};}, async end() { this.ended += 1; }};
+  const calls: string[] = [];
+  let pingPool: unknown;
+  let pingSend: unknown;
+  const handler = createWorkerHandler({
+    createPool: () => pool as unknown as Pool,
+    commerceRetention: async () => ({claimed: 0, completed: 0, failed: 0, externalCalls: 0, released: 0, unknown: 0}),
+    commerceDueWork: async () => ({claimed: 0, completed: 0, failed: 0, externalCalls: 0, released: 0, unknown: 0}),
+    commerceSweep: async () => 0,
+    commerceEmailSweep: async () => ({expired: 0, deleted: 0}),
+    commerceApplyDeferred: async () => ({applied: 0, failed: 0, skipped: 0}),
+    sharesRefresh: async () => { calls.push('shares'); return 0; },
+    syncGitHub: async () => { calls.push('github'); return empty; },
+    authPrune: async () => { calls.push('auth'); return {sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0}; },
+    agentPings: async (given, send) => {
+      calls.push('pings');
+      pingPool = given;
+      pingSend = send;
+      throw new Error('ping sweep boom');
+    },
+  });
+  const {ctx, pending} = context();
+  const logged = await capture(async () => {
+    await handler.scheduled({cron: '*/10 * * * *'}, env(), ctx);
+  });
+  await Promise.all(pending);
+  assert.equal(pingPool, pool);
+  assert.equal(typeof pingSend, 'function');
+  assert.deepEqual(calls, ['auth', 'pings', 'shares', 'github']);
+  assert.deepEqual(logged, ['agent_pings_failed']);
+});
+
+test('scheduled skips agentPings when FREEDOM_AGENT_PINGS_DISABLED is true', async () => {
+  const pool = {ended: 0, async query(sql:string){return {rows:sql.includes('INSERT INTO github_feed_state')?[{}]:[]};}, async end() { this.ended += 1; }};
+  let pingCalls = 0;
+  const handler = createWorkerHandler({
+    createPool: () => pool as unknown as Pool,
+    commerceRetention: async () => ({claimed: 0, completed: 0, failed: 0, externalCalls: 0, released: 0, unknown: 0}),
+    commerceDueWork: async () => ({claimed: 0, completed: 0, failed: 0, externalCalls: 0, released: 0, unknown: 0}),
+    commerceSweep: async () => 0,
+    commerceEmailSweep: async () => ({expired: 0, deleted: 0}),
+    commerceApplyDeferred: async () => ({applied: 0, failed: 0, skipped: 0}),
+    sharesRefresh: async () => 0,
+    syncGitHub: async () => empty,
+    authPrune: async () => ({sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0}),
+    agentPings: async () => { pingCalls++; return {claimed: 0, sent: 0, failed: 0}; },
+  });
+  const {ctx, pending} = context();
+  const logged = await capture(async () => {
+    await handler.scheduled({cron: '*/10 * * * *'}, {...env(), FREEDOM_AGENT_PINGS_DISABLED: 'true'}, ctx);
+  });
+  await Promise.all(pending);
+  assert.equal(pingCalls, 0);
+  assert.deepEqual(logged, []);
 });

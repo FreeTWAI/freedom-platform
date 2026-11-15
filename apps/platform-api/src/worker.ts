@@ -1,5 +1,6 @@
 import { installWorkerGuildToolSigner, type GuildToolSigningBindings } from './worker-guild-tool-signer.js';
 import { workerGuildToolFetch } from './worker-guild-tool-fetch.js';
+import { createAgentPingFetch, sweepAgentPings } from '../../../modules/client-connections/agent-pings.js';
 import { withSendLimit } from './mail-send-limit.js';
 import { refreshDueRepositories } from '../../../modules/shares/repository-cache.js';
 import {runContactRetentionWork} from '../../../modules/agent-commerce/operations/contact-retention.js';
@@ -108,6 +109,7 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings,G
   EMAIL?: {send(message:{to:string;from:string;subject:string;text:string;replyTo?:string}):Promise<{messageId:string}>};
   FREEDOM_SHOP_KEY_POLICY?: 'legacy-compatible'|'purpose-bound-only';
   FREEDOM_GUILD_LAUNCHPAD_ENABLED?: string;
+  FREEDOM_AGENT_PINGS_DISABLED?: string;
   FREEDOM_HOSTED_RESERVATIONS_ENABLED?: string;
   FREEDOM_SUPPLIER_CONSOLE_ENABLED?: string;
   FREEDOM_SUPPLY_MATERIAL_MEDIA_ENABLED?: string;
@@ -356,6 +358,8 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     health: { runtime: 'cloudflare-workers', release_sha: config.release },
     linkPreviewFetch: workerPreviewFetch,
     guildToolFetch: workerGuildToolFetch,
+    agentPingFetch: createAgentPingFetch(globalThis.fetch, config.origin),
+    agentPingsDisabled: env.FREEDOM_AGENT_PINGS_DISABLED === 'true',
     moduleProviders: undefined,
     guildLaunchpadEnabled: env.FREEDOM_GUILD_LAUNCHPAD_ENABLED === 'true',
     commerceQueryTransport:queryTransport,commercePayments:payments,commerceJournal:journal,commerceEmailSender:emailSender,commerceSettings:settings,commerceOrderNotificationsEnabled:readCommerceOrderNotificationsEnabled(env),commerceSelfShipEnabled:readCommerceSelfShipEnabled(env),commerceDropShipEnabled:readCommerceDropShipEnabled(env),
@@ -436,6 +440,8 @@ export type WorkerDependencies = {
   sharesRefresh?: typeof refreshDueRepositories;
   /** Test seam. Production uses pruneExpiredAuthRecords. */
   authPrune?: typeof pruneExpiredAuthRecords;
+  /** Test seam. Production uses sweepAgentPings. */
+  agentPings?: typeof sweepAgentPings;
   commerceDueWork?:typeof runDueCommerceWork;
   commerceRetention?:typeof runContactRetentionWork;
   commerceQueryTransport?:PaymentQueryTransport;
@@ -605,6 +611,11 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
           leased=await acquireScheduledLease(pool,owner);if(!leased)return;
           try{await (deps.authPrune??pruneExpiredAuthRecords)(pool);}
           catch{console.error('auth_prune_failed');}
+          if(env.FREEDOM_AGENT_PINGS_DISABLED!=='true'){
+            const pingOrigin=(()=>{try{return env.APP_ORIGIN?new URL(env.APP_ORIGIN).origin:'';}catch{return '';}})();
+            try{await (deps.agentPings??sweepAgentPings)(pool,createAgentPingFetch(globalThis.fetch,pingOrigin),{publicOrigin:pingOrigin});}
+            catch{console.error('agent_pings_failed');}
+          }
           if(env.FREEDOM_GUILD_LAUNCHPAD_ENABLED==='true'){
             try{await sweepDueOperations(pool);}
             catch{console.error('module_provision_sweep_failed');}
