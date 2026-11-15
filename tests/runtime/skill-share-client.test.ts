@@ -403,7 +403,7 @@ for (const [file, signature, component, props] of [
     const exports: any = {};
     runInNewContext(code, {
       exports, ...react, URL, AbortController,
-      useSkillDiscovery: () => ({data: null}), httpsLink: (value: string | undefined) => value ?? null,
+      useSkillDiscovery: () => ({data: null}), httpsLink: (value: string | undefined) => value ?? null, distinctCopyUrl: () => null,
       submissionSharePath: () => '/development/submissions/test', skillSharePath: () => '/development/skills/social-post',
       isSkillIllustrationUrl: () => false, relationshipLabels: {}, client: {csrfToken: 'test'}, sessionClient: {csrfToken: 'test'}, isStorefrontReading: () => false,
       ...Object.fromEntries(['SkillShare', 'SkillBookBadges', 'SkillBookCover', 'SkillBookSourceAccount', 'SkillBookStar', 'EventOutcomeBacklinks', 'DevelopmentEntry', 'CommunityBadge', 'GitHubSourceLinks', 'SkillInstall', 'AuthorClaimPanel', 'StorefrontBookUsage'].map(name => [name, name])),

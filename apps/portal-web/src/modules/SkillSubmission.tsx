@@ -715,7 +715,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     }}>
       <div className="section-head"><h2>投稿你的開源工具</h2><p>填寫真實用途與三步流程，先預覽再公開。</p></div>
       <fieldset disabled={pending || saveUnknown || publishUnknown} className="stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-      <label className="field">GitHub 專案網址<input name="repository_url" data-manual-source required type="url" maxLength={300} placeholder="https://github.com/你的帳號/專案名稱" data-guide-anchor="opensource:repository" value={draft.repository_url} onChange={event => setDraft({ ...draft, repository_url: event.target.value })}/></label>
+      <label className="field">GitHub 專案網址<input name="repository_url" data-manual-source required type="url" maxLength={300} placeholder="https://github.com/你的帳號/專案名稱" value={draft.repository_url} onChange={event => setDraft({ ...draft, repository_url: event.target.value })}/></label>
       <label className="field">作品名稱<input data-manual-source required maxLength={120} placeholder="例如：自動整理會議筆記" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/></label>
       <label className="field">一句話介紹<textarea aria-label="一句話介紹" data-manual-source required maxLength={2000} rows={3} placeholder="它能幫誰，解決什麼問題？" value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })}/></label>
       {draft.page ? <SkillSubmissionPageFields value={draft.page} onChange={page => setDraft({ ...draft, page })}/> : <div className="stack"><p className="hint">這是先前保存的介紹，原文會保留；可以補上問題、原理與流程圖。</p><button type="button" className="btn btn-secondary btn-small" onClick={() => setDraft({ ...draft, page: blankSkillPageFields() })}>補齊完整介紹頁</button></div>}
