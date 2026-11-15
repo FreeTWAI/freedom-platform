@@ -18,7 +18,7 @@ export const workFeatures = {
   },
   "workbench": {
     moduleId: "work", placement: 'page',
-    render: ({locationHash}) => <WorkbenchPanel selectedId={/^#workbench\/([0-9a-f-]{36})(?:\?|$)/i.exec(locationHash)?.[1]}/>,
+    render: ({locationHash, selectTab}) => <WorkbenchPanel selectedId={/^#workbench\/([0-9a-f-]{36})(?:\?|$)/i.exec(locationHash)?.[1]} onDiscover={() => selectTab('tasks')}/>,
   },
   "private-ai": {
     moduleId: "execution-runs", placement: 'page',

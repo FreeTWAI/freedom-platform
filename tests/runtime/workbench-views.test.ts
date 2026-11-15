@@ -106,6 +106,7 @@ function mountWorkbench(initialData: {
   dashboard: Record<string, unknown>;
   pages: Array<{ items: unknown[]; next_cursor: string | null }>;
   selectedId?: string;
+  onDiscover?: () => void;
 }) {
   let dashboardData = initialData.dashboard;
   let pagesData = initialData.pages;
@@ -214,7 +215,7 @@ function mountWorkbench(initialData: {
   };
 
   const panelUrl = new URL('../../apps/portal-web/src/modules/WorkbenchPanel.tsx', import.meta.url);
-  const { WorkbenchPanel } = loadModule(panelUrl) as { WorkbenchPanel: React.ComponentType<{ selectedId?: string }> };
+  const { WorkbenchPanel } = loadModule(panelUrl) as { WorkbenchPanel: React.ComponentType<{ selectedId?: string; onDiscover?: () => void }> };
 
   function renderNode(node: unknown, path: string): TreeChild[] {
     if (node == null || typeof node === 'boolean') return [];
@@ -245,7 +246,7 @@ function mountWorkbench(initialData: {
   let tree: TreeChild[] = [];
   const renderOnce = () => {
     pendingEffects = [];
-    tree = renderNode(React.createElement(WorkbenchPanel, { selectedId: initialData.selectedId }), 'root');
+    tree = renderNode(React.createElement(WorkbenchPanel, { selectedId: initialData.selectedId, onDiscover: initialData.onDiscover }), 'root');
     const toRun = pendingEffects;
     pendingEffects = [];
     for (const eff of toRun) {
@@ -405,6 +406,25 @@ test('I2: empty 我的工作 shows 看社群工作 button that switches view, an
   const pickerAfter = collectNodes(app.getTree(), (n) => n.tag === 'select' && n.props['aria-label'] === '工作檢視')[0];
   const optionsAfter = collectNodes(pickerAfter.children, (n) => n.tag === 'option').map((o) => textOf(o));
   assert.deepEqual(optionsAfter, ['我的工作', '社群工作', '我的成果']);
+});
+
+test('I2: in the work tool the one view picker ends with 探索任務, which opens task discovery', async () => {
+  let discoveries = 0;
+  const app = mountWorkbench({
+    dashboard: { summary: { accepted_count: 0 }, now: [makeWorkItem('now-2', '進行中工作乙')], next: [], review_queue: [], gained: [] },
+    pages: [{ items: [], next_cursor: null }],
+    onDiscover: () => { discoveries++; },
+  });
+  await app.settle();
+  const picker = collectNodes(app.getTree(), (n) => n.tag === 'select' && n.props['aria-label'] === '工作檢視');
+  assert.equal(picker.length, 1);
+  assert.deepEqual(collectNodes(picker[0].children, (n) => n.tag === 'option').map((o) => textOf(o)), ['我的工作', '社群工作', '我的成果', '探索任務']);
+  (picker[0].props.onChange as (e: { target: { value: string } }) => void)({ target: { value: 'discovery' } });
+  await app.settle();
+  assert.equal(discoveries, 1);
+  // The workbench itself keeps 我的工作; the shell changes the page.
+  assert.equal(collectNodes(app.getTree(), (n) => n.tag === 'select' && n.props['aria-label'] === '工作檢視')[0].props.value, 'mine');
+  assert.equal(allText(app.getTree()).includes('進行中工作乙'), true);
 });
 
 test('I2: selected-item view (#workbench/<uuid>) stays unchanged without view picker', async () => {

@@ -12,7 +12,8 @@ import type { Dashboard, WorkItem } from '../types'
 
 type WorkbenchView = 'mine' | 'community' | 'review' | 'outcomes'
 
-export function WorkbenchPanel({selectedId}:{selectedId?:string}) {
+// The work tool's one view picker. With onDiscover it also lists 探索任務, which opens task discovery.
+export function WorkbenchPanel({selectedId, onDiscover}:{selectedId?:string; onDiscover?:()=>void}) {
   const { session, pending, mutate } = usePortal()
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -83,11 +84,26 @@ export function WorkbenchPanel({selectedId}:{selectedId?:string}) {
     }
   }, [dashboard, view])
 
+  const reviewCount = dashboard?.review_queue.length ?? 0
+  const activeView: WorkbenchView = view === 'review' && reviewCount === 0 ? 'mine' : view
+  const picker = (
+      <label className="field place-view-picker">
+        檢視
+        <select aria-label="工作檢視" value={activeView} onChange={(event) => { if (event.target.value === 'discovery') { onDiscover?.(); return } setView(event.target.value as WorkbenchView); setCreatedStatus('') }}>
+          <option value="mine">我的工作</option>
+          <option value="community">社群工作</option>
+          {reviewCount > 0 && <option value="review">{`待你回饋（${reviewCount}）`}</option>}
+          <option value="outcomes">我的成果</option>
+          {onDiscover && <option value="discovery">探索任務</option>}
+        </select>
+      </label>
+  )
+  // In the work tool the picker stays while the workbench loads or fails, so 探索任務 is still reachable.
   if (loading && !dashboard) {
-    return <p className="muted" role="status">載入工作台…</p>
+    return <>{onDiscover && picker}<p className="muted" role="status">載入工作台…</p></>
   }
   if (loadError || !dashboard || !items) {
-    return <ErrorPanel error={loadError ?? { message: '無法顯示工作台', network: false, conflict: false }} onReload={() => void load()} />
+    return <>{onDiscover && picker}<ErrorPanel error={loadError ?? { message: '無法顯示工作台', network: false, conflict: false }} onReload={() => void load()} /></>
   }
 
   if(selectedId){
@@ -96,8 +112,6 @@ export function WorkbenchPanel({selectedId}:{selectedId?:string}) {
   }
   const seen = new Set([...dashboard.now, ...dashboard.next].map((item) => item.work_item_id))
   const catalog = items.filter((item) => !item.my_claim && !seen.has(item.work_item_id))
-  const reviewCount = dashboard.review_queue.length
-  const activeView: WorkbenchView = view === 'review' && reviewCount === 0 ? 'mine' : view
 
   async function handleCreated(title: string) {
     await load()
@@ -112,15 +126,7 @@ export function WorkbenchPanel({selectedId}:{selectedId?:string}) {
       <CreateWorkForm pending={pending} mutate={mutate} onCreated={handleCreated} />
       {createdStatus && <p className="banner banner-info" role="status">{createdStatus}</p>}
 
-      <label className="field place-view-picker">
-        檢視
-        <select aria-label="工作檢視" value={activeView} onChange={(event) => { setView(event.target.value as WorkbenchView); setCreatedStatus('') }}>
-          <option value="mine">我的工作</option>
-          <option value="community">社群工作</option>
-          {reviewCount > 0 && <option value="review">{`待你回饋（${reviewCount}）`}</option>}
-          <option value="outcomes">我的成果</option>
-        </select>
-      </label>
+      {picker}
 
       {activeView === 'mine' && (
         <>
