@@ -511,8 +511,9 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
  // simulated second in software WebGL, and page.clock replays every frame of the journey. That drawing
  // is nearly all of the time: locally, pearl milk tea took 29-31 s at each viewport and 8-9 s with the
  // light illustration, and in a profiled 3D boil segment the page's scripts ran under 3% of the time.
- // GitHub's runners take about 1.1-2.2 times the local time: pearl milk tea at 1440x900 took 35.6 s in
- // Verify 43701950520 and 64.3 s in 43707780287. 120 s covers the slower runner almost twice over.
+ // GitHub's runners take 1.1 times the local time or more: pearl milk tea at 1440x900 took 35.5 s in Verify
+ // 43701950520, and 43707780287 stopped it at the 60 s limit while it captured its last frame. 120 s is about
+ // twice what that slower runner needed.
  test.setTimeout(120_000);
  const recipe=recipeOf(id)!,errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.setViewportSize(viewport);await page.clock.install();

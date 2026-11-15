@@ -25,7 +25,7 @@ const {PerspectiveCamera,Vector3}=createRequire(new URL('../../apps/portal-web/p
 // Bundle the real preview and existing scoring domain, then exercise native input.
 for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD atelier real build ${width}x${height}: native stamp preview, pause, input and screenshot`,async({browser},info)=>{
  // Bundling the real preview with esbuild, then drawing it in software WebGL, is slowest at 1440x1000:
- // 26.4 s in Verify 43701950520 and 39.4 s on a slower runner (43707780287), against the 45 s default.
+ // 23.4 s in Verify 43701950520 and 38.1 s on a slower runner (43707780287), against the 45 s default.
  test.setTimeout(90_000);
  const context=await browser.newContext({viewport:{width,height},hasTouch:width<1000,isMobile:width<1000,deviceScaleFactor:1});const page=await context.newPage();
  try {
