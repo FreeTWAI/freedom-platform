@@ -408,10 +408,11 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     const announcementsBlock = session.page.locator('.guild-launchpad-editor .guild-launchpad-block').filter({has: session.page.locator('p', {hasText: /^公告$/})});
     await announcementsBlock.getByRole('button', {name: '編輯', exact: true}).click();
     const moveAnnouncements = session.page.getByRole('button', {name: '上移公告', exact: true});
-    for (let step = 0; step < 7; step += 1) {
-      if (await session.page.locator('.guild-launchpad-content > section > h2').first().innerText() === '公告') break;
-      await moveAnnouncements.click();
-    }
+    // The editor disables 上移公告 as soon as 公告 is first; the composed content re-renders a moment
+    // later, so reading its first heading between clicks raced (hosted run 43665447139 clicked the
+    // disabled button until the test timeout).
+    for (let step = 0; step < 7 && await moveAnnouncements.isEnabled(); step += 1) await moveAnnouncements.click();
+    await expect(moveAnnouncements).toBeDisabled();
     await expect(session.page.locator('.guild-launchpad-content > section > h2').first()).toHaveText('公告');
     await session.page.locator('.guild-launchpad-preview-menu > summary').click();
     await session.page.getByRole('button', {name: '預覽公開', exact: true}).click();
