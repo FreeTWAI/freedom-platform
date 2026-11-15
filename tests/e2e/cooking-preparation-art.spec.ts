@@ -13,6 +13,22 @@ export async function capturePreparationScreenshot(target:Pick<Locator,'screensh
   await testInfo.attach(name,{body,contentType:'image/png'});
   return body;
 }
+// Shard 1's JSON report carries every embedded attachment of a passing run (with the daily
+// composition specs) and must fit the 64 MiB default-shard fragment
+// (scripts/ci/pinned-e2e-fragments.mjs). The preparation-art PNG contract above is unchanged.
+// Scoop-timeline frames are the evidence that test exists for: embedded, as JPEG.
+async function captureReviewFrame(target:Pick<Locator,'screenshot'>,testInfo:Pick<TestInfo,'attach'>,name:string){
+  const body=await target.screenshot({type:'jpeg',quality:80});
+  await testInfo.attach(name,{body,contentType:'image/jpeg'});
+  return body;
+}
+// Journey frames are written to the test's output directory: a failing journey keeps them (the
+// runner copies a failed test's file attachments), a passing journey leaves them out of the report.
+async function captureFailureFrame(target:Pick<Locator,'screenshot'>,testInfo:Pick<TestInfo,'attach'|'outputPath'>,name:string){
+  const path=testInfo.outputPath(name);
+  await target.screenshot({path,type:'png'});
+  await testInfo.attach(name,{path,contentType:'image/png'});
+}
 
 type GuideBox={left:number;right:number;top:number;bottom:number;width:number;height:number};
 type GuidePaint={paintIssues:string[];stroke:string;strokeWidth:number;strokeOpacity:number;opacity:number;visible:boolean;length:number;bounds:GuideBox;owner:GuideBox;viewport:{width:number;height:number};samples:{painted:boolean;inputOwned:boolean}[]};
@@ -499,7 +515,7 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
  await page.getByRole('button',{name:'開始料理',exact:true}).click();
  const game=page.locator('.ck-game'),stage=page.locator('.fullscreen-game');
  await expect.poll(()=>page.evaluate(()=>({width:innerWidth,height:innerHeight}))).toEqual(viewport);
- const shot=async(kind:string,state:string)=>{await page.clock.runFor(40);await capturePreparationScreenshot(stage,testInfo,`front-${id}-${kind}-${state}-${viewport.width}x${viewport.height}.png`);};
+ const shot=async(kind:string,state:string)=>{await page.clock.runFor(40);await captureFailureFrame(stage,testInfo,`front-${id}-${kind}-${state}-${viewport.width}x${viewport.height}.png`);};
  for(const [index,s] of recipe.steps.entries()){
   await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene',s.kind);await expect(page.locator('.ck-visual-3d')).toBeVisible();
   await page.clock.runFor(160);
@@ -528,7 +544,7 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
  }
  expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.status,COOKING_RUN_KEY)).toBe('done');await page.clock.resume();
  await expect(page.locator('.fw-arcade-result')).toBeVisible();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible({timeout:10_000});
- await capturePreparationScreenshot(page.locator('.fw-arcade-result'),testInfo,`front-${id}-completed-${viewport.width}x${viewport.height}.png`);expect(errors).toEqual([]);
+ await captureFailureFrame(page.locator('.fw-arcade-result'),testInfo,`front-${id}-completed-${viewport.width}x${viewport.height}.png`);expect(errors).toEqual([]);
 });
 
 // Separate evidence cases: never replace, shorten or relax the complete journeys
@@ -546,7 +562,7 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
  const stage=page.locator('.fullscreen-game'),native=page.locator('.ck-kitchen-canvas canvas');await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(native).toBeVisible();
  const frames:Array<{name:string;requestedVirtualMs:number;pageClockMs:number;sha256:string;nativeSha256:string}>=[];
  const capture=async(name:string,requestedVirtualMs:number)=>{await expect(native).toBeVisible();const pageClockMs=await page.evaluate(()=>performance.now());const prefix=`scoop-${viewport.width}x${viewport.height}-${name}`;
-  const body=await capturePreparationScreenshot(stage,testInfo,`${prefix}.png`),canvas=await capturePreparationScreenshot(native,testInfo,`${prefix}-native.png`);
+  const body=await captureReviewFrame(stage,testInfo,`${prefix}.jpg`),canvas=await captureReviewFrame(native,testInfo,`${prefix}-native.jpg`);
   frames.push({name,requestedVirtualMs,pageClockMs,sha256:createHash('sha256').update(body).digest('hex'),nativeSha256:createHash('sha256').update(canvas).digest('hex')});
  };
  const panScene=page.locator('.ck-scene-pan'),b=(await panScene.boundingBox())!;
