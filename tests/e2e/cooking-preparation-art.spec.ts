@@ -487,6 +487,11 @@ test('immersive kitchen: 320x568 viewport fallback keeps controls separate',asyn
 // Additive native evidence for all nine operations. These recipes cover every
 // operation using normal controls; no saved-run injection or test-only renderer.
 for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const id of ['rice-balls','margherita-pizza','pearl-milk-tea','egg-fried-rice'])test(`front kitchen journey: ${id} at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
+ // Measured budget: every 60 fps frame of each step runs under page.clock in software WebGL, plus
+ // a screenshot per state. With software rasterizers at one pixel per CSS pixel the three heavier
+ // dishes took 27-33 s locally at low load and up to 42 s under load; before the fix GitHub's runners
+ // took 1.0-1.25 times the local time (rice-balls 15.8-20.5 s against 16.4-17.0 s locally).
+ test.setTimeout(60_000);
  const recipe=recipeOf(id)!,errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.setViewportSize(viewport);await page.clock.install();
  await page.goto(`/play?game=kitchen&practice=1&recipe=${id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible();
@@ -495,7 +500,6 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
  const game=page.locator('.ck-game'),stage=page.locator('.fullscreen-game');
  await expect.poll(()=>page.evaluate(()=>({width:innerWidth,height:innerHeight}))).toEqual(viewport);
  const shot=async(kind:string,state:string)=>{await page.clock.runFor(40);await capturePreparationScreenshot(stage,testInfo,`front-${id}-${kind}-${state}-${viewport.width}x${viewport.height}.png`);};
- const scenePoint=async(x:number,y:number)=>{const b=(await page.locator('.ck-scene').boundingBox())!;return {x:b.x+x*b.width,y:b.y+y*b.height};};
  for(const [index,s] of recipe.steps.entries()){
   await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene',s.kind);await expect(page.locator('.ck-visual-3d')).toBeVisible();
   await page.clock.runFor(160);
@@ -506,8 +510,9 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
   await shot(s.kind,'start');
   if(s.kind==='slice')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();if(i===0)await shot(s.kind,'cut');}
   if(s.kind==='mix'){
-   const first=await scenePoint(.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();
-   for(let i=1;i<=s.goal*32;i++){const angle=i*Math.PI/16,p=await scenePoint(.5+.3*Math.cos(angle),.52+.3*Math.sin(angle));await page.mouse.move(p.x,p.y);if(i===16)await shot(s.kind,'stir');}await page.mouse.up();
+   const box=(await page.locator('.ck-scene').boundingBox())!;
+   await page.mouse.move(box.x+.8*box.width,box.y+.52*box.height);await page.mouse.down();
+   for(let i=1;i<=s.goal*32;i++){const angle=i*Math.PI/16;await page.mouse.move(box.x+(.5+.3*Math.cos(angle))*box.width,box.y+(.52+.3*Math.sin(angle))*box.height);if(i===16)await shot(s.kind,'stir');}await page.mouse.up();
   }
   if(s.kind==='knead')for(let i=0;i<s.goal;i++){await game.focus();await page.keyboard.down('Space');await page.clock.runFor(s.holdMs/2);if(i===0)await shot(s.kind,'press');await page.clock.runFor(s.holdMs/2);await page.keyboard.up('Space');await page.clock.runFor(160);}
   if(s.kind==='pan'||s.kind==='boil'||s.kind==='bake'){
