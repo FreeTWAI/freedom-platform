@@ -10,9 +10,12 @@ export * from './fixtures.js';
 type Features=Pick<NonNullable<Parameters<typeof createApp>[3]>,
   'linkPreviewFetch'|'shortVideosEnabled'|'memberReportingEnabled'|'personalContentEnabled'|'firstParticipationEnabled'|'notificationPreferencesEnabled'|'eventParticipationEnabled'|'squadOutcomesEnabled'|'eventOutcomesEnabled'|'eventEmailSender'|'totpEncryptionKey'|'passwordEmailSender'|'communitySearchEnabled'|'participationMetricsEnabled'|'guildLaunchpadEnabled'|'hostedReservationsEnabled'|'supplierConsoleEnabled'|'storePoliciesEnabled'>;
 
+/** `before` runs before the app sees a request; the optional `after` may replace the app's response (e.g. to stream it slowly). */
+type RequestGate={before:(request:Request)=>Promise<void>;after?:(request:Request,response:Response)=>Promise<Response>};
+
 /** Real per-test Node host on the existing owned schema. Both ON/OFF cases run in
  * the ordinary browser pass; feature coverage does not depend on a new CI pin. */
-export const test=base.extend<{memberFeatures:Features;memberRequestGate:{before:(request:Request)=>Promise<void>}|undefined}>({
+export const test=base.extend<{memberFeatures:Features;memberRequestGate:RequestGate|undefined}>({
   memberFeatures:[{},{option:true}],
   memberRequestGate:[undefined,{option:true}],
   baseURL:async({e2eAuthPool,memberFeatures,memberRequestGate},use)=>{
@@ -20,7 +23,8 @@ export const test=base.extend<{memberFeatures:Features;memberRequestGate:{before
     let app:ReturnType<typeof createApp>|undefined;
     const server=serve({hostname:'127.0.0.1',port:0,fetch:async request=>{
       if(memberRequestGate)await memberRequestGate.before(request);
-      return app?app.fetch(request):new Response(null,{status:503});
+      const response=app?await app.fetch(request):new Response(null,{status:503});
+      return memberRequestGate?.after?memberRequestGate.after(request,response):response;
     }});
     try{
       if(!server.listening)await new Promise<void>((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});

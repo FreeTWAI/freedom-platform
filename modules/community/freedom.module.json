@@ -149,7 +149,8 @@
     "modules/community/event-exposure.ts",
     "modules/community/event-claims.ts",
     "modules/community/event-interest.ts",
-    "tests/e2e/event-sharing.spec.ts"
+    "tests/e2e/event-sharing.spec.ts",
+    "tests/e2e/event-page-readiness.spec.ts"
   ],
   "public_exports": [
     "modules/community/catalog.ts",

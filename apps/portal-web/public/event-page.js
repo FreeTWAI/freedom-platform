@@ -1,15 +1,26 @@
-(async()=>{
+(()=>{
  'use strict';
  if(/^#participation=[A-Za-z0-9_-]{43}$/.test(location.hash)){const url=new URL(location.href);url.searchParams.set('app','1');location.replace(url.href);return;}
- const data=JSON.parse(document.getElementById('event-data').textContent),status=document.getElementById('event-status');
+ const data=JSON.parse(document.getElementById('event-data').textContent),status=document.getElementById('event-status'),login=document.getElementById('event-login');
  const refs=new URLSearchParams(location.search).getAll('ref'),ref=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?refs[0]:null;
  for(const img of document.querySelectorAll('.cover')){img.addEventListener('error',()=>{img.hidden=true;});if(img.complete&&!img.naturalWidth)img.hidden=true;}
- let session=null,pending=null,guestAttempt=null;
- async function request(path,body,extra={}){const response=await fetch('/api/v1'+path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',...(session?{'X-CSRF-Token':session.csrf_token}:{}),...extra},body:JSON.stringify(body)});let result=null;try{result=await response.json();}catch{}if(!response.ok){const error=Error(response.status>=500?'目前無法完成報名，請再試一次。':(result?.detail||result?.message||'操作未完成，請再試一次。'));error.status=response.status;throw error;}if(!result||typeof result!=='object'){const error=Error('invalid_registration_receipt');error.status=response.status;throw error;}return result;}
- if(data.member){try{const r=await fetch('/api/v1/session',{cache:'no-store'});if(r.ok)session=await r.json();}catch{} }
- async function act(button,run){if(button.disabled)return;button.disabled=true;status.textContent='處理中…';try{await run();}catch(e){status.textContent=e.message;}finally{button.disabled=false;}}
+ let session=null,sessionRead=null,pending=null,guestAttempt=null;
+ const signInError=()=>{const error=Error('登入已過期，請重新登入。');error.signIn=true;return error;};
+ async function request(path,body,extra={}){const response=await fetch('/api/v1'+path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',...(session?{'X-CSRF-Token':session.csrf_token}:{}),...extra},body:JSON.stringify(body)});let result=null;try{result=await response.json();}catch{}if(!response.ok){if(data.member&&(response.status===401||result?.code==='csrf_rejected'))session=null;const error=data.member&&response.status===401?signInError():Error(response.status>=500?'目前無法完成報名，請再試一次。':(result?.detail||result?.message||'操作未完成，請再試一次。'));error.status=response.status;throw error;}if(!result||typeof result!=='object'){const error=Error('invalid_registration_receipt');error.status=response.status;throw error;}return result;}
+ // Handlers are installed before the session is known. A member action waits for the session and its CSRF token
+ // (one shared read), so a click during that wait is carried out once, not dropped. A failed read is retried by the next action.
+ function memberSession(){
+  if(session)return Promise.resolve(session);
+  return sessionRead??=fetch('/api/v1/session',{cache:'no-store',credentials:'same-origin'}).then(async response=>{
+   if(response.status===401)throw signInError();
+   const value=response.ok?await response.json():null;
+   if(typeof value?.csrf_token!=='string')throw Error('session_unavailable');
+   return session=value;
+  }).catch(error=>{throw error.signIn?error:Error('無法確認登入狀態，請再試一次。');}).finally(()=>{sessionRead=null;});
+ }
+ async function act(button,run){if(button.disabled)return;button.disabled=true;if(login)login.hidden=true;status.textContent='處理中…';try{await run();}catch(e){status.textContent=e.message;if(e.signIn&&login)login.hidden=false;}finally{button.disabled=false;}}
  document.getElementById('event-register')?.addEventListener('click',e=>void act(e.currentTarget,async()=>{
-  if(!session)throw Error('請重新登入');pending??=crypto.randomUUID();
+  await memberSession();pending??=crypto.randomUUID();
   await request('/events/'+data.id+'/'+(data.waitlist?'waitlist':'rsvp'),data.waitlist?{action:'join',referral_code:ref}:{going:true,referral_code:ref},{'Idempotency-Key':pending,...(data.waitlist?{'If-Match':JSON.stringify(String(data.version))}:{})});location.reload();
  }));
  document.getElementById('event-guest')?.addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');void act(button,async()=>{
@@ -29,9 +40,12 @@
   }
  });});
  // The server-rendered link opens the original site in a new tab. Interest is only counted, never a gate.
- document.getElementById('event-interest')?.addEventListener('click',()=>{void request((data.member?'/events/':'/public/events/')+data.id+'/interest',data.member?{}:{interest_id:crypto.randomUUID()},{'Idempotency-Key':crypto.randomUUID()}).catch(()=>{});});
- document.getElementById('event-claim')?.addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget;void act(form.querySelector('button'),async()=>{if(!session)throw Error('請重新登入');const fields=new FormData(form);await request('/events/'+data.id+'/claim',{statement:fields.get('statement'),evidence_url:fields.get('evidence_url'),declared:fields.get('declared')==='on'},{'Idempotency-Key':crypto.randomUUID()});status.textContent='認領已送出，等待來源核實';form.hidden=true;});});
+ document.getElementById('event-interest')?.addEventListener('click',()=>{const count=()=>request((data.member?'/events/':'/public/events/')+data.id+'/interest',data.member?{}:{interest_id:crypto.randomUUID()},{'Idempotency-Key':crypto.randomUUID()});void (data.member?memberSession().then(count):count()).catch(()=>{});});
+ document.getElementById('event-claim')?.addEventListener('submit',e=>{e.preventDefault();const form=e.currentTarget,fields=new FormData(form);void act(form.querySelector('button'),async()=>{await memberSession();await request('/events/'+data.id+'/claim',{statement:fields.get('statement'),evidence_url:fields.get('evidence_url'),declared:fields.get('declared')==='on'},{'Idempotency-Key':crypto.randomUUID()});status.textContent='認領已送出，等待來源核實';form.hidden=true;});});
  document.getElementById('event-share')?.addEventListener('click',e=>void act(e.currentTarget,async()=>{
-  if(!session)throw Error('請重新登入');const result=await request('/events/'+data.id+'/share',{}, {'Idempotency-Key':crypto.randomUUID()});const box=document.getElementById('event-share-result');box.replaceChildren();const input=document.createElement('input');input.readOnly=true;input.setAttribute('aria-label','我的分享連結');input.value=new URL(result.path,location.origin).href;box.append(input);const counts=document.createElement('p');counts.textContent=result.clicks+' 個有效點閱日 · '+result.registrations+' 人報名';box.append(counts);const actions=document.createElement('div');actions.className='event-share-actions';const copyBtn=document.createElement('button');copyBtn.type='button';copyBtn.className='btn btn-secondary';copyBtn.textContent='複製連結';copyBtn.addEventListener('click',()=>{if(!navigator.clipboard?.writeText){input.focus();input.select();status.textContent='請手動複製上面的連結。';return;}void navigator.clipboard.writeText(input.value).then(()=>{status.textContent='已複製。';},()=>{input.focus();input.select();status.textContent='請手動複製上面的連結。';});});actions.append(copyBtn);if(typeof navigator.share==='function'){const shareBtn=document.createElement('button');shareBtn.type='button';shareBtn.className='btn btn-secondary';shareBtn.textContent='分享';shareBtn.addEventListener('click',()=>{void navigator.share({title:document.title,url:input.value}).catch(err=>{if(err?.name==='AbortError')return;input.focus();input.select();status.textContent='無法開啟分享，請複製上面的連結';});});actions.append(shareBtn);}box.append(actions);input.select();status.textContent='分享連結已建立';
+  await memberSession();const result=await request('/events/'+data.id+'/share',{}, {'Idempotency-Key':crypto.randomUUID()});const box=document.getElementById('event-share-result');box.replaceChildren();const input=document.createElement('input');input.readOnly=true;input.setAttribute('aria-label','我的分享連結');input.value=new URL(result.path,location.origin).href;box.append(input);const counts=document.createElement('p');counts.textContent=result.clicks+' 個有效點閱日 · '+result.registrations+' 人報名';box.append(counts);const actions=document.createElement('div');actions.className='event-share-actions';const copyBtn=document.createElement('button');copyBtn.type='button';copyBtn.className='btn btn-secondary';copyBtn.textContent='複製連結';copyBtn.addEventListener('click',()=>{if(!navigator.clipboard?.writeText){input.focus();input.select();status.textContent='請手動複製上面的連結。';return;}void navigator.clipboard.writeText(input.value).then(()=>{status.textContent='已複製。';},()=>{input.focus();input.select();status.textContent='請手動複製上面的連結。';});});actions.append(copyBtn);if(typeof navigator.share==='function'){const shareBtn=document.createElement('button');shareBtn.type='button';shareBtn.className='btn btn-secondary';shareBtn.textContent='分享';shareBtn.addEventListener('click',()=>{void navigator.share({title:document.title,url:input.value}).catch(err=>{if(err?.name==='AbortError')return;input.focus();input.select();status.textContent='無法開啟分享，請複製上面的連結';});});actions.append(shareBtn);}box.append(actions);input.select();status.textContent='分享連結已建立';
  }));
+ // The page renders these controls disabled, so none can be pressed, and no form submitted natively, before its handler exists.
+ for(const control of document.querySelectorAll('#event-register,#event-share,#event-guest button,#event-claim button'))control.disabled=false;
+ if(data.member)memberSession().catch(error=>{if(error.signIn){status.textContent=error.message;if(login)login.hidden=false;}});
 })();
