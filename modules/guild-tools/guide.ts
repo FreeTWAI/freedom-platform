@@ -7,7 +7,7 @@ export function guildToolGuide(origin:string){return `# 公會工具：20 分鐘
 1. 複製 freedom-platform 的 templates/guild-tool 內容到自己的 Repo 根目錄，包含隱藏的 .github/workflows/pages.yml；保留 bridge.js。修改 index.html、main.js、style.css 及 freedom-tool.json，讓名稱、代號與所需功能符合自己的工具。
 2. 使用 Node 24 在 Repo 根目錄執行 npm run check 和 npm run build；不需安裝依賴，dist/ 是完整靜態網站。main.js 的 PLATFORM_ORIGINS 列出允許嵌入工具的正式站與 staging 精確來源；如果使用另一個平台，請先加入它的精確 origin。沒有清單或來源不符時，工具不會連線或傳訊息。
 3. GitHub Pages 將 Source 設為 GitHub Actions，推送 main 後由隨附 workflow 檢查、建置並發布 dist/；或將 dist/ 部署到 Cloudflare Pages。部署及雲端帳號由作者自行控制，不需向平台送 PR。20 分鐘不含首次主機帳號、創作實際工具和等待會長。
-4. 網站發布後，公會長或獲發布委任的成員在公會「工具 → 新增工具」填名稱與網址，必要時在進階設定選代號、功能與模式；按「預覽」，確認工具連線，再按「加入啟動台」。manifest 是作者自述，平台不會替你帶入其設定。只有會長可修改既有登錄及接受修訂。
+4. 網站發布後，公會長或獲發布委任的成員在公會「工具 → 新增工具」、一般公會成員在「工具 → 提出工具草稿」填名稱與網址，必要時在進階設定選代號、功能與模式；按「預覽」，確認工具連線，再按「加入啟動台」或送出草稿。manifest 是作者自述，平台不會替你帶入其設定。會長或獲發布委任的成員可接受第一版或任何草稿；既有非草稿工具的重新登錄及後續修訂接受限會長操作。
 
 範本畫面只顯示公會名稱、登入狀態和簡短操作結果；原始回應供開發者在瀏覽器主控台查看。
 
@@ -53,7 +53,7 @@ Host 每次載入送 {version:'freedom.guild-launchpad/v2', type:'init', tool_id
 
 ## 會長加入
 
-公會 → 工具 → 新增工具，填名稱與 HTTPS 地址 → 預覽 → 加入啟動台。預覽只有公開 context；需要 v2 握手才能按加入。委任成員可登錄並接受新工具的第一版；既有工具的重新登錄及修訂接受都限會長操作。新來源、profile 或 scopes 改變會產生 pending revision，需會長再確認。接受後重新載入平台文件以更新 CSP；新版本同網址發布不需平台動作。
+公會長或獲發布委任的成員可在「公會 → 工具 → 新增工具」填名稱與 HTTPS 地址 → 預覽 → 加入啟動台；一般公會成員可在「提出工具草稿」送出 24 小時草稿（每人每公會最多 3 份）。預覽只有公開 context；表單需要 v2 握手才能按加入，草稿清單可直接按「接受」。會長或獲發布委任的成員可接受新工具的第一版或草稿；既有非草稿工具的重新登錄及後續修訂接受都限會長操作。新來源、profile 或 scopes 改變會產生 pending revision，需會長再確認。接受後重新載入平台文件以更新 CSP；新版本同網址發布不需平台動作。
 
 路由 #guilds/<guild_key>/tools/<tool_id>。每公會 16 工具，全站 64 origins；每會員每小時 20 次網址檢查。工具上方顯示來源與功能。會長可停用；三位不同會員檢舉自動停用。停用後新操作被拒絕，已開頁面最遲下一次 5 秒輪詢移除 frame。
 

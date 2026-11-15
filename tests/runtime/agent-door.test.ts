@@ -287,6 +287,8 @@ test('public guide and generated contract describe exactly the granted operation
  assert.ok(guide.includes('"consent_to_share":true'),'missing works.create consent_to_share example');
  assert.ok(guide.includes('{"name":"profile.read","arguments":{}}'),'missing profile.read MCP example');
  assert.ok(guide.includes(`curl -H "Authorization: Bearer $FREEDOM_AGENT_TOKEN" "${origin}/api/v1/me/positioning"`),'missing profile.read REST curl example');
+ assert.equal(guide.includes('先 GET 活動讀取 aggregate_version'),false,'ifMatch guidance must be item-neutral');
+ assert.equal(guide.includes('先讀取該項目，取得 aggregate_version。'),true,'missing neutral aggregate_version guidance');
  for(const forbidden of ['/api/v1/me/showcases/:id/sharing','/api/v1/social-posts/:id/public-sharing','/api/v1/me/account','/api/v1/me/profile-publication','/api/v1/me/conversations']){
   assert.equal(guide.includes(forbidden),false,`unexpected member-only route in guide: ${forbidden}`);
  }

@@ -1,5 +1,7 @@
 # 參與這個專案
 
+要在自己的 Repo 做公會工具、遊戲或串接 Agent，先看[在自己的 Repo 基於自由工坊開發](docs/development/build-on-freedom.md)。
+
 <!-- freedom-repository-guide:start -->
 ## 自由工坊：從一個成果到一個 PR
 

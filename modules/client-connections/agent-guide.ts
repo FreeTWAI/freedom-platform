@@ -23,6 +23,7 @@ export function agentGuide(origin:string){
  '會員登入後，到「自動化 → 我的 Agent」建立金鑰。權限範圍：read 讀取、share 分享、rsvp 報名、react 回應，依需求勾選後複製僅顯示一次的文字。不要交出密碼或 cookie。',
  `API base URL：${origin}/api/v1`,
  `機器契約：${origin}/agent/openapi.json`,
+ `機器可讀的入口：${origin}/.well-known/freedom-agent.json`,
  '公開指引與契約請勿附帶 Authorization。',
  '## MCP 連線',
  `地址：${origin}/api/v1/mcp（Streamable HTTP，JSON 回應）。在「自動化 → 我的 Agent」按「複製連線設定」，使用原有金鑰；不需再建立一把。`,
@@ -32,13 +33,15 @@ export function agentGuide(origin:string){
  '## 請求',
  '只用 Authorization: Bearer $FREEDOM_AGENT_TOKEN。不可同時帶 Cookie。',
  'POST 加 Content-Type: application/json 與 Idempotency-Key（8–128 字元，英數字、_、-）。同一操作重試必須沿用原 key 和內容；不需要 CSRF。候補及活動編輯、通知、取消另加 If-Match: "最新活動 aggregate_version"。',
+ '## JavaScript',
+ `從 FreeTWAI/freedom-platform 複製 \`packages/sdk/agent-client.mjs\` 與 \`packages/sdk/agent-operations.mjs\`：\n\`\`\`js\nimport { createAgentClient } from './agent-client.mjs';\nconst agent = createAgentClient({ baseUrl: '${origin}/api/v1', token: process.env.FREEDOM_AGENT_TOKEN });\nconst guilds = await agent.call('guilds.list');\n\`\`\``,
  '## 操作',
  ];
  for(const op of agentOperations.filter(op=>op.granted!==false)){
   lines.push(`### ${op.title} (${op.scope} ${scopeLabels[op.scope]} · ${op.id})`,
    `${op.method} ${op.route}\nMCP tools/call：\`${JSON.stringify(mcpCallExample(op))}\``,
    ...(op.featureFlag?[`需 ${op.featureFlag}=true；未啟用時不可操作。`]:[]),
-   ...(op.ifMatch?['先 GET 活動讀取 aggregate_version，再送 If-Match（含雙引號）。']:[]),
+   ...(op.ifMatch?['先讀取該項目，取得 aggregate_version。再送 If-Match（含雙引號）。']:[]),
    ...(op.example?['範例 JSON：','```json',JSON.stringify(op.example,null,2),'```']:['範例：`curl -H "Authorization: Bearer $FREEDOM_AGENT_TOKEN" "'+origin+op.route+'"`']));
  }
  lines.push('## 活動分享', 'POST /api/v1/events 只需 title、starts_at（含時區）、location，發布後立即開放。每位會員 24 小時最多 5 場。選 guild_key 後限該公會；不能藉 Agent 擴大可見範圍。匯入先 POST /api/v1/shares/preview，內容 {kind:"event",url:"https://來源網址"}；核對後 POST /api/v1/shares，內容 {kind:"event",url:"https://來源網址",event:{title,starts_at,location}}。來源讀取失敗時手動補齊，外部報名只計興趣。', '主辦者可用 events.update、events.announce、events.cancel 編輯、通知與取消自己的活動；每場活動每個台北日最多通知 3 次，本人與 Agent 合計。', '## 不授予 Agent 的端點', ...agentOperations.filter(op=>op.granted===false).map(op=>`${op.method} ${op.route} — ${op.title}；無 Agent scope。`));

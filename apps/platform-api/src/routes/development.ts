@@ -1,4 +1,5 @@
 import {guildToolGuide} from '../../../../modules/guild-tools/guide.js';
+import {agentDiscovery} from '../../../../modules/client-connections/agent-discovery.js';
 import {agentGuide} from '../../../../modules/client-connections/agent-guide.js';
 import {agentContract} from '../../../../modules/client-connections/agent-contract.js';
 import {Hono,type Context} from 'hono';
@@ -18,6 +19,7 @@ export function createDevelopmentRoutes(readMetrics?:(id:string)=>Promise<GitHub
  });
  app.get('/api/v1/development-map',c=>c.json(developmentMap()));
  app.get('/.well-known/freedom-development.json',c=>c.json(developmentMap()));
+ app.get('/.well-known/freedom-agent.json',c=>c.json(agentDiscovery(new URL(c.req.url).origin)));
  app.get('/api/v1/skills/:id/collaboration',async c=>{
    const id=c.req.param('id');const editorial=await readEditorial?.(id);
    const data=getSkillCollaboration(id,editorial);

@@ -258,3 +258,8 @@ test('book HTML unescapes Markdown prose without double-escaping and .md export 
   assert.ok(md.includes('&amp;lt;keep&amp;gt;'));
  }
 });
+
+test('llms.txt links the external developer entry guide build-on-freedom.md',async()=>{
+ const llms=await (await app.request(origin+'/llms.txt')).text();
+ assert.match(llms,/build-on-freedom\.md/);
+});

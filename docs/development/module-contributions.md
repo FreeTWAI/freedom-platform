@@ -2,6 +2,8 @@
 
 先找到功能的模組，再修改它的實作與測試。平台使用同一套 `freedom.module.json` 記錄模組歸屬、公開入口、依賴與驗證要求；不需要另建一份功能清單，也不需要為每個功能開一個 repository。
 
+要在自己的 Repo 做公會工具、遊戲或串接 Agent（不改平台原始碼），先看[在自己的 Repo 基於自由工坊開發](./build-on-freedom.md)。
+
 從自己的 fork 或工作分支提交 PR 到 `FreeTWAI/freedom-platform:main`。先看 [目前 PR](https://github.com/FreeTWAI/freedom-platform/pulls) 與 [Issues](https://github.com/FreeTWAI/freedom-platform/issues)，協調重疊範圍；已獲維護者直接派工時沿用該授權。完整協作規則見 [CONTRIBUTING](../../CONTRIBUTING.md)；Agent 開工前仍須讀 [AGENTS](../../AGENTS.md) 與受影響模組的 context。
 
 ## 1. 找到要修改的模組
