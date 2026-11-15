@@ -31,6 +31,7 @@ async function loadPlaceView() {
   const stubs: Record<string, unknown> = {
     react: reactStub,
     '../frame-tools/RegisteredTools': { RegisteredTools: () => null },
+    './CommunitySaved': { CommunitySaved: stub('CommunitySaved') },
     '../games/AbsurdDaily': { AbsurdDaily: stub('AbsurdDaily') },
     '../modules/AgentTokens': { AgentTokens: stub('AgentTokens') },
     '../modules/ClientConnections': { ClientConnections: stub('ClientConnections') },

@@ -162,7 +162,8 @@ test('UX-V-03: hides disabled tools from members/visitors, marks 已停用 for m
 
   const mgrBox=document.createElement('div');document.body.appendChild(mgrBox);
   const mgrRoot=createRoot(mgrBox);
-  const mgrClient={sessionGeneration:1,async get(){return {manage:true,leader:true,registration_available:true,token_exchange_available:false};}};
+  // A signed-in member reads the guild's tool list through the session client, so the mock answers both paths.
+  const mgrClient={sessionGeneration:1,async get(path:string){return path.endsWith('/tools/access')?{manage:true,leader:true,registration_available:true,token_exchange_available:false}:{items:[enabled,disabled,pending]};}};
   await act(async()=>{
     mgrRoot.render(React.createElement(RegisteredTools,{guildKey:'guild_games',client:mgrClient as any,memberKey:'m1'}));
     await Promise.resolve();await Promise.resolve();
