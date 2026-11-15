@@ -113,18 +113,27 @@ const TOKEN = 'fw_agent_' + 'a'.repeat(43);
 const tokenRow = (patch: Record<string, unknown> = {}) => ({
   connection_id: 'conn-1', client_name: '我的 Agent', scopes: ['read', 'share', 'rsvp'],
   expires_at: '2099-01-01T00:00:00.000Z', last_used_at: null, revoked_at: null, suspended_at: null,
-  public_items_today: 0, public_daily_cap: 20, pending_publication: null, ...patch,
+  public_items_today: 0, public_daily_cap: 20, pending_publication: null, ping: null, ...patch,
 });
 
-async function mountTokens(t: TestContext, initialItems: any[]) {
+type MountOptions = {
+  onPost?: (path: string, body: unknown, options: any, setItems: (next: any[]) => void, getItems: () => any[]) => Promise<unknown> | unknown;
+};
+
+async function mountTokens(t: TestContext, initialItems: any[], mountOpts: MountOptions = {}) {
   copiedText = '';
   let items = [...initialItems];
-  const posts: Array<{path: string; body: unknown}> = [];
+  const gets: string[] = [];
+  const posts: Array<{path: string; body: unknown; options?: any}> = [];
   const client: any = {
     sessionGeneration: 1, csrfToken: 'synthetic',
-    async get(path: string) {if (path === '/me/agent-tokens') return {items}; throw Error(path);},
-    async post(path: string, body: unknown) {
-      posts.push({path, body});
+    async get(path: string) {gets.push(path); if (path === '/me/agent-tokens') return {items}; throw Error(path);},
+    async post(path: string, body: unknown, options?: any) {
+      posts.push({path, body, options});
+      if (mountOpts.onPost) {
+        const handled = await mountOpts.onPost(path, body, options, next => { items = next; }, () => items);
+        if (handled !== undefined) return handled;
+      }
       if (path === '/me/agent-tokens') {
         const created = tokenRow({access_token: TOKEN});
         items = [tokenRow()];
@@ -135,6 +144,21 @@ async function mountTokens(t: TestContext, initialItems: any[]) {
         const renewed = tokenRow({connection_id: 'conn-2', scopes, access_token: TOKEN});
         items = [tokenRow({connection_id: 'conn-2', scopes})];
         return renewed;
+      }
+      const pingMatch = /^\/me\/agent-tokens\/([^/]+)\/ping$/.exec(path);
+      if (pingMatch) {
+        const notifyUrl = (body as {notify_url: string | null}).notify_url;
+        const ping = notifyUrl === null ? null : {
+          notify_url: notifyUrl, last_attempt_at: null, last_success_at: null,
+          last_status: null, last_error: null, paused_at: null, attempts: 0,
+        };
+        items = items.map(item => item.connection_id === pingMatch[1] ? {...item, ping} : item);
+        return {ping};
+      }
+      const testMatch = /^\/me\/agent-tokens\/([^/]+)\/ping\/test$/.exec(path);
+      if (testMatch) {
+        const current = items.find(item => item.connection_id === testMatch[1]);
+        return {ok: true, status: 204, error: null, ping: current?.ping ?? null};
       }
       throw Error(path);
     },
@@ -148,17 +172,27 @@ async function mountTokens(t: TestContext, initialItems: any[]) {
   const buttons = (text?: string) => nodes().filter(n => n.nodeName === 'BUTTON' && (!text || n.textContent === text));
   const primaryButtons = () => buttons().filter(n => (n.attributes.class ?? '').split(' ').includes('btn-primary'));
   const textareas = () => nodes().filter(n => n.nodeName === 'TEXTAREA');
+  const urlInputs = () => nodes().filter(n => n.nodeName === 'INPUT' && (n.type === 'url' || n.attributes.type === 'url'));
+  const pingForms = () => nodes().filter(n => n.nodeName === 'FORM' && descendants(n).some(c => c.nodeName === 'INPUT' && (c.type === 'url' || c.attributes.type === 'url')));
+  const statuses = () => nodes().filter(n => n.attributes.role === 'status').map(n => n.textContent);
+  const alerts = () => nodes().filter(n => n.attributes.role === 'alert').map(n => n.textContent);
+  const setUrl = async (input: HostNode, value: string) => {
+    await React.act(async () => {propsOf(input).onChange({target: {value}, currentTarget: input}); await new Promise(r => setImmediate(r));});
+  };
   const click = async (text: string) => {
     const btn = buttons(text)[0];
     assert.ok(btn, `missing button ${text}`);
     await React.act(async () => {propsOf(btn).onClick({type: 'click', button: 0, currentTarget: btn}); await new Promise(r => setImmediate(r));});
   };
+  const submitForm = async (form: HostNode) => {
+    await React.act(async () => {propsOf(form).onSubmit({preventDefault() {}}); await new Promise(r => setImmediate(r));});
+  };
   const submit = async () => {
     const form = nodes().find(n => n.nodeName === 'FORM');
     assert.ok(form, 'missing form');
-    await React.act(async () => {propsOf(form).onSubmit({preventDefault() {}}); await new Promise(r => setImmediate(r));});
+    await submitForm(form);
   };
-  return {buttons, primaryButtons, textareas, click, submit, nodes, posts};
+  return {buttons, primaryButtons, textareas, urlInputs, pingForms, statuses, alerts, setUrl, click, submitForm, submit, nodes, gets, posts};
 }
 
 test('UX-F-03: AgentTokens hides 複製連線設定 without a token and keeps one-time box until 已保存', async t => {
@@ -293,4 +327,155 @@ test('AgentTokens groups works under 作品 and profile under 個人資料 and o
   assert.ok(profileGroup);
   assert.equal(profileGroup.items.some(text => text.includes('查看我的定位卡')), true);
   assert.equal(profileGroup.items.some(text => text.includes('帳號') || text.includes('儲存')), false);
+});
+
+test('AgentTokens shows ping block only on live keys with read scope', async t => {
+  const ui = await mountTokens(t, [
+    tokenRow({connection_id: 'conn-live', client_name: '可用讀寫', scopes: ['read', 'share']}),
+    tokenRow({connection_id: 'conn-no-read', client_name: '只寫金鑰', scopes: ['share', 'rsvp']}),
+    tokenRow({connection_id: 'conn-revoked', client_name: '已撤銷金鑰', scopes: ['read'], revoked_at: '2026-01-01T00:00:00.000Z'}),
+    tokenRow({connection_id: 'conn-suspended', client_name: '已停用金鑰', scopes: ['read'], suspended_at: '2026-01-01T00:00:00.000Z'}),
+    tokenRow({connection_id: 'conn-expired', client_name: '已到期金鑰', scopes: ['read'], expires_at: '2020-01-01T00:00:00.000Z'}),
+  ]);
+  const pingHeaders = ui.nodes().filter(n => n.nodeName === 'H4' && n.textContent === '變更通知（選填）');
+  assert.equal(pingHeaders.length, 1);
+  assert.equal(ui.urlInputs().length, 1);
+  assert.equal(ui.buttons('儲存').length, 1);
+  const details = ui.nodes().filter(n => n.nodeName === 'DETAILS' && descendants(n).some(c => c.nodeName === 'H4' && c.textContent === '變更通知（選填）'));
+  assert.equal(details.length, 1);
+  assert.ok(details[0].textContent.includes('可用讀寫'));
+  assert.ok(details[0].textContent.includes('通知網址'));
+});
+
+test('AgentTokens saves, tests, and stops ping URL with Idempotency-Key and reload', async t => {
+  const ui = await mountTokens(t, [
+    tokenRow({connection_id: 'conn-1', client_name: '第一把'}),
+    tokenRow({
+      connection_id: 'conn-2', client_name: '第二把',
+      ping: {notify_url: 'https://saved.pages.dev/hook', last_attempt_at: null, last_success_at: null, last_status: null, last_error: null, paused_at: null, attempts: 0},
+    }),
+  ]);
+  assert.equal(ui.urlInputs().length, 2);
+  assert.equal(propsOf(ui.urlInputs()[0]).value, '');
+  assert.equal(propsOf(ui.urlInputs()[1]).value, 'https://saved.pages.dev/hook');
+  assert.equal(ui.buttons('送測試通知').length, 1);
+  assert.equal(ui.buttons('停止通知').length, 1);
+  assert.deepEqual(ui.statuses(), ['尚未送出通知']);
+
+  const getsBeforeSave = ui.gets.length;
+  await ui.setUrl(ui.urlInputs()[0], 'https://my-agent.example-user.workers.dev/ping');
+  await ui.submitForm(ui.pingForms()[0]);
+
+  assert.equal(ui.posts.length, 1);
+  assert.equal(ui.posts[0].path, '/me/agent-tokens/conn-1/ping');
+  assert.equal(JSON.stringify(ui.posts[0].body), JSON.stringify({notify_url: 'https://my-agent.example-user.workers.dev/ping'}));
+  assert.match(ui.posts[0].options?.idempotencyKey ?? '', /^[0-9a-f-]{36}$/i);
+  assert.equal(ui.gets.length, getsBeforeSave + 1);
+  assert.equal(ui.buttons('送測試通知').length, 2);
+  assert.equal(ui.buttons('停止通知').length, 2);
+  assert.equal(ui.statuses().length, 2);
+  assert.equal(propsOf(ui.urlInputs()[1]).value, 'https://saved.pages.dev/hook');
+
+  await ui.click('停止通知');
+  assert.equal(ui.posts.length, 2);
+  assert.equal(ui.posts[1].path, '/me/agent-tokens/conn-1/ping');
+  assert.equal(JSON.stringify(ui.posts[1].body), JSON.stringify({notify_url: null}));
+  assert.match(ui.posts[1].options?.idempotencyKey ?? '', /^[0-9a-f-]{36}$/i);
+  assert.notEqual(ui.posts[1].options?.idempotencyKey, ui.posts[0].options?.idempotencyKey);
+  assert.equal(ui.gets.length, getsBeforeSave + 2);
+  assert.equal(propsOf(ui.urlInputs()[0]).value, '');
+  assert.equal(ui.buttons('送測試通知').length, 1);
+  assert.equal(ui.buttons('停止通知').length, 1);
+});
+
+test('AgentTokens shows test ping reload result and 503/429 error in alert', async t => {
+  let failTest = false;
+  const ui = await mountTokens(t, [
+    tokenRow({
+      connection_id: 'conn-1',
+      ping: {notify_url: 'https://a.workers.dev/p', last_attempt_at: null, last_success_at: null, last_status: null, last_error: 'timeout', paused_at: '2026-11-15T10:00:00.000Z', attempts: 8},
+    }),
+  ], {
+    async onPost(path, _body, _options, setItems, getItems) {
+      if (path !== '/me/agent-tokens/conn-1/ping/test') return undefined;
+      if (failTest) throw new Error('變更通知暫停服務，請稍後再試。');
+      const okPing = {notify_url: 'https://a.workers.dev/p', last_attempt_at: '2026-11-15T12:00:00.000Z', last_success_at: '2026-11-15T12:00:00.000Z', last_status: 204, last_error: null, paused_at: null, attempts: 0};
+      setItems(getItems().map(item => ({...item, ping: okPing})));
+      return {ok: true, status: 204, error: null, ping: okPing};
+    },
+  });
+  assert.deepEqual(ui.statuses(), ['已暫停：連續 8 次失敗（上次：逾時）。修好後按「送測試通知」，成功就會恢復。']);
+  await ui.click('送測試通知');
+  assert.equal(ui.posts[0].path, '/me/agent-tokens/conn-1/ping/test');
+  assert.equal(JSON.stringify(ui.posts[0].body), '{}');
+  assert.deepEqual(ui.statuses(), [`上次通知成功：${new Date('2026-11-15T12:00:00.000Z').toLocaleString('zh-TW')}`]);
+
+  failTest = true;
+  await ui.click('送測試通知');
+  assert.deepEqual(ui.alerts(), ['變更通知暫停服務，請稍後再試。']);
+});
+
+test('AgentTokens renders all four ping status lines and all five failure reasons', async t => {
+  const successAt = '2026-11-15T09:30:00.000Z';
+  const basePing = {notify_url: 'https://a.workers.dev/p', last_attempt_at: '2026-11-15T10:00:00.000Z', last_success_at: null, last_status: null, last_error: null, paused_at: null, attempts: 1};
+  const cases: Array<{ping: Record<string, unknown>; expected: string}> = [
+    {ping: {...basePing, last_attempt_at: null, attempts: 0}, expected: '尚未送出通知'},
+    {ping: {...basePing, last_success_at: successAt, last_status: 204, last_error: null, attempts: 0}, expected: `上次通知成功：${new Date(successAt).toLocaleString('zh-TW')}`},
+    {ping: {...basePing, last_error: 'timeout'}, expected: '上次通知失敗：逾時，將自動重試'},
+    {ping: {...basePing, last_error: 'network'}, expected: '上次通知失敗：連線失敗，將自動重試'},
+    {ping: {...basePing, last_error: 'redirect', last_status: 302}, expected: '上次通知失敗：不接受轉址，將自動重試'},
+    {ping: {...basePing, last_error: 'http_status', last_status: 502}, expected: '上次通知失敗：HTTP 502，將自動重試'},
+    {ping: {...basePing, last_error: 'rejected_url'}, expected: '上次通知失敗：網址不符合規則，將自動重試'},
+    {ping: {...basePing, last_error: 'http_status', last_status: 500, paused_at: '2026-11-15T10:05:00.000Z', attempts: 8}, expected: '已暫停：連續 8 次失敗（上次：HTTP 500）。修好後按「送測試通知」，成功就會恢復。'},
+    {ping: {...basePing, last_error: null, paused_at: '2026-11-15T10:05:00.000Z', attempts: 8}, expected: '已暫停：連續 8 次失敗。修好後按「送測試通知」，成功就會恢復。'},
+  ];
+  for (const c of cases) {
+    const ui = await mountTokens(t, [tokenRow({ping: c.ping})]);
+    assert.deepEqual(ui.statuses(), [c.expected]);
+  }
+});
+
+test('AgentTokens flight guard blocks concurrent ping actions', async t => {
+  let resolvePost!: (v: unknown) => void;
+  const deferred = new Promise(r => {resolvePost = r;});
+  const ui = await mountTokens(t, [
+    tokenRow({
+      connection_id: 'conn-1',
+      ping: {notify_url: 'https://a.workers.dev/p', last_attempt_at: null, last_success_at: null, last_status: null, last_error: null, paused_at: null, attempts: 0},
+    }),
+  ], {
+    onPost(path) {
+      if (path.endsWith('/ping/test')) return deferred;
+      return undefined;
+    },
+  });
+
+  const testBtn = ui.buttons('送測試通知')[0];
+  const stopBtn = ui.buttons('停止通知')[0];
+  const saveBtn = ui.buttons('儲存')[0];
+  const form = ui.pingForms()[0];
+
+  await React.act(async () => {
+    propsOf(testBtn).onClick({type: 'click', button: 0, currentTarget: testBtn});
+    await Promise.resolve();
+  });
+  assert.equal(ui.posts.length, 1);
+  assert.equal(testBtn.hasAttribute('disabled'), true);
+  assert.equal(stopBtn.hasAttribute('disabled'), true);
+  assert.equal(saveBtn.hasAttribute('disabled'), true);
+
+  await React.act(async () => {
+    propsOf(testBtn).onClick({type: 'click', button: 0, currentTarget: testBtn});
+    propsOf(stopBtn).onClick({type: 'click', button: 0, currentTarget: stopBtn});
+    propsOf(form).onSubmit({preventDefault() {}});
+    await new Promise(r => setImmediate(r));
+  });
+  assert.equal(ui.posts.length, 1);
+
+  await React.act(async () => {
+    resolvePost({ok: true, status: 204, error: null, ping: null});
+    await new Promise(r => setImmediate(r));
+  });
+  assert.equal(ui.posts.length, 1);
+  assert.equal(ui.buttons('儲存')[0].hasAttribute('disabled'), false);
 });

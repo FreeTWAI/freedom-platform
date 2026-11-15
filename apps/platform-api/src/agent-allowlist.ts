@@ -66,9 +66,28 @@ export const agentOperations: readonly AgentOperation[] = [
   {id:'services.resume',method:'POST',route:'/api/v1/member-services/:id/resume',scope:'share',title:'恢復服務',screen:'services',ifMatch:true,example:{}},
   {id:'services.delete',method:'DELETE',route:'/api/v1/member-services/:id',scope:'share',title:'刪除自己的服務',screen:'services',ifMatch:true,example:{}},
   {id:'works.create',method:'POST',route:'/api/v1/showcases',scope:'share',title:'發布作品',screen:'works',publicItem:true,example:{title:'開源協作作品',description:'記錄開發流程與可重現示範',public_url:'https://example.com/work',consent_to_share:true}},
+  {id:'skills.drafts',method:'GET',route:'/api/v1/me/skill-submissions',scope:'read',title:'查看我的技能書草稿',screen:'works'},
+  {id:'skills.draft_read',method:'GET',route:'/api/v1/me/skill-submissions/:id',scope:'read',title:'查看一份技能書草稿',screen:'works'},
+  {id:'skills.draft',method:'POST',route:'/api/v1/me/skill-submissions/manual',scope:'share',title:'交技能書私人草稿',screen:'works',example:{repository_url:'https://github.com/example/project',title:'技能書名稱',description:'技能書簡介',use_notes:'先閱讀 README 再開始使用',relationship:'curator'}},
+  {id:'skills.revise',method:'POST',route:'/api/v1/me/skill-submissions/:id/manual',scope:'share',title:'修改自己的技能書草稿',screen:'works',ifMatch:true,example:{repository_url:'https://github.com/example/project',title:'更新後技能書',description:'更新後簡介',use_notes:'更新後使用方式',relationship:'curator'}},
+  {id:'skills.issue',method:'POST',route:'/api/v1/me/skill-submissions',scope:'share',title:'建立上傳授權草稿（限本人）',screen:'works',granted:false},
+  {id:'skills.illustration',method:'GET',route:'/api/v1/me/skill-submissions/:id/illustration',scope:'read',title:'查看草稿示意圖（限本人）',screen:'works',granted:false},
+  {id:'skills.grant',method:'POST',route:'/api/v1/me/skill-submissions/:id/grant',scope:'share',title:'重發上傳授權（限本人）',screen:'works',granted:false},
+  {id:'skills.revoke',method:'POST',route:'/api/v1/me/skill-submissions/:id/revoke',scope:'share',title:'撤回技能書草稿（限本人）',screen:'works',granted:false},
+  {id:'skills.publish',method:'POST',route:'/api/v1/me/skill-submissions/:id/publish',scope:'share',title:'公開發布技能書（限本人）',screen:'works',granted:false},
+  {id:'skills.upgrade',method:'POST',route:'/api/v1/me/skill-submissions/:id/upgrade',scope:'share',title:'升級已公開技能書（限本人）',screen:'works',granted:false},
+  {id:'skills.upload_keys',method:'GET',route:'/api/v1/me/skill-upload-keys',scope:'read',title:'查看技能上傳金鑰（限本人）',screen:'works',granted:false},
+  {id:'skills.upload_key_create',method:'POST',route:'/api/v1/me/skill-upload-keys',scope:'share',title:'建立技能上傳金鑰（限本人）',screen:'works',granted:false},
+  {id:'skills.upload_key_revoke',method:'POST',route:'/api/v1/me/skill-upload-keys/:id/revoke',scope:'share',title:'撤銷技能上傳金鑰（限本人）',screen:'works',granted:false},
+  {id:'development.status',method:'GET',route:'/api/v1/me/development/:kind/:target',scope:'read',title:'查看開發權限狀態',screen:'guilds'},
+  {id:'development.propose',method:'POST',route:'/api/v1/me/development/:kind/:target/proposals',scope:'share',title:'交私人開發提案',screen:'guilds',example:{title:'改善說明文件',summary:'補齊操作步驟與常見問題說明',pr_url:null}},
+  {id:'development.consent',method:'POST',route:'/api/v1/me/development/:kind/:target/consent',scope:'share',title:'同意開發提案條款（限本人）',screen:'guilds',granted:false},
+  {id:'development.activate',method:'POST',route:'/api/v1/me/development/:kind/:target/activate',scope:'share',title:'啟用開發權限（限本人）',screen:'guilds',granted:false},
+  {id:'development.keys',method:'POST',route:'/api/v1/me/development/:kind/:target/keys',scope:'share',title:'核發開發金鑰（限本人）',screen:'guilds',granted:false},
+  {id:'development.revoke',method:'POST',route:'/api/v1/me/development/:kind/:target/revoke',scope:'share',title:'撤銷開發權限（限本人）',screen:'guilds',granted:false},
   {id:'profile.read',method:'GET',route:'/api/v1/me/positioning',scope:'read',title:'查看我的定位卡',screen:'profile'},
 ];
-// Report, claim and star are person-only; react covers likes and comments.
+// Report, claim, star, skill-submission publish/grant/revoke/upgrade/illustration/keys, and development consent/activate/keys/revoke are person-only; react covers likes and comments.
 export function agentOperation(method:string,registeredPattern:string,operations:readonly AgentOperation[]=agentOperations) {
   return operations.find(op=>op.granted!==false&&op.method===method&&op.route===registeredPattern);
 }

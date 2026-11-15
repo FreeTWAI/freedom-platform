@@ -33,7 +33,8 @@
 
 會員本人可建立金鑰，讓外部 Agent 透過 REST API、MCP 或 SDK 操作已授權的範圍。
 
-- **金鑰與權限範圍**：登入平台後到「自動化 → 我的 Agent」建立 `fw_agent_` 金鑰（僅顯示一次；90 天到期，每人最多 20 把有效金鑰，續期會撤銷舊金鑰）。可勾選範圍為 `read`（讀取）、`share`（分享）、`rsvp`（報名）、`react`（回應）。請帶 `Authorization: Bearer $FREEDOM_AGENT_TOKEN`，不可同時送出 Cookie 或 `X-CSRF-Token`。
+- **金鑰與權限範圍**：登入平台後到「自動化 → 我的 Agent」建立 `fw_agent_` 金鑰（僅顯示一次；90 天到期，每人最多 20 把有效金鑰，續期會撤銷舊金鑰）。可勾選範圍為 `read`（讀取）、`share`（分享、交私人草稿）、`rsvp`（報名）、`react`（回應）。請帶 `Authorization: Bearer $FREEDOM_AGENT_TOKEN`，不可同時送出 Cookie 或 `X-CSRF-Token`。
+  - **交私人草稿**：以同一把勾選 `share` 的 `fw_agent_` 金鑰，可透過 `skills.draft`、`skills.revise` 與 `development.propose`（搭配 `read` 讀取 `skills.drafts`、`skills.draft_read`、`development.status`）建立或修改私人技能書草稿與私人開發提案，不需首次公開確認；公開發布與權限啟用仍限會員本人。既有的技能上傳金鑰（`fpk_`／`fpg_`）與開發憑證（`fpd_`）仍維持可用。
 - **指引、契約與探索**：
   - 文字指引：[/agent.md](https://freetwai.com/agent.md)
   - OpenAPI 契約：[/agent/openapi.json](https://freetwai.com/agent/openapi.json)
@@ -41,7 +42,9 @@
 - **MCP 端點**：`POST /api/v1/mcp`（Streamable HTTP、JSON 回應，支援協定 `2025-06-18` 與 `2025-11-25`，請求體上限 32,768 bytes）。
 - **變更清單**：`GET /api/v1/agent/events?after=<next_cursor>` 輪詢本人變更（事件類型：`event.updated`、`event.approved`、`rsvp.confirmed`、`rsvp.waitlist_promoted`、`message.received`、`share.credited`；不含私訊正文，事件保留 30 天）。
 - **寫入與限制**：所有非 `GET` 呼叫須帶 `Idempotency-Key`（8–128 字元，`[A-Za-z0-9_-]`）；需要版本鎖定的操作須先讀取項目取得最新 `aggregate_version` 並送 `If-Match`。首次公開發布回傳 `202 pending_member`，須由本人在瀏覽器確認後以原 key 與內容重送。每把金鑰每日（UTC）上限 20 件公開內容、100 次回應，輔助查詢每 24 小時 100 次；連續 10 次計入的 4xx（不含 409、429）會暫停金鑰。
-- **JavaScript SDK**：從本 Repo 複製 `packages/sdk/agent-client.mjs` 與 `packages/sdk/agent-operations.mjs`：
+- **JavaScript SDK**：從本 Repo 複製 `packages/sdk/agent-client.mjs` 與 `packages/sdk/agent-operations.mjs`（TypeScript 型別見 Repo 內的 `packages/sdk/agent-client.d.mts`）：
+  - 也可直接從平台網址取得（`curl -O https://freetwai.com/agent/sdk/v1/agent-client.mjs && curl -O https://freetwai.com/agent/sdk/v1/agent-operations.mjs`），或在 Deno 與瀏覽器直接 `import` `https://freetwai.com/agent/sdk/v1/agent-client.mjs`。
+  - 寫入操作（非 `GET`）請呼叫 `newIdempotencyKey()` 產生 `idempotencyKey`，並在重試時沿用同一個 key。
 
 ```js
 import { createAgentClient } from './agent-client.mjs';
@@ -55,7 +58,8 @@ const guilds = await agent.call('guilds.list');
 const feed = await agent.events();
 ```
 
-- **Webhook 現況**：目前沒有對外發送的 webhook，所有變更通知請透過上述 `GET /api/v1/agent/events` 輪詢。
+- **變更通知（選填）**：可在「自動化 → 我的 Agent」為有效的 `read` 金鑰設定通知網址（支援 `workers.dev`、`pages.dev`、`netlify.app`、`vercel.app` 的 HTTPS 網址），平台有新變更時會在約 10 分鐘內送出 `freedom.agent-ping/v1` 簽章 `POST` 喚醒通知（規格見 [/.well-known/freedom-agent.json](https://freetwai.com/.well-known/freedom-agent.json) 與 [/agent.md#change-ping](https://freetwai.com/agent.md#change-ping)）。
+- **驗證與準則**：接收端可用 SDK 的 `verifyAgentPing({ token, body, headers })` 驗證簽章後快速回覆 `2xx`；通知可能重複送達，收到後仍請呼叫 `GET /api/v1/agent/events` 讀取變更清單，清單本身才是唯一準則。
 
 ## 修改平台本身
 

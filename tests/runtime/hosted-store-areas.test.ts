@@ -8,10 +8,12 @@ import ts from '@typescript/typescript6';
 // Products copy, Publish copy/read lock, and Settings read lock; all other
 // panels and forms retain their original fingerprint. Complete JSX includes
 // every branch, attribute, text node and callback, even when hidden.
+// store-products-panel and store-publish-panel take tabIndex={-1}, so the
+// 開店步驟 button 「前往下一步」 can move focus to the panel it opens.
 const baseline: Readonly<Record<string, string>> = {
-  "store-products-panel": "93a51428ebd300723ed80dd01b6cfbdd85adc29295ee2881719e076d10343c66",
+  "store-products-panel": "2c5f3048ab5fe900fab6cb0298b254f9e7d807c877da6231f86bd043da6b06d5",
   "store-cooperation-panel": "5b33264a138207bbe8f732d2c710798ca1bcb922881f01e2d2a1c685e86cf3a9",
-  "store-publish-panel": "a59682ad46f87ff45c77bbb30b26ff1f35d7a31022fde82f320d02c768cec328",
+  "store-publish-panel": "44224d70be2bfeaad3a9d8ac913402255cfc7984d28afee97ac2a95729af54e1",
   "store-settings-panel": "5d76fbdf114c3fc69c1ce66fdfa3c1d91d2d58b4d4a970aa6baace0a89ad4978",
   "PublicationReview": "a8dcbae6aeed7bc722a2a25a5d841c24a7d4389d158a674085c83aa75d31b988",
   "ManualCopy": "76cdc0866f74582d365de26024391e0d4a6738328c1b85237c8cc8eb1453888a",

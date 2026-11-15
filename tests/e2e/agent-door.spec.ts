@@ -66,6 +66,17 @@ test('member creates one token in the portal; their agent registers and reads it
  await panel.getByRole('button',{name:'複製連線設定',exact:true}).click();
  expect(/fw_agent_[A-Za-z0-9_-]{43}/.test(await page.evaluate(()=>navigator.clipboard.readText())),'reload never restores a token').toBe(false);
  await page.getByRole('region',{name:'Agent 連線'}).locator('summary').filter({hasText:'我的 Agent'}).click();
+ const keyDetails=panel.locator('details').filter({hasText:'我的 Agent'});
+ await keyDetails.getByLabel('通知網址',{exact:true}).fill('https://my-agent.example-user.workers.dev/ping');
+ await keyDetails.getByRole('button',{name:'儲存',exact:true}).click();
+ await expect(keyDetails.getByRole('status')).toHaveText('尚未送出通知');
+ await keyDetails.getByLabel('通知網址',{exact:true}).fill('http://example.com/x');
+ await keyDetails.getByRole('button',{name:'儲存',exact:true}).click();
+ await expect(panel.getByRole('alert')).toHaveText('請使用 workers.dev、pages.dev、netlify.app 或 vercel.app 的 HTTPS 網址（不含 ? 或 #）。');
+ await keyDetails.getByRole('button',{name:'停止通知',exact:true}).click();
+ await expect(keyDetails.getByRole('status')).toHaveCount(0);
+ await expect(keyDetails.getByRole('button',{name:'送測試通知',exact:true})).toHaveCount(0);
+ await expect(keyDetails.getByRole('button',{name:'停止通知',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'撤銷',exact:true}).click();
  await expect(page.getByRole('region',{name:'Agent 連線'}).locator('summary').filter({hasText:'我的 Agent'})).toContainText('已撤銷');
  expect((await fetch(origin+'/api/v1/agent/events',{headers:{Authorization:'Bearer '+token}})).status).toBe(401);

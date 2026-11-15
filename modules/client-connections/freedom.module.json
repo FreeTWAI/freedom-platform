@@ -33,6 +33,7 @@
     "apps/platform-api/src/agent-boundary.ts",
     "apps/platform-api/src/routes/agent-tokens.ts",
     "migrations/205_agent_tokens.sql",
+    "migrations/215_agent_change_pings.sql",
     "tests/runtime/agent-door.test.ts",
     "scripts/build-agent-contract.mjs",
     "contracts/agent/v1/**",
@@ -40,6 +41,8 @@
     "modules/client-connections/agent-contract.ts",
     "apps/portal-web/src/modules/agent-operations.ts",
     "modules/client-connections/agent-feed.ts",
+    "modules/client-connections/agent-pings.ts",
+    "tests/runtime/agent-change-pings.test.ts",
     "apps/platform-api/src/routes/agent-feed.ts",
     "apps/portal-web/src/modules/AgentHandoff.tsx",
     "apps/portal-web/src/modules/AgentTokens.tsx",
@@ -55,6 +58,8 @@
     "packages/sdk/agent-operations.mjs",
     "packages/sdk/agent-client.mjs",
     "packages/sdk/agent-client.d.mts",
+    "apps/portal-web/public/agent/sdk/v1/agent-client.mjs",
+    "apps/portal-web/public/agent/sdk/v1/agent-operations.mjs",
     "tests/runtime/sdk-agent-client.test.ts"
   ],
   "public_exports": [

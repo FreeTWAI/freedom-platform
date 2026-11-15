@@ -2,6 +2,12 @@ import { agentOperations } from './agent-operations.mjs';
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const TOKEN_RE = /^fw_agent_[A-Za-z0-9_-]{43}$/;
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{8,128}$/;
+const MAX_JSON_BYTES = 2_000_000;
+const MAX_PING_BYTES = 4096;
+const PING_FORMAT = 'freedom.agent-ping/v1';
+const PING_TIMESTAMP_RE = /^(0|[1-9]\d*)$/;
+const PING_SIGNATURE_RE = /^v1=([0-9a-f]{64})$/;
 const operations = Object.freeze(agentOperations.map((op) => Object.freeze({ ...op })));
 const operationById = new Map(operations.map((op) => [op.id, op]));
 
@@ -23,12 +29,37 @@ function parseBaseUrl(baseUrl) {
   return url.href;
 }
 
-async function parseJson(response) {
-  if (typeof response.text === 'function') {
-    const text = await response.text();
-    return text ? JSON.parse(text) : null;
+async function readJson(response) {
+  const contentType = response.headers?.get?.('content-type') ?? '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    if (response.body) await response.body.cancel().catch(() => {});
+    throw new TypeError('Platform response is not JSON');
   }
-  return typeof response.json === 'function' ? await response.json() : null;
+  const reader = response.body?.getReader?.();
+  if (!reader) throw new TypeError('Platform response is not JSON');
+  let bytes = 0;
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > MAX_JSON_BYTES) {
+      await reader.cancel();
+      throw new TypeError('Platform response is too large');
+    }
+    chunks.push(value);
+  }
+  const bytesValue = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytesValue.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(bytesValue));
+  } catch {
+    throw new TypeError('Platform response is not JSON');
+  }
 }
 
 /** HTTP error returned by the Freedom agent API. */
@@ -39,6 +70,11 @@ export class AgentError extends Error {
     this.status = status;
     this.code = code;
   }
+}
+
+/** Generate a fresh UUIDv4 idempotency key for a write operation. */
+export function newIdempotencyKey() {
+  return crypto.randomUUID();
 }
 
 /** Create a dependency-free client for a member's fw_agent_ token. */
@@ -75,8 +111,11 @@ export function createAgentClient(config) {
     }
     if (op.if_match && (typeof ifMatch !== 'string' || !ifMatch)) throw new TypeError(`If-Match required for ${operationId}`);
     if (ifMatch !== undefined && (typeof ifMatch !== 'string' || !ifMatch)) throw new TypeError('Invalid If-Match');
-    if (idempotencyKey !== undefined && (typeof idempotencyKey !== 'string' || !idempotencyKey)) {
-      throw new TypeError('Invalid Idempotency-Key');
+    if (op.method !== 'GET' && (idempotencyKey === undefined || idempotencyKey === null)) {
+      throw new TypeError('idempotencyKey is required for every write; reuse the same key when you retry');
+    }
+    if (idempotencyKey !== undefined && (typeof idempotencyKey !== 'string' || !IDEMPOTENCY_KEY_RE.test(idempotencyKey))) {
+      throw new TypeError('idempotencyKey must be 8-128 letters, digits, - or _');
     }
     if (op.method === 'GET' && body !== undefined) throw new TypeError('GET operation cannot have a body');
 
@@ -96,9 +135,11 @@ export function createAgentClient(config) {
         redirect: 'error',
         signal: controller.signal,
       });
-      if (response.ok) return response.status === 204 ? null : await parseJson(response);
+      if (response.ok) return response.status === 204 ? null : await readJson(response);
+      // A failed answer keeps its status even when its body is not a JSON Problem (an HTML 502 from a
+      // proxy, or a body over the cap), so the caller can still decide whether to retry.
       let payload = null;
-      try { payload = await parseJson(response); } catch { payload = null; }
+      try { payload = await readJson(response); } catch { payload = null; }
       const code = (payload && typeof payload.code === 'string' && payload.code)
         || (payload && typeof payload.error === 'string' && payload.error)
         || `http_${response.status}`;
@@ -112,4 +153,137 @@ export function createAgentClient(config) {
   }
 
   return { operations, call, events: ({ after } = {}) => call('agent.events', { query: { after } }) };
+}
+
+/** Verification error thrown by verifyAgentPing. */
+export class AgentPingError extends Error {
+  constructor(code, message = code) {
+    super(message);
+    this.name = 'AgentPingError';
+    this.code = code;
+  }
+}
+
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function readPingHeader(headers, targetName) {
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+    throw new AgentPingError('ping_malformed', 'headers must be a Headers instance or plain object');
+  }
+  if (typeof headers.get === 'function') {
+    const value = headers.get(targetName);
+    return value === null ? undefined : value;
+  }
+  if (!isPlainObject(headers)) {
+    throw new AgentPingError('ping_malformed', 'headers must be a Headers instance or plain object');
+  }
+  const lowerTarget = targetName.toLowerCase();
+  let found;
+  let count = 0;
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === lowerTarget) {
+      count += 1;
+      found = value;
+    }
+  }
+  if (count > 1) throw new AgentPingError('ping_malformed', `Duplicate header: ${targetName}`);
+  if (found !== undefined && typeof found !== 'string') {
+    throw new AgentPingError('ping_malformed', `Invalid header: ${targetName}`);
+  }
+  return found;
+}
+
+function parsePingPayload(body) {
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new AgentPingError('ping_malformed', 'Ping body is not valid JSON');
+  }
+  if (!isPlainObject(parsed)) {
+    throw new AgentPingError('ping_malformed', 'Ping body must be a JSON object');
+  }
+  const keys = Object.keys(parsed);
+  if (
+    keys.length !== 4
+    || parsed.format !== PING_FORMAT
+    || typeof parsed.ping_id !== 'string' || !parsed.ping_id
+    || typeof parsed.connection_id !== 'string' || !parsed.connection_id
+    || typeof parsed.test !== 'boolean'
+  ) {
+    throw new AgentPingError('ping_malformed', 'Invalid ping payload');
+  }
+  return {
+    ping_id: parsed.ping_id,
+    connection_id: parsed.connection_id,
+    test: parsed.test,
+  };
+}
+
+/** Verify an incoming Freedom agent change ping using WebCrypto HMAC-SHA256. */
+export async function verifyAgentPing(options) {
+  if (!isPlainObject(options)) {
+    throw new AgentPingError('ping_malformed', 'Ping verification options must be a plain object');
+  }
+  const { token, body, headers, now = Date.now(), toleranceSeconds = 300 } = options;
+  if (
+    typeof now !== 'number' || !Number.isFinite(now)
+    || typeof toleranceSeconds !== 'number' || !Number.isFinite(toleranceSeconds) || toleranceSeconds < 0
+  ) {
+    throw new AgentPingError('ping_malformed', 'Invalid ping verification time window');
+  }
+  if (typeof token !== 'string' || !TOKEN_RE.test(token)) {
+    throw new AgentPingError('ping_malformed', 'Invalid agent token');
+  }
+  if (typeof body !== 'string') {
+    throw new AgentPingError('ping_malformed', 'Ping body must be a string');
+  }
+  const encoder = new TextEncoder();
+  if (encoder.encode(body).byteLength > MAX_PING_BYTES) {
+    throw new AgentPingError('ping_malformed', 'Ping body exceeds 4096 bytes');
+  }
+  const tsRaw = readPingHeader(headers, 'freedom-ping-timestamp');
+  const sigRaw = readPingHeader(headers, 'freedom-ping-signature');
+  if (typeof tsRaw !== 'string' || !PING_TIMESTAMP_RE.test(tsRaw)) {
+    throw new AgentPingError('ping_malformed', 'Missing or invalid Freedom-Ping-Timestamp header');
+  }
+  const timestamp = Number(tsRaw);
+  if (!Number.isSafeInteger(timestamp)) {
+    throw new AgentPingError('ping_malformed', 'Invalid Freedom-Ping-Timestamp header');
+  }
+  const sigMatch = typeof sigRaw === 'string' ? PING_SIGNATURE_RE.exec(sigRaw) : null;
+  if (!sigMatch) {
+    throw new AgentPingError('ping_malformed', 'Missing or invalid Freedom-Ping-Signature header');
+  }
+
+  if (Math.abs(now / 1000 - timestamp) > toleranceSeconds) {
+    throw new AgentPingError('ping_expired', 'Ping timestamp is outside tolerance');
+  }
+
+  const tokenDigest = await crypto.subtle.digest('SHA-256', encoder.encode(token));
+  const tokenHashHex = toHex(tokenDigest);
+  const hmacKey = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(tokenHashHex),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
+  const messageBytes = encoder.encode(`${PING_FORMAT}\n${tsRaw}\n${body}`);
+  const verified = await crypto.subtle.verify('HMAC', hmacKey, hexToBytes(sigMatch[1]), messageBytes);
+  if (!verified) {
+    throw new AgentPingError('ping_signature_invalid', 'Invalid ping signature');
+  }
+
+  return { ...parsePingPayload(body), timestamp };
 }

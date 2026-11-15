@@ -2,6 +2,7 @@ import {HostedStoreSettingsArea, SettingsForm} from './HostedStoreSettingsArea';
 import {HostedStorePublishArea} from './HostedStorePublishArea';
 import {HostedStoreCooperationArea} from './HostedStoreCooperationArea';
 import {HostedStoreProductsArea} from './HostedStoreProductsArea';
+import {HostedStoreNextSteps} from './HostedStoreNextSteps';
 import {useStorePageData} from './hosted-store-page-state';
 import {useStoreDirtyForms, type RegisterLeave} from './hosted-store-dirty-state';
 import {StoreOverviewSchema,type StoreOverview} from '../../../../contracts/guild-launchpad/v1/hosted-commerce-setup';
@@ -107,6 +108,13 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
   const [manualUrl, setManualUrl] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<{url: string; message: string} | null>(null);
   const manualField = useRef<HTMLInputElement>(null);
+  const nextPanelFocus = useRef<'products' | 'publish' | null>(null);
+  useLayoutEffect(() => {
+    const target = nextPanelFocus.current;
+    if (!target || target !== area) return;
+    nextPanelFocus.current = null;
+    document.getElementById(`store-${target}-panel`)?.focus();
+  }, [area]);
   const publication = view?.publication;
   const publicPath = publication?.state === 'published' ? publication.public_path : null;
   const storeCopyUrl = publicPath ? absoluteUrl(publicPath) : null;
@@ -171,6 +179,7 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
       {!store ? can('store:manage') ? <SettingsForm key="setup" client={client} root={root} busy={locked} onMissing={() => setMissing(true)} onDirty={value => markDirty('settings', value)} onSave={(body, success, fieldError) => command({method: 'post', path: root + '/setup', body, schema: StoreViewSchema, notice: '已建立商店。', success, fieldError})}/>
         : <p>這間商店還沒完成設定，請業務空間擁有者或管理員設定。</p> : <>
         {checkoutEnabled?<StoreOrderBanner client={client} tenantId={tenantId} instanceId={instanceId} consoleEnabled={commerceConsoleEnabled} refresh={distributionRefresh}/>:<p className="banner" role="note">{reservationSetting?.reservation_enabled && reservationSetting.admission_enabled ? '已開放 30 分鐘庫存預留；付款與出貨尚未啟用。' : NOTICE}</p>}
+        <HostedStoreNextSteps publicationState={view.publication.state} productCount={view.product_count} writable={view.writable} canWrite={can('store:write')} canPublish={can('store:publish')} area={area} onNext={target => {nextPanelFocus.current = target; setArea(target);}}/>
         <nav className="hosted-supply-nav hosted-retail-nav" aria-label="商店工作區">{([['products','商品'],['publish','店面與發布'],['settings','商店資料'],['cooperation','供貨合作']] as const).map(([key,label])=><button key={key} type="button" className="btn btn-ghost" aria-pressed={area===key} aria-controls={`store-${key}-panel`} onClick={()=>setArea(key)}>{label}</button>)}</nav>
         {otherDraft&&<div className="hosted-store-draft-note"><p>另一個工作區有未儲存內容，先儲存或取消後就能繼續修改。</p><button type="button" className="btn btn-ghost" onClick={()=>setArea(draftArea(otherDraft[0]))}>回到未儲存的工作區</button></div>}
         <HostedStoreProductsArea

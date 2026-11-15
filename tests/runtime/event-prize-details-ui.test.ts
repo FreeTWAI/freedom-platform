@@ -167,7 +167,9 @@ test('event A prize details never render as event B while its GET is pending or 
 
 test('late newer event GET cannot silently rebase an older prize draft onto a new version',async t=>{
  const h=panel(t);h.props.locationHash='#events/'+ID;h.setProps(h.props);
- const original=stored({prize_details:eventPrizePayload([prize()])});await h.settle(h.reads().find(r=>r.path==='/events/'+ID),original);h.click(h.button('編輯活動'));h.change('獎品名稱','尚未儲存的草稿獎品');
+ for(const r of h.reads().filter(r=>!r.done)){r.done=true;await h.settle(r,r.path==='/events'?new Error('list down'):{items:[]},r.path==='/events');}
+ const detailReq=h.reads().find(r=>r.path==='/events/'+ID&&!r.done);assert(detailReq);detailReq.done=true;
+ const original=stored({prize_details:eventPrizePayload([prize()])});await h.settle(detailReq,original);h.click(h.button('重試'));h.click(h.button('編輯活動'));h.change('獎品名稱','尚未儲存的草稿獎品');
  await h.ready([stored({aggregate_version:2,prize_details:eventPrizePayload([{...prize(),name:'其他操作的新獎品'}])})]);
  assert.equal(h.field('獎品名稱').value,'尚未儲存的草稿獎品');h.submit();assert.equal(h.writes().length,0);assert.match(h.text(),/活動已有較新的版本/);assert.equal(h.field('獎品名稱').value,'尚未儲存的草稿獎品');
 });

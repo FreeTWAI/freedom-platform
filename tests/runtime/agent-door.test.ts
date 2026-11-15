@@ -303,7 +303,7 @@ test('contract --check detects a changed allowlist and a changed generated artif
  const {tmpdir}=await import('node:os');const {join,dirname}=await import('node:path');const {spawnSync}=await import('node:child_process');
  const dir=mkdtempSync(join(tmpdir(),'agent-contract-test-'));
  try{
-  const files=['scripts/build-agent-contract.mjs','apps/platform-api/src/agent-allowlist.ts','contracts/agent/v1/openapi.json','apps/portal-web/src/modules/agent-operations.ts','modules/client-connections/agent-contract.ts'];
+  const files=['scripts/build-agent-contract.mjs','apps/platform-api/src/agent-allowlist.ts','contracts/agent/v1/openapi.json','apps/portal-web/src/modules/agent-operations.ts','modules/client-connections/agent-contract.ts','apps/portal-web/public/agent/sdk/v1/agent-client.mjs','apps/portal-web/public/agent/sdk/v1/agent-operations.mjs'];
   for(const file of files){mkdirSync(dirname(join(dir,file)),{recursive:true});copyFileSync(file,join(dir,file));}
   writeFileSync(join(dir,'package.json'),'{"type":"module"}');
   symlinkSync(process.cwd()+'/node_modules',join(dir,'node_modules'));
@@ -315,6 +315,8 @@ test('contract --check detects a changed allowlist and a changed generated artif
   assert.equal(check().status,0);
   appendFileSync(join(dir,files[2]),' ');assert.equal(check().status,1);
   copyFileSync(files[2],join(dir,files[2]));
+  appendFileSync(join(dir,files[5]),' ');assert.equal(check().status,1);
+  copyFileSync(files[5],join(dir,files[5]));
   const schemaFile=join(dir,'apps/platform-api/src/agent-schemas.ts');
   writeFileSync(schemaFile,readFileSync(schemaFile,'utf8').replace('max(100)','max(99)'));assert.equal(check().status,1);
   copyFileSync('apps/platform-api/src/agent-schemas.ts',schemaFile);
@@ -993,4 +995,176 @@ test('works.create and profile.read enforce scope, consent_to_share, confirmatio
  assert.equal(replay.data.showcase_id,created.data.showcase_id);
  const pub=(await pool.query('SELECT resource_id FROM agent_publications WHERE connection_id=$1 AND idempotency_key=$2',[shareOnly.connection_id,key])).rows[0];
  assert.equal(pub?.resource_id,created.data.showcase_id);
+});
+
+test('F1 allowlist grants six draft operations and keeps person-only routes denied',async()=>{
+ const {agentOperation}=await import('../../apps/platform-api/src/agent-allowlist.js');
+ const expected=[
+  {id:'skills.drafts',method:'GET',route:'/api/v1/me/skill-submissions',scope:'read',screen:'works',title:'查看我的技能書草稿',ifMatch:undefined},
+  {id:'skills.draft_read',method:'GET',route:'/api/v1/me/skill-submissions/:id',scope:'read',screen:'works',title:'查看一份技能書草稿',ifMatch:undefined},
+  {id:'skills.draft',method:'POST',route:'/api/v1/me/skill-submissions/manual',scope:'share',screen:'works',title:'交技能書私人草稿',ifMatch:undefined},
+  {id:'skills.revise',method:'POST',route:'/api/v1/me/skill-submissions/:id/manual',scope:'share',screen:'works',title:'修改自己的技能書草稿',ifMatch:true},
+  {id:'development.status',method:'GET',route:'/api/v1/me/development/:kind/:target',scope:'read',screen:'guilds',title:'查看開發權限狀態',ifMatch:undefined},
+  {id:'development.propose',method:'POST',route:'/api/v1/me/development/:kind/:target/proposals',scope:'share',screen:'guilds',title:'交私人開發提案',ifMatch:undefined},
+ ] as const;
+ for(const item of expected){
+  const op=agentOperation(item.method,item.route);
+  assert.ok(op,`expected allowlisted ${item.id}`);
+  assert.equal(op.id,item.id);assert.equal(op.scope,item.scope);assert.equal(op.screen,item.screen);assert.equal(op.title,item.title);
+  assert.equal(op.publicItem,undefined);assert.equal(op.ifMatch,item.ifMatch);
+  if(item.method!=='GET')assert.ok(op.example&&typeof op.example==='object',`missing example for ${item.id}`);
+ }
+ for(const [method,route] of [
+  ['POST','/api/v1/me/skill-submissions'],
+  ['GET','/api/v1/me/skill-submissions/:id/illustration'],
+  ['POST','/api/v1/me/skill-submissions/:id/grant'],
+  ['POST','/api/v1/me/skill-submissions/:id/revoke'],
+  ['POST','/api/v1/me/skill-submissions/:id/publish'],
+  ['POST','/api/v1/me/skill-submissions/:id/upgrade'],
+  ['GET','/api/v1/me/skill-upload-keys'],
+  ['POST','/api/v1/me/skill-upload-keys'],
+  ['POST','/api/v1/me/skill-upload-keys/:id/revoke'],
+  ['POST','/api/v1/me/development/:kind/:target/consent'],
+  ['POST','/api/v1/me/development/:kind/:target/activate'],
+  ['POST','/api/v1/me/development/:kind/:target/keys'],
+  ['POST','/api/v1/me/development/:kind/:target/revoke'],
+ ] as const){
+  assert.equal(agentOperation(method,route),undefined,`${method} ${route} must not be granted`);
+  const doc=agentOperations.find(entry=>entry.method===method&&entry.route===route);
+  assert.equal(doc?.granted,false,`${method} ${route} must be documented as granted:false`);
+ }
+});
+
+test('agent key creates, reads, lists, revises, and replays private skill drafts while keeping publish and revoked keys blocked',async()=>{
+ const owner=await ready(0),readOnly=await issue(owner,['read']),shareOnly=await issue(owner,['share']),allScopes=await issue(owner,['read','share','rsvp','react']);
+ const draftBody={repository_url:'https://github.com/example/skill-draft',title:'代理私人技能書',description:'代理建立的私人技能書草稿',use_notes:'先讀 README 再測試',relationship:'curator'};
+ assert.equal((await req('/api/v1/me/skill-submissions/manual',{token:readOnly.access_token,body:draftBody})).data.code,'scope_required');
+
+ const key=randomUUID();
+ const created=await req('/api/v1/me/skill-submissions/manual',{token:shareOnly.access_token,body:draftBody,key});
+ assert.equal(created.status,201,JSON.stringify(created.data));
+ assert.equal(created.data.status,'ready_for_review');
+ assert.equal(created.data.public_path,null);
+ assert.equal((await pool.query('SELECT count(*) FROM agent_publications WHERE connection_id=$1',[shareOnly.connection_id])).rows[0].count,'0');
+
+ const createJournal=(await pool.query("SELECT command,data FROM transition_journal WHERE aggregate_type='skill_submission' AND aggregate_id=$1 AND aggregate_version=1",[created.data.submission_id])).rows[0];
+ assert.equal(createJournal?.command,'save_manual_draft');
+ assert.equal(createJournal?.data?.source,'agent');
+ assert.equal(createJournal?.data?.connection_id,shareOnly.connection_id);
+
+ const replay=await req('/api/v1/me/skill-submissions/manual',{token:shareOnly.access_token,body:draftBody,key});
+ assert.equal(replay.status,201,JSON.stringify(replay.data));
+ assert.equal(replay.data.submission_id,created.data.submission_id);
+ const conflict=await req('/api/v1/me/skill-submissions/manual',{token:shareOnly.access_token,body:{...draftBody,title:'不同標題'},key});
+ assert.equal(conflict.status,409);
+ assert.equal(conflict.data.code,'idempotency_conflict');
+
+ assert.equal((await req('/api/v1/me/skill-submissions',{token:shareOnly.access_token})).data.code,'scope_required');
+ assert.equal((await req(`/api/v1/me/skill-submissions/${created.data.submission_id}`,{token:shareOnly.access_token})).data.code,'scope_required');
+ const listed=await req('/api/v1/me/skill-submissions',{token:readOnly.access_token});
+ assert.equal(listed.status,200,JSON.stringify(listed.data));
+ assert.ok(listed.data.items.some((item:any)=>item.submission_id===created.data.submission_id&&item.status==='ready_for_review'));
+ const readOne=await req(`/api/v1/me/skill-submissions/${created.data.submission_id}`,{token:readOnly.access_token});
+ assert.equal(readOne.status,200,JSON.stringify(readOne.data));
+ assert.equal(readOne.data.submission_id,created.data.submission_id);
+
+ assert.equal((await req(`/api/v1/me/skill-submissions/${created.data.submission_id}/manual`,{token:readOnly.access_token,body:{...draftBody,title:'無權修改'},headers:{'If-Match':`"${created.data.aggregate_version}"`}})).data.code,'scope_required');
+ const revised=await req(`/api/v1/me/skill-submissions/${created.data.submission_id}/manual`,{token:shareOnly.access_token,body:{...draftBody,title:'更新後私人技能書'},headers:{'If-Match':`"${created.data.aggregate_version}"`}});
+ assert.equal(revised.status,200,JSON.stringify(revised.data));
+ assert.equal(revised.data.payload.title,'更新後私人技能書');
+ assert.equal(revised.data.aggregate_version,2);
+ const reviseJournal=(await pool.query("SELECT command,data FROM transition_journal WHERE aggregate_type='skill_submission' AND aggregate_id=$1 AND aggregate_version=2",[created.data.submission_id])).rows[0];
+ assert.equal(reviseJournal?.command,'revise_manual_draft');
+ assert.equal(reviseJournal?.data?.source,'agent');
+ assert.equal(reviseJournal?.data?.connection_id,shareOnly.connection_id);
+
+ const publishRefused=await req(`/api/v1/me/skill-submissions/${created.data.submission_id}/publish`,{token:allScopes.access_token,body:{public_consent:true,confirmation_text:'確定公開'}});
+ assert.equal(publishRefused.status,403);
+ assert.equal(publishRefused.data.code,'scope_required');
+
+ await req(`/api/v1/me/agent-tokens/${shareOnly.connection_id}/revoke`,{session:owner,body:{}});
+ assert.equal((await req('/api/v1/me/skill-submissions/manual',{token:shareOnly.access_token,body:draftBody})).status,401);
+ assert.equal((await req(`/api/v1/me/skill-submissions/${created.data.submission_id}/manual`,{token:shareOnly.access_token,body:draftBody,headers:{'If-Match':'"2"'}})).status,401);
+});
+
+test('agent key reads development status and saves proposals with an active grant while matching browser grant refusals and blocking person-only development routes',async()=>{
+ const owner=await ready(0),readOnly=await issue(owner,['read']),shareOnly=await issue(owner,['share']),allScopes=await issue(owner,['read','share','rsvp','react']);
+ const devGithubFetch:typeof fetch=async input=>{
+  const u=String(input);
+  if(u==='https://github.com/login/oauth/access_token')return Response.json({access_token:'ghu_synthetic',token_type:'bearer',scope:''});
+  if(u==='https://api.github.com/user')return Response.json({id:42,login:'contributor'});
+  if(u.startsWith('https://api.github.com/applications/'))return new Response(null,{status:204});
+  if(u.startsWith('https://api.github.com/user/installations?'))return Response.json({installations:[{id:77,app_id:9,account:{id:42},suspended_at:null,permissions:{metadata:'read'}}]});
+  if(u.includes('/repositories?'))return Response.json({repositories:[{id:200,full_name:'contributor/video-autopilot-kit',private:false,permissions:{push:true}}]});
+  if(u.includes('/repos/')){
+   const name=u.split('/repos/')[1],own=name.startsWith('contributor/');
+   return Response.json({id:own?200:100,full_name:name,private:false,archived:false,owner:{id:own?42:7},permissions:{push:true},...(own?{source:{id:100}}:{})});
+  }
+  throw new Error('Unexpected dev GitHub fixture: '+u);
+ };
+ const devApp=createApp(pool,origin,'local',{eventParticipationEnabled:true,socialAchievementsEnabled:true,githubSocial:{config:{clientId:'Iv1.synthetic',clientSecret:'synthetic-secret',tokenKey:randomBytes(32).toString('base64'),redirectUri:origin+'/github/callback',appId:'9',appSlug:'synthetic-app'},fetcher:devGithubFetch}});
+ const devReq=async(path:string,opts:{session?:Session;token?:string;body?:unknown;key?:string;headers?:Record<string,string>}={})=>{
+  const {session,token,body,key=randomUUID()}=opts;
+  const headers:Record<string,string>={...(session?{Origin:origin,Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{}),...(token?{Authorization:'Bearer '+token}:{}),...opts.headers};
+  if(body!==undefined){headers['Content-Type']='application/json';headers['Idempotency-Key']=key;}
+  const res=await devApp.request(origin+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body)});
+  return {status:res.status,data:await res.json() as any};
+ };
+
+ const proposalBody={title:'代理私人開發提案',summary:'透過單一代理鑰匙提交私人開發提案。',pr_url:null};
+ const browserNoGrant=await devReq('/api/v1/me/development/skill/video-autopilot/proposals',{session:owner,body:proposalBody});
+ const agentNoGrant=await devReq('/api/v1/me/development/skill/video-autopilot/proposals',{token:shareOnly.access_token,body:proposalBody});
+ assert.equal(agentNoGrant.status,browserNoGrant.status);
+ assert.equal(agentNoGrant.data.code,browserNoGrant.data.code);
+
+ const guildCheck=(await pool.query("SELECT aggregate_version,state FROM positioning_profession_memberships WHERE user_id=$1 AND guild_key='guild_ai_vibe'",[owner.user.user_id])).rows[0];
+ if(guildCheck?.state!=='active'){
+  const joined=await devReq('/api/v1/guilds/guild_ai_vibe/join',{session:owner,body:{},...(guildCheck?{headers:{'If-Match':`"${guildCheck.aggregate_version}"`}}:{})});
+  assert.equal(joined.status,200,JSON.stringify(joined.data));
+ }
+ await pool.query("UPDATE positioning_profession_memberships SET member_tier='full' WHERE user_id=$1 AND guild_key='guild_ai_vibe'",[owner.user.user_id]);
+ const ghStart=await devReq('/api/v1/me/github/connect',{session:owner,body:{return_to:'#skills'}});
+ assert.equal(ghStart.status,200,JSON.stringify(ghStart.data));
+ assert.equal((await devReq('/api/v1/me/github/complete',{session:owner,body:{state:new URL(ghStart.data.authorization_url).searchParams.get('state')!,code:'synthetic-code'}})).status,200);
+ assert.equal((await devReq('/api/v1/me/development/skill/video-autopilot/consent',{session:owner,body:{policy_version:'development-proposal-v1',accepted:true}})).status,200);
+
+ const browserBeforeActivate=await devReq('/api/v1/me/development/skill/video-autopilot/proposals',{session:owner,body:proposalBody});
+ const agentBeforeActivate=await devReq('/api/v1/me/development/skill/video-autopilot/proposals',{token:shareOnly.access_token,body:proposalBody});
+ assert.equal(agentBeforeActivate.status,browserBeforeActivate.status);
+ assert.equal(agentBeforeActivate.data.code,browserBeforeActivate.data.code);
+ assert.equal(agentBeforeActivate.data.code,'development_grant_required');
+
+ assert.equal((await devReq('/api/v1/me/development/skill/video-autopilot/activate',{session:owner,body:{working_repository_url:'https://github.com/contributor/video-autopilot-kit'}})).status,200);
+
+ assert.equal((await devReq('/api/v1/me/development/skill/video-autopilot',{token:shareOnly.access_token})).data.code,'scope_required');
+ const devStatus=await devReq('/api/v1/me/development/skill/video-autopilot',{token:readOnly.access_token});
+ assert.equal(devStatus.status,200,JSON.stringify(devStatus.data));
+ assert.equal(devStatus.data.enabled,true);
+
+ assert.equal((await devReq('/api/v1/me/development/skill/video-autopilot/proposals',{token:readOnly.access_token,body:proposalBody})).data.code,'scope_required');
+ const propKey=randomUUID();
+ const saved=await devReq('/api/v1/me/development/skill/video-autopilot/proposals',{token:shareOnly.access_token,body:proposalBody,key:propKey});
+ assert.equal(saved.status,200,JSON.stringify(saved.data));
+ assert.equal(saved.data.title,proposalBody.title);
+ const propJournal=(await pool.query("SELECT command,data FROM transition_journal WHERE aggregate_type='development_proposal' AND aggregate_id=$1 AND aggregate_version=1",[saved.data.proposal_id])).rows[0];
+ assert.equal(propJournal?.command,'save_private_proposal');
+ assert.equal(propJournal?.data?.source,'agent');
+ assert.equal(propJournal?.data?.connection_id,shareOnly.connection_id);
+
+ const propReplay=await devReq('/api/v1/me/development/skill/video-autopilot/proposals',{token:shareOnly.access_token,body:proposalBody,key:propKey});
+ assert.equal(propReplay.status,200);
+ assert.equal(propReplay.data.proposal_id,saved.data.proposal_id);
+ const propConflict=await devReq('/api/v1/me/development/skill/video-autopilot/proposals',{token:shareOnly.access_token,body:{...proposalBody,title:'不同提案標題'},key:propKey});
+ assert.equal(propConflict.status,409);
+ assert.equal(propConflict.data.code,'idempotency_conflict');
+
+ for(const [action,body] of [
+  ['consent',{policy_version:'development-proposal-v1',accepted:true}],
+  ['activate',{working_repository_url:'https://github.com/contributor/video-autopilot-kit'}],
+  ['keys',{}],
+ ] as const){
+  const refused=await devReq(`/api/v1/me/development/skill/video-autopilot/${action}`,{token:allScopes.access_token,body});
+  assert.equal(refused.status,403,action);
+  assert.equal(refused.data.code,'scope_required',action);
+ }
 });

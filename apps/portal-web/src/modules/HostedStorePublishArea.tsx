@@ -57,7 +57,7 @@ export function HostedStorePublishArea({
   publishDisabled, publishSaved, hasDraft, store, view, publicPath, storeCopyUrl,
   copyAction, copyLink, copyFeedback, manualUrl, manualField,
 }: HostedStorePublishAreaProps) {
-  return <section id="store-publish-panel" hidden={area!=='publish'} className="hosted-supply-panel stack" aria-labelledby="store-publish-title"><h3 id="store-publish-title">預覽與發布</h3>
+  return <section id="store-publish-panel" tabIndex={-1} hidden={area!=='publish'} className="hosted-supply-panel stack" aria-labelledby="store-publish-title"><h3 id="store-publish-title">預覽與發布</h3>
           <p className="field-hint">這是商店的公開展示頁，不是另一份商品庫。修改先保存在後台，按發布才更新訪客看到的版本。</p>
           <p>{publication?.state === 'published' ? `目前公開第 ${publication.current_revision} 版。` : publication?.state === 'unpublished' ? '已停止公開。' : '尚未發布。'}</p>
           {publication?.state === 'published' && preview?.dirty && <p>有尚未發布的變更。</p>}

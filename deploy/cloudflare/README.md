@@ -175,6 +175,10 @@ transport，不會連到綠界。
 
 `FREEDOM_COMMERCE_CONSOLE_ENABLED` 預設關閉，只有明確的 `true` 才安裝新的賣家訂單、付款例外、人工退款紀錄與付款查詢路由；關閉時這些路由回傳 404。它需要同一環境的 `FREEDOM_GUILD_LAUNCHPAD_ENABLED=true`。賣家與供應商共用頁框元件，開關各自獨立；自有庫存離線試用可以保留 Supplier console 關閉。`FREEDOM_COMMERCE_CHECKOUT_ENABLED=true` 則需要主控台開關同時開啟，確保店家可以處理新訂單。兩者都只接受 `true`／`false`；就緒與安裝檢查分別以 `commerce_launchpad_required`、`commerce_console_required` 拒絕缺少的依賴。關閉結帳不會關閉既有訂單的賣家服務。詳見 [EC-SPEC-10 §2.2](../../docs/platform-plan/execution/commerce/EC-SPEC-10-release-operations.md#22-主機設定提議)。
 
+## Agent 變更通知開關
+
+`FREEDOM_AGENT_PINGS_DISABLED` 未設定時預設啟用；設為 `'true'` 會停止排程掃描送出變更通知，並使測試通知路由回傳 `503 agent_pings_unavailable`。
+
 ## 營運維護與契約腳本
 
 下列四組操作／契約腳本已納入根目錄 `package.json`，可在 repo 根目錄執行。涉及資料庫寫入的腳本不會退回讀取環境中的 `DATABASE_URL`，必須明確指定目標連線字串並先做 dry-run：

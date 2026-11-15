@@ -33,3 +33,15 @@ test('agent publication receipts and recipient change cursors do not authorize p
  assert.match(sql,/recipient.community_id=sender.community_id/);
  assert.doesNotMatch(sql,/\bUPDATE\s+community_events\s+SET\s+state\s*=\s*'published'/i);
 });
+test('215 creates agent_change_pings extending the 214 ledger without authority grants',()=>{
+ const pingsSql=readFileSync(new URL('../../../migrations/215_agent_change_pings.sql',import.meta.url),'utf8');
+ const sources=readMigrationSources(fileURLToPath(new URL('../../../migrations',import.meta.url)));
+ const prior=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=214),legacyMigrationProfile({first:1,last:214,known_gaps:[22]}));
+ const next=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=215),legacyMigrationProfile({first:1,last:215,known_gaps:[22]}),prior.ledger);
+ assert.deepEqual(next.pending,['215_agent_change_pings.sql']);
+ assert.match(pingsSql,/CREATE TABLE agent_change_pings/);
+ assert.match(pingsSql,/connection_id uuid PRIMARY KEY REFERENCES agent_token_connections\(connection_id\) ON DELETE CASCADE/);
+ assert.match(pingsSql,/notify_url text NOT NULL CHECK\(char_length\(notify_url\) BETWEEN 12 AND 2048 AND notify_url LIKE 'https:\/\/%'\)/);
+ assert.match(pingsSql,/last_error text CHECK\(last_error IN \('timeout','network','redirect','http_status','rejected_url'\)\)/);
+ assert.doesNotMatch(pingsSql,/\bGRANT\b|SECURITY DEFINER|CREATE ROLE|\b(?:INSERT INTO|UPDATE|ALTER TABLE)\s+(?:shares|payments|member_client_connections|agent_connections|platform_admins)/i);
+});

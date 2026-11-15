@@ -255,6 +255,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     console.warn(JSON.stringify({event:status>=500?'server_error':'slow_request',method:c.req.method,route,status,duration_ms}));
   });
   app.use('/guild-tool/v2/client.js',async(c,next)=>{c.header('Access-Control-Allow-Origin','*');await next();});
+  app.use('/agent/sdk/v1/*',async(c,next)=>{c.header('Access-Control-Allow-Origin','*');await next();});
   app.use('/api/v1/me/onboarding/*',onboardingDiagnostics());
   app.use('*',async(c,next)=>{
     const headers=platformResponseHeaders(c.req.path,brokerFormOrigin,paymentFormOrigin,runtime.shortVideosEnabled===true,['/','/play','/play/'].includes(c.req.path)?await frameOrigins(pool,origin):[]);
@@ -647,7 +648,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createRepoMaintainerMemberRoutes(pool));
   app.route('/api/v1',createAvatarRoutes(pool,runtime.avatarAssetStore));
   app.route('/api/v1',createClientConnectionRoutes(pool));
-  app.route('/api/v1',createAgentTokenRoutes(pool));
+  app.route('/api/v1',createAgentTokenRoutes(pool,{origin,agentPingFetch:runtime.agentPingFetch,agentPingsDisabled:runtime.agentPingsDisabled===true}));
   app.route('/api/v1',createAgentFeedRoutes(pool));
   app.route('/api/v1',createJournalMemberRoutes(pool));
   registerShareAttachments(app, pool, {fetcher: options.githubSocial?.fetcher, get token(){return runtime.githubMetricsToken();}}, runtime.afterResponse);

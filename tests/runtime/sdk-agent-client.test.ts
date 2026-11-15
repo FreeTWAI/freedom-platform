@@ -1,11 +1,19 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash, createHmac } from 'node:crypto';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { Pool } from 'pg';
 import { serve } from '@hono/node-server';
 import { agentOperations as allowlistOperations } from '../../apps/platform-api/src/agent-allowlist.js';
-import { createAgentClient, AgentError, type AgentOperation } from '../../packages/sdk/agent-client.mjs';
+import {
+  createAgentClient,
+  AgentError,
+  AgentPingError,
+  newIdempotencyKey,
+  verifyAgentPing,
+  type AgentOperation,
+} from '../../packages/sdk/agent-client.mjs';
 import { createPool } from '../../packages/db/index.js';
 import { migrate } from '../../scripts/database.js';
 import { seedLocal, DEMO_USERS, DEMO_PASSWORD } from '../../packages/testing/seed.js';
@@ -91,7 +99,10 @@ test('call sends bearer without cookie, omits credentials, encodes params and qu
     token: validToken,
     fetcher: async (url, init = {}) => {
       seen.push({ url: String(url), init });
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     },
   });
 
@@ -143,8 +154,18 @@ test('call handles 204, AgentError codes, and timeout abort', async () => {
     timeoutMs: 25,
     fetcher: (_url, init) => {
       if (mode === 'no-content') return Promise.resolve(new Response(null, { status: 204 }));
-      if (mode === 'code') return Promise.resolve(new Response(JSON.stringify({ code: 'rate_limited', error: 'ignored' }), { status: 429 }));
-      if (mode === 'error') return Promise.resolve(new Response(JSON.stringify({ error: 'stale_version' }), { status: 412 }));
+      if (mode === 'code') {
+        return Promise.resolve(new Response(JSON.stringify({ code: 'rate_limited', error: 'ignored' }), {
+          status: 429,
+          headers: { 'content-type': 'application/json' },
+        }));
+      }
+      if (mode === 'error') {
+        return Promise.resolve(new Response(JSON.stringify({ error: 'stale_version' }), {
+          status: 412,
+          headers: { 'content-type': 'application/json' },
+        }));
+      }
       if (mode === 'bare') return Promise.resolve(new Response('bad gateway', { status: 502 }));
       return new Promise((_, reject) => {
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason ?? new Error('aborted')));
@@ -226,5 +247,370 @@ test('agentGuide includes JavaScript SDK snippet with env var token and no secre
   assert.equal(guide.includes("baseUrl: 'https://freetwai.com/api/v1'"), true);
   assert.equal(guide.includes('token: process.env.FREEDOM_AGENT_TOKEN'), true);
   assert.equal(guide.includes("agent.call('guilds.list')"), true);
+  assert.equal(guide.includes('https://freetwai.com/agent/sdk/v1/agent-client.mjs'), true);
+  assert.equal(guide.includes('https://freetwai.com/agent/sdk/v1/agent-operations.mjs'), true);
+  assert.equal(guide.includes('packages/sdk/agent-client.d.mts'), true);
+  assert.equal(guide.includes('newIdempotencyKey()'), true);
   assert.equal(/fw_agent_/.test(guide), false);
+});
+
+test('agentGuide documents change-ping section, anchor, headers, and Worker verifyAgentPing snippet without secrets', () => {
+  const origin = 'https://freetwai.com';
+  const guide = agentGuide(origin);
+  assert.equal(guide.includes('## 變更通知（選用）'), true);
+  assert.equal(guide.includes('id="change-ping"'), true);
+  assert.equal(guide.includes('Freedom-Ping-Timestamp'), true);
+  assert.equal(guide.includes('Freedom-Ping-Signature'), true);
+  assert.equal(guide.includes('Freedom-Ping-Id'), true);
+  assert.equal(guide.includes('freedom.agent-ping/v1'), true);
+  assert.equal(guide.includes(`${origin}/agent/sdk/v1/agent-client.mjs`), true);
+  assert.equal(guide.includes("import { AgentPingError, verifyAgentPing } from './agent-client.mjs';"), true);
+  assert.equal(guide.includes('await request.text()'), true);
+  assert.equal(guide.includes('GET /api/v1/agent/events'), true);
+  assert.equal(/fw_agent_/.test(guide), false);
+});
+
+test('F1: writes require a valid idempotencyKey before any fetch, GET needs none, newIdempotencyKey returns UUID', async () => {
+  const k1 = newIdempotencyKey();
+  const k2 = newIdempotencyKey();
+  assert.match(k1, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  assert.match(k1, /^[A-Za-z0-9_-]{8,128}$/);
+  assert.notEqual(k1, k2);
+
+  let fetches = 0;
+  const client = createAgentClient({
+    baseUrl: 'https://freetwai.com/api/v1',
+    token: validToken,
+    fetcher: async () => {
+      fetches += 1;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  await assert.rejects(
+    () => client.call('tools.identity', { params: { guild: 'g1', tool: 't1' } }),
+    (err: unknown) =>
+      err instanceof TypeError &&
+      err.message === 'idempotencyKey is required for every write; reuse the same key when you retry',
+  );
+  assert.equal(fetches, 0);
+
+  for (const bad of ['', 'short7!', 'short', 'bad key!', 'a'.repeat(129), 123 as unknown as string]) {
+    await assert.rejects(
+      () => client.call('tools.identity', { params: { guild: 'g1', tool: 't1' }, idempotencyKey: bad }),
+      (err: unknown) =>
+        err instanceof TypeError && err.message === 'idempotencyKey must be 8-128 letters, digits, - or _',
+    );
+    assert.equal(fetches, 0);
+  }
+
+  await client.call('guilds.list');
+  assert.equal(fetches, 1);
+
+  await client.call('tools.identity', { params: { guild: 'g1', tool: 't1' }, idempotencyKey: k1 });
+  assert.equal(fetches, 2);
+});
+
+test('F2: a successful answer must be JSON within 2,000,000 bytes; a failed answer keeps its status as AgentError', async () => {
+  const client = createAgentClient({
+    baseUrl: 'https://freetwai.com/api/v1',
+    token: validToken,
+    fetcher: async (url) => {
+      const target = String(url);
+      if (target.endsWith('/guilds')) {
+        return new Response('<html>502 Bad Gateway</html>', {
+          status: 502,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
+      }
+      if (target.includes('after=html-ok')) {
+        return new Response('<html>Sign in</html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
+      }
+      if (target.includes('after=big-problem')) {
+        return new Response(JSON.stringify({ code: 'x', pad: 'x'.repeat(2_000_001) }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (target.includes('after=too-big')) {
+        const big = JSON.stringify({ pad: 'x'.repeat(2_000_001 - 10) });
+        assert.equal(Buffer.byteLength(big), 2_000_001);
+        return new Response(big, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (target.includes('after=max-ok')) {
+        const exact = JSON.stringify({ pad: 'x'.repeat(2_000_000 - 10) });
+        assert.equal(Buffer.byteLength(exact), 2_000_000);
+        return new Response(exact, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (target.includes('after=ok')) {
+        return new Response(JSON.stringify({ items: [{ id: 'ev1' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+        });
+      }
+      return new Response(JSON.stringify({ code: 'forbidden', detail: 'nope' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  // A proxy's HTML 502 is still an AgentError with its status, so a caller can retry it.
+  await assert.rejects(
+    () => client.call('guilds.list'),
+    (err: unknown) => err instanceof AgentError && err.status === 502 && err.code === 'http_502',
+  );
+
+  await assert.rejects(
+    () => client.events({ after: 'html-ok' }),
+    (err: unknown) => err instanceof TypeError && err.message === 'Platform response is not JSON',
+  );
+
+  // An error body over the cap is not read past it, and the answer keeps its status.
+  await assert.rejects(
+    () => client.events({ after: 'big-problem' }),
+    (err: unknown) => err instanceof AgentError && err.status === 500 && err.code === 'http_500',
+  );
+
+  await assert.rejects(
+    () => client.events({ after: 'too-big' }),
+    (err: unknown) => err instanceof TypeError && err.message === 'Platform response is too large',
+  );
+
+  const exactOk = (await client.events({ after: 'max-ok' })) as { pad: string };
+  assert.equal(exactOk.pad.length, 2_000_000 - 10);
+
+  const normalOk = (await client.events({ after: 'ok' })) as { items: Array<{ id: string }> };
+  assert.equal(normalOk.items[0].id, 'ev1');
+
+  await assert.rejects(
+    () => client.events({ after: 'problem' }),
+    (err: unknown) => err instanceof AgentError && err.status === 403 && err.code === 'forbidden' && err.message === 'nope',
+  );
+});
+
+test('F3: verifyAgentPing matches §2 test vector, check order, header forms, and error codes', async () => {
+  const vectorToken = 'fw_agent_TESTVECTORtestvector0123456789-_abcdefghijk';
+  const expectedTokenHash = '1635af5c9afb050b8e187930f09e9aa6838f5e9dc84b0bbd7fa0a5b1220bec02';
+  const vectorTimestamp = '1794787200';
+  const vectorBody =
+    '{"format":"freedom.agent-ping/v1","ping_id":"00000000-0000-4000-8000-000000000001","connection_id":"00000000-0000-4000-8000-000000000002","test":false}';
+  const vectorSig = 'v1=9dd83cda92f3492dffbedd6b31314b28caae62e80d187e3cc7b3afc3f102ac62';
+  const nowMs = 1794787200 * 1000;
+
+  const signPing = (token: string, timestamp: string, body: string) => {
+    const tokenHash = createHash('sha256').update(token, 'utf8').digest('hex');
+    const hex = createHmac('sha256', Buffer.from(tokenHash, 'ascii'))
+      .update(`freedom.agent-ping/v1\n${timestamp}\n${body}`, 'utf8')
+      .digest('hex');
+    return { tokenHash, sig: `v1=${hex}` };
+  };
+
+  // Independent node:crypto check reproduces the §2 test vector.
+  const vec = signPing(vectorToken, vectorTimestamp, vectorBody);
+  assert.equal(vec.tokenHash, expectedTokenHash);
+  assert.equal(vec.sig, vectorSig);
+
+  // Headers object and plain object (case-insensitive) both verify the test vector.
+  const hObj = new Headers({
+    'Freedom-Ping-Timestamp': vectorTimestamp,
+    'Freedom-Ping-Signature': vectorSig,
+  });
+  const res1 = await verifyAgentPing({ token: vectorToken, body: vectorBody, headers: hObj, now: nowMs });
+  assert.deepEqual(res1, {
+    ping_id: '00000000-0000-4000-8000-000000000001',
+    connection_id: '00000000-0000-4000-8000-000000000002',
+    test: false,
+    timestamp: 1794787200,
+  });
+
+  const res2 = await verifyAgentPing({
+    token: vectorToken,
+    body: vectorBody,
+    headers: {
+      'freedom-ping-timestamp': vectorTimestamp,
+      'FREEDOM-PING-SIGNATURE': vectorSig,
+    },
+    now: nowMs,
+  });
+  assert.deepEqual(res2, res1);
+
+  // Boundary: 300s off passes; 301s off (past or future) fails with ping_expired.
+  await verifyAgentPing({
+    token: vectorToken,
+    body: vectorBody,
+    headers: hObj,
+    now: (1794787200 + 300) * 1000,
+  });
+  for (const offsetSec of [301, -301]) {
+    await assert.rejects(
+      () =>
+        verifyAgentPing({
+          token: vectorToken,
+          body: vectorBody,
+          headers: hObj,
+          now: (1794787200 + offsetSec) * 1000,
+        }),
+      (err: unknown) => err instanceof AgentPingError && err.code === 'ping_expired',
+    );
+  }
+
+  // Wrong token (valid format, wrong value) -> ping_signature_invalid.
+  await assert.rejects(
+    () =>
+      verifyAgentPing({
+        token: `fw_agent_${'b'.repeat(43)}`,
+        body: vectorBody,
+        headers: hObj,
+        now: nowMs,
+      }),
+    (err: unknown) => err instanceof AgentPingError && err.code === 'ping_signature_invalid',
+  );
+
+  // One changed body byte -> ping_signature_invalid.
+  const tamperedBody = vectorBody.replace('"test":false', '"test":true ');
+  await assert.rejects(
+    () => verifyAgentPing({ token: vectorToken, body: tamperedBody, headers: hObj, now: nowMs }),
+    (err: unknown) => err instanceof AgentPingError && err.code === 'ping_signature_invalid',
+  );
+
+  // Invalid signature header format: v2= or 63 hex chars -> ping_malformed (even if expired).
+  for (const badSig of [`v2=${vectorSig.slice(3)}`, vectorSig.slice(0, -1), '']) {
+    await assert.rejects(
+      () =>
+        verifyAgentPing({
+          token: vectorToken,
+          body: vectorBody,
+          headers: { 'freedom-ping-timestamp': '1', 'freedom-ping-signature': badSig },
+          now: nowMs,
+        }),
+      (err: unknown) => err instanceof AgentPingError && err.code === 'ping_malformed',
+    );
+  }
+
+  // Missing header, bad token format, non-string body -> ping_malformed.
+  await assert.rejects(
+    () =>
+      verifyAgentPing({
+        token: vectorToken,
+        body: vectorBody,
+        headers: { 'freedom-ping-timestamp': vectorTimestamp },
+        now: nowMs,
+      }),
+    (err: unknown) => err instanceof AgentPingError && err.code === 'ping_malformed',
+  );
+  await assert.rejects(
+    () => verifyAgentPing({ token: 'bad', body: vectorBody, headers: hObj, now: nowMs }),
+    (err: unknown) => err instanceof AgentPingError && err.code === 'ping_malformed',
+  );
+  await assert.rejects(
+    () => verifyAgentPing({ token: vectorToken, body: 123 as unknown as string, headers: hObj, now: nowMs }),
+    (err: unknown) => err instanceof AgentPingError && err.code === 'ping_malformed',
+  );
+
+  // 4097-byte body -> ping_malformed; 4096-byte signed body passes.
+  const baseObj = {
+    format: 'freedom.agent-ping/v1',
+    ping_id: '00000000-0000-4000-8000-000000000001',
+    connection_id: '',
+    test: true,
+  };
+  const emptyLen = Buffer.byteLength(JSON.stringify(baseObj));
+  const ok4096 = JSON.stringify({ ...baseObj, connection_id: 'x'.repeat(4096 - emptyLen) });
+  assert.equal(Buffer.byteLength(ok4096), 4096);
+  const sig4096 = signPing(vectorToken, vectorTimestamp, ok4096).sig;
+  const ok4096Res = await verifyAgentPing({
+    token: vectorToken,
+    body: ok4096,
+    headers: { 'freedom-ping-timestamp': vectorTimestamp, 'freedom-ping-signature': sig4096 },
+    now: nowMs,
+  });
+  assert.equal(ok4096Res.test, true);
+
+  const tooLong4097 = JSON.stringify({ ...baseObj, connection_id: 'x'.repeat(4097 - emptyLen) });
+  assert.equal(Buffer.byteLength(tooLong4097), 4097);
+  await assert.rejects(
+    () =>
+      verifyAgentPing({
+        token: vectorToken,
+        body: tooLong4097,
+        headers: {
+          'freedom-ping-timestamp': vectorTimestamp,
+          'freedom-ping-signature': signPing(vectorToken, vectorTimestamp, tooLong4097).sig,
+        },
+        now: nowMs,
+      }),
+    (err: unknown) => err instanceof AgentPingError && err.code === 'ping_malformed',
+  );
+
+  // Valid signature over JSON with an extra key -> ping_malformed.
+  const extraBody = JSON.stringify({ ...baseObj, connection_id: 'c1', extra: 1 });
+  await assert.rejects(
+    () =>
+      verifyAgentPing({
+        token: vectorToken,
+        body: extraBody,
+        headers: {
+          'freedom-ping-timestamp': vectorTimestamp,
+          'freedom-ping-signature': signPing(vectorToken, vectorTimestamp, extraBody).sig,
+        },
+        now: nowMs,
+      }),
+    (err: unknown) => err instanceof AgentPingError && err.code === 'ping_malformed',
+  );
+
+  // Order check: bad signature over malformed JSON fails with ping_signature_invalid (not ping_malformed).
+  await assert.rejects(
+    () =>
+      verifyAgentPing({
+        token: vectorToken,
+        body: 'not-json',
+        headers: hObj,
+        now: nowMs,
+      }),
+    (err: unknown) => err instanceof AgentPingError && err.code === 'ping_signature_invalid',
+  );
+
+  // Order check: expired timestamp with wrong signature fails with ping_expired (time before signature).
+  await assert.rejects(
+    () =>
+      verifyAgentPing({
+        token: vectorToken,
+        body: 'not-json',
+        headers: hObj,
+        now: (1794787200 + 301) * 1000,
+      }),
+    (err: unknown) => err instanceof AgentPingError && err.code === 'ping_expired',
+  );
+});
+
+test('F4: served SDK copies match source bytes and /agent/sdk/v1/* allows CORS', async () => {
+  const clientSrc = readFileSync(new URL('../../packages/sdk/agent-client.mjs', import.meta.url));
+  const clientServed = readFileSync(
+    new URL('../../apps/portal-web/public/agent/sdk/v1/agent-client.mjs', import.meta.url),
+  );
+  assert.equal(clientServed.equals(clientSrc), true);
+
+  const opsSrc = readFileSync(new URL('../../packages/sdk/agent-operations.mjs', import.meta.url));
+  const opsServed = readFileSync(
+    new URL('../../apps/portal-web/public/agent/sdk/v1/agent-operations.mjs', import.meta.url),
+  );
+  assert.equal(opsServed.equals(opsSrc), true);
+
+  for (const path of ['/agent/sdk/v1/agent-client.mjs', '/agent/sdk/v1/agent-operations.mjs']) {
+    const res = await app.request(`${origin}${path}`);
+    assert.equal(res.headers.get('access-control-allow-origin'), '*');
+  }
 });

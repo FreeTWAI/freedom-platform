@@ -13,6 +13,13 @@ export interface AgentDiscoveryDocument {
   guide_url: string;
   mcp_url: string;
   change_feed_url: string;
+  change_ping: {
+    format: 'freedom.agent-ping/v1';
+    signature: 'hmac-sha256';
+    key: 'sha256-hex-of-agent-token';
+    settings: '#automation/agent';
+    guide_url: string;
+  };
   authentication: {
     scheme: 'bearer';
     header: 'Authorization';
@@ -25,6 +32,11 @@ export interface AgentDiscoveryDocument {
     guide_url: string;
     jwks_url: string;
     template: string;
+  };
+  sdk: {
+    client_url: string;
+    operations_url: string;
+    types: string;
   };
   development_map_url: string;
 }
@@ -54,6 +66,13 @@ export function agentDiscovery(origin: string): AgentDiscoveryDocument {
     guide_url: `${base}/agent.md`,
     mcp_url: `${base}/api/v1/mcp`,
     change_feed_url: `${base}/api/v1/agent/events`,
+    change_ping: {
+      format: 'freedom.agent-ping/v1',
+      signature: 'hmac-sha256',
+      key: 'sha256-hex-of-agent-token',
+      settings: '#automation/agent',
+      guide_url: `${base}/agent.md#change-ping`,
+    },
     authentication: {
       scheme: 'bearer',
       header: 'Authorization',
@@ -66,6 +85,11 @@ export function agentDiscovery(origin: string): AgentDiscoveryDocument {
       guide_url: `${base}/guild-tool.md`,
       jwks_url: `${base}/.well-known/guild-tool-jwks.json`,
       template: 'https://github.com/FreeTWAI/freedom-platform/tree/main/templates/guild-tool',
+    },
+    sdk: {
+      client_url: `${base}/agent/sdk/v1/agent-client.mjs`,
+      operations_url: `${base}/agent/sdk/v1/agent-operations.mjs`,
+      types: 'packages/sdk/agent-client.d.mts',
     },
     development_map_url: `${base}/.well-known/freedom-development.json`,
   };

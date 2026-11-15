@@ -6,6 +6,8 @@
 
 ## 本輪實作範圍
 
+想要只用一把 Agent 金鑰時，會員在完成公會資格、GitHub 連動、同意與 Repo 啟用後，可到「自動化 → 我的 Agent」建立勾選 `share` 範圍的 `fw_agent_` 金鑰，經由 `development.propose`（`POST /api/v1/me/development/:kind/:target/proposals`，搭配 `read` 範圍的 `development.status`）查看狀態與保存私人開發提案；`consent`、`activate`、`keys`、`revoke` 仍限會員本人操作。開發任務視窗核發的 60 分鐘 `fpd_` 憑證與 `/development-agent/v1/proposals` 端點仍維持可用。
+
 技能書的「開發這本技能書」與頁面下方的「啟用這一頁的開發」共用任務視窗。未加入時提供相應公會選擇，不要求同時加入兩個 AI 公會，也不改主力公會。OAuth 返回可從分頁儲存的安全 capability／target 恢復任務；不存秘密。公開原作與 Agent 文件仍可閱讀。
 
 `modules/development-access/` 實作 capability `skill`／`platform`，作用為保存本人指定目標的**私人開發提案**。不是原作寫入、合併、平台部署或既有技能書內容管理權。既有投稿 key、一般 `skill.submit` 及具名教材維護任命保持原契約。Agent 執行本機修改與 GitHub push／PR 使用本人另外提供的 GitHub 授權。

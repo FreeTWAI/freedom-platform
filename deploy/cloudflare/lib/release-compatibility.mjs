@@ -270,6 +270,8 @@ const FOUNDATION_NAMES = [
   '213_share_preview_facts.sql',
   // Expiry for member-proposed guild tool drafts (24 hours) and a check that enabled tools never expire; no publication, admin or release authority.
   '214_guild_tool_drafts.sql',
+  // Optional member-configured HTTPS wake-up ping URL and delivery cursor/retry state per agent token connection; carries no member data or authority.
+  '215_agent_change_pings.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
