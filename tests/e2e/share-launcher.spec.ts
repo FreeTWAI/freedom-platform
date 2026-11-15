@@ -1,6 +1,17 @@
 import {randomUUID} from 'node:crypto';
-import {test,expect,type Page} from './fixtures.js';
+import {test,expect,type Page,type Request} from './fixtures.js';
 import {person,login as loginMember,open,post,launchStore,storeArea} from './hosted-store-fixture.js';
+
+// The 動態 feed records a read for any post that stays half visible for a second
+// (SocialInteractions.tsx), and posts made by earlier specs can be on screen here.
+// A read is not content, so the no-publication checks skip that one request and nothing else.
+const isFeedReadPath=(pathname:string)=>/^\/api\/v1\/social-posts\/[^/]+\/read$/.test(pathname);
+const contentWrite=(request:Request)=>request.method()==='POST'&&!isFeedReadPath(new URL(request.url()).pathname);
+
+test('the no-publication checks skip the feed read receipt and nothing else',()=>{
+  expect(isFeedReadPath('/api/v1/social-posts/post-id/read')).toBe(true);
+  for(const pathname of ['/api/v1/social-posts','/api/v1/social-posts/notes','/api/v1/social-posts/post-id/edit','/api/v1/social-posts/post-id/comments','/api/v1/social-posts/post-id/like','/api/v1/social-posts/post-id/public-sharing','/api/v1/social-posts/post-id/read/extra','/api/v1/me/notifications/notice-id/read'])expect(isFeedReadPath(pathname)).toBe(false);
+});
 
 async function login(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
@@ -20,7 +31,7 @@ async function choose(page:Page,label:string){
 
 for(const width of [1280,320])test(`one visible entry opens actual post, work, resource and product controls without automatic publication (${width}px)`,async({page})=>{
   await page.setViewportSize({width,height:844});await login(page);
-  const writes:string[]=[];page.on('request',request=>{if(request.method()==='POST')writes.push(new URL(request.url()).pathname);});
+  const writes:string[]=[];page.on('request',request=>{if(contentWrite(request))writes.push(new URL(request.url()).pathname);});
   const title=`入口分享作品 ${width}`;
   await choose(page,'分享作品');await page.getByRole('button',{name:'發布作品',exact:true}).click();await expect(page.getByLabel('作品標題',{exact:true})).toBeFocused();
   expect(writes).toEqual([]);
@@ -207,7 +218,7 @@ test('an unavailable share page reports failure, keeps retry and does not create
 
  test('expanded share kinds reach events, services, collaboration, cocreation and drafts without publication',async({page})=>{
   await login(page);
-  const writes:string[]=[];page.on('request',request=>{if(request.method()==='POST')writes.push(new URL(request.url()).pathname);});
+  const writes:string[]=[];page.on('request',request=>{if(contentWrite(request))writes.push(new URL(request.url()).pathname);});
   // 活動 stays in the share box: it opens the three-field event form instead of leaving.
   await choose(page,'刊登商品');
   const box=page.getByRole('dialog',{name:'分享',exact:true});

@@ -134,6 +134,9 @@ test('failed callback stays unconfigured and returns to fresh setup without resu
 test('setup blocks an unexpected external form target and never presents it as successful',async({page})=>{
   await adminFixtures(page,{start:route=>route.fulfill({json:{target:'https://github.com.evil.invalid/organizations/FreeTWAI/settings/apps/new',manifest}})});
   const outbound:string[]=[];page.on('request',request=>{if(new URL(request.url()).protocol==='https:')outbound.push(request.url());});
-  await openSetup(page);await page.getByRole('button',{name:'建立 GitHub App',exact:true}).click();
-  await expect(page.getByRole('alert')).toHaveText('GitHub 設定網址不正確。');await expect(page).toHaveURL(/\/admin\?view=github$/);expect(outbound).toEqual([]);await expect(page.getByRole('button',{name:'建立 GitHub App',exact:true})).toBeEnabled();
+  // The admin menu opens a screen that is not a management list with manage=0 (AdminPanel writeManage).
+  // The refused target must leave this exact same-origin address in place.
+  await openSetup(page);const setup=new URL('/admin?view=github&manage=0',page.url()).href;await expect(page).toHaveURL(setup);
+  await page.getByRole('button',{name:'建立 GitHub App',exact:true}).click();
+  await expect(page.getByRole('alert')).toHaveText('GitHub 設定網址不正確。');await expect(page).toHaveURL(setup);expect(outbound).toEqual([]);await expect(page.getByRole('button',{name:'建立 GitHub App',exact:true})).toBeEnabled();
 });
