@@ -21,6 +21,7 @@ import {
   signAgentPing,
   sweepAgentPings,
 } from '../../modules/client-connections/agent-pings.js';
+import { AgentPingError, verifyAgentPing } from '../../packages/sdk/agent-client.mjs';
 
 test('isProviderHostedUrl with AGENT_PING_SUFFIXES enforces provider-hosted HTTPS URLs', () => {
   assert.equal(PROVIDER_HOSTING_SUFFIXES.includes('github.io'), true);
@@ -655,6 +656,14 @@ test('F7: sweeper sends on new change, skips idle/late-commit until committed, a
     sentRequests[0].headers['Freedom-Ping-Signature'],
     signAgentPing(storedHash, sentRequests[0].headers['Freedom-Ping-Timestamp'], sentRequests[0].body),
   );
+  // The agent's side: the SDK verifier accepts the swept ping with the agent's own token.
+  const verified = await verifyAgentPing({
+    token: issued.access_token,
+    body: sentRequests[0].body,
+    headers: sentRequests[0].headers,
+  });
+  assert.equal(verified.connection_id, issued.connection_id);
+  assert.equal(verified.test, false);
   const after1 = (
     await pool.query('SELECT pinged_cursor::text FROM agent_change_pings WHERE connection_id=$1', [issued.connection_id])
   ).rows[0].pinged_cursor;
@@ -915,6 +924,16 @@ test('F7: revoked, expired, suspended, no-read, inactive user and onboarding-pen
   assert.notEqual(
     seen[0].headers['Freedom-Ping-Signature'],
     signAgentPing(oldHash, seen[0].headers['Freedom-Ping-Timestamp'], seen[0].body),
+  );
+  // The SDK accepts the renewed key's ping with the new token and rejects it with the old one.
+  assert.equal(
+    (await verifyAgentPing({ token: renewed.data.access_token, body: seen[0].body, headers: seen[0].headers }))
+      .connection_id,
+    renewed.data.connection_id,
+  );
+  await assert.rejects(
+    verifyAgentPing({ token: kLive.access_token, body: seen[0].body, headers: seen[0].headers }),
+    (error: unknown) => error instanceof AgentPingError,
   );
 
   // Inactive user blocks live key
