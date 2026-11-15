@@ -5,6 +5,8 @@ import {socialMetadataInput} from '../../../modules/community/social-content.js'
 import {projectInput} from '../../../modules/opensource-marketing/service.js';
 import {showcaseInput} from '../../../modules/opportunity-project-work/business.js';
 import {shareInput} from '../../../modules/shares/service.js';
+import {manualInput} from '../../../modules/skill-submissions/service.js';
+import {kind as developmentKind,proposalInput} from '../../../modules/development-access/service.js';
 import {SOCIAL_PLATFORMS} from '../../../packages/shared/share-url.js';
 import {SERVICE_CATEGORIES,SERVICE_MODES} from '../../../packages/shared/member-service.js';
 import {text} from '../../../packages/shared/validation.js';
@@ -58,11 +60,18 @@ export const agentBodySchemas:Record<string,z.ZodType>={
  'services.resume':empty,
  'services.delete':empty,
  'works.create':showcaseInput,
+ 'skills.drafts':empty,
+ 'skills.draft_read':empty,
+ 'skills.draft':manualInput,
+ 'skills.revise':manualInput,
+ 'development.status':empty,
+ 'development.propose':proposalInput,
  'profile.read':empty,
 };
 export const agentPathSchemas:Record<string,z.ZodType>={
  id:z.uuid(),share_id:z.uuid(),guild:z.string().regex(/^guild_[a-zA-Z0-9_]+$/).max(100),
  tool:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),
+ kind:developmentKind,target:z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
 };
 const offset=z.number().int().min(0).max(10000).optional();
 export const agentQuerySchemas:Record<string,z.ZodObject>={
@@ -225,6 +234,33 @@ const socialCommentView=z.looseObject({
  revision:z.number().int(),
  author:z.looseObject({user_id:z.string(),display_name:z.string(),avatar_url:z.string().nullable()}),
  mine:z.boolean(),
+});
+const skillSubmissionView=z.looseObject({
+ submission_id:z.string(),
+ status:z.string(),
+ aggregate_version:z.number().int(),
+ payload:z.record(z.string(),z.unknown()).nullable(),
+ project_id:z.string().nullable(),
+ seed:z.record(z.string(),z.unknown()).nullable(),
+ upgrades_submission_id:z.string().nullable(),
+ upgrade:z.looseObject({submission_id:z.string(),status:z.string()}).nullable(),
+ can_upgrade:z.boolean(),
+ catalog_book:z.looseObject({book_id:z.string(),title:z.string(),public_path:z.string()}).nullable(),
+ can_edit:z.boolean(),
+ public_path:z.string().nullable(),
+ illustration_url:z.string().nullable(),
+ grant_expires_at:z.string().nullable(),
+ grant_consumed_at:z.string().nullable(),
+ grant_revoked_at:z.string().nullable(),
+ created_at:z.string(),
+ updated_at:z.string(),
+});
+const developmentProposalView=z.looseObject({
+ proposal_id:z.string(),
+ title:z.string(),
+ summary:z.string(),
+ pr_url:z.string().nullable(),
+ created_at:z.string(),
 });
 export const agentResponseSchemas:Record<string,z.ZodType>={
  'guilds.list':z.looseObject({
@@ -519,6 +555,30 @@ export const agentResponseSchemas:Record<string,z.ZodType>={
   via_agent:z.boolean(),
   share_id:z.string(),
  }),
+ 'skills.drafts':z.looseObject({items:z.array(skillSubmissionView)}),
+ 'skills.draft_read':skillSubmissionView,
+ 'skills.draft':skillSubmissionView,
+ 'skills.revise':skillSubmissionView,
+ 'development.status':z.looseObject({
+  capability:developmentKind,
+  target:z.looseObject({key:z.string(),title:z.string(),repository:z.string(),guide_url:z.string()}),
+  guilds:z.array(z.looseObject({guild_key:z.string(),name:z.string(),state:z.string().nullable(),aggregate_version:z.number().int().nullable()})),
+  eligible:z.boolean(),
+  intern_blocked:z.boolean(),
+  github:z.looseObject({id:z.string(),login:z.string()}).nullable(),
+  app:z.looseObject({configured:z.boolean(),installation_url:z.string().nullable()}),
+  policy_version:z.string(),
+  consent:z.boolean(),
+  grant:z.looseObject({
+   grant_id:z.string(),capability:z.string(),target_key:z.string(),target_repository:z.string(),
+   working_repository:z.string(),guild_sources:z.array(z.string()),policy_version:z.string(),
+   checked_at:z.string(),expires_at:z.string(),revoked_at:z.string().nullable(),revoke_reason:z.string().nullable(),
+  }).nullable(),
+  enabled:z.boolean(),
+  keys:z.array(z.looseObject({key_id:z.string(),source_grant_id:z.string(),scope:z.string(),expires_at:z.string(),revoked_at:z.string().nullable()})),
+  proposals:z.array(developmentProposalView),
+ }),
+ 'development.propose':developmentProposalView,
  'profile.read':z.looseObject({
   profile:z.looseObject({
    profile_id:z.string(),

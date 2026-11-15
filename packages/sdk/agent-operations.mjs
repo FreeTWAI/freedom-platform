@@ -309,6 +309,48 @@ export const agentOperations = [
     "if_match": false
   },
   {
+    "id": "skills.drafts",
+    "method": "GET",
+    "path": "/me/skill-submissions",
+    "scope": "read",
+    "if_match": false
+  },
+  {
+    "id": "skills.draft_read",
+    "method": "GET",
+    "path": "/me/skill-submissions/{id}",
+    "scope": "read",
+    "if_match": false
+  },
+  {
+    "id": "skills.draft",
+    "method": "POST",
+    "path": "/me/skill-submissions/manual",
+    "scope": "share",
+    "if_match": false
+  },
+  {
+    "id": "skills.revise",
+    "method": "POST",
+    "path": "/me/skill-submissions/{id}/manual",
+    "scope": "share",
+    "if_match": true
+  },
+  {
+    "id": "development.status",
+    "method": "GET",
+    "path": "/me/development/{kind}/{target}",
+    "scope": "read",
+    "if_match": false
+  },
+  {
+    "id": "development.propose",
+    "method": "POST",
+    "path": "/me/development/{kind}/{target}/proposals",
+    "scope": "share",
+    "if_match": false
+  },
+  {
     "id": "profile.read",
     "method": "GET",
     "path": "/me/positioning",

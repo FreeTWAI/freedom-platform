@@ -472,6 +472,74 @@ export const agentOperations = [
     }
   },
   {
+    "id": "skills.drafts",
+    "method": "GET",
+    "route": "/api/v1/me/skill-submissions",
+    "scope": "read",
+    "title": "查看我的技能書草稿",
+    "screen": "works"
+  },
+  {
+    "id": "skills.draft_read",
+    "method": "GET",
+    "route": "/api/v1/me/skill-submissions/:id",
+    "scope": "read",
+    "title": "查看一份技能書草稿",
+    "screen": "works"
+  },
+  {
+    "id": "skills.draft",
+    "method": "POST",
+    "route": "/api/v1/me/skill-submissions/manual",
+    "scope": "share",
+    "title": "交技能書私人草稿",
+    "screen": "works",
+    "example": {
+      "repository_url": "https://github.com/example/project",
+      "title": "技能書名稱",
+      "description": "技能書簡介",
+      "use_notes": "先閱讀 README 再開始使用",
+      "relationship": "curator"
+    }
+  },
+  {
+    "id": "skills.revise",
+    "method": "POST",
+    "route": "/api/v1/me/skill-submissions/:id/manual",
+    "scope": "share",
+    "title": "修改自己的技能書草稿",
+    "screen": "works",
+    "ifMatch": true,
+    "example": {
+      "repository_url": "https://github.com/example/project",
+      "title": "更新後技能書",
+      "description": "更新後簡介",
+      "use_notes": "更新後使用方式",
+      "relationship": "curator"
+    }
+  },
+  {
+    "id": "development.status",
+    "method": "GET",
+    "route": "/api/v1/me/development/:kind/:target",
+    "scope": "read",
+    "title": "查看開發權限狀態",
+    "screen": "guilds"
+  },
+  {
+    "id": "development.propose",
+    "method": "POST",
+    "route": "/api/v1/me/development/:kind/:target/proposals",
+    "scope": "share",
+    "title": "交私人開發提案",
+    "screen": "guilds",
+    "example": {
+      "title": "改善說明文件",
+      "summary": "補齊操作步驟與常見問題說明",
+      "pr_url": null
+    }
+  },
+  {
     "id": "profile.read",
     "method": "GET",
     "route": "/api/v1/me/positioning",

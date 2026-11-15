@@ -4,7 +4,7 @@ import {agentOperations} from '../../apps/platform-api/src/agent-allowlist.js';
 import {agentBodySchemas,agentJsonSchema,agentPendingSchema,agentResponseSchemas} from '../../apps/platform-api/src/agent-schemas.js';
 import {agentContract} from '../../modules/client-connections/agent-contract.js';
 import {z} from 'zod';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,randomBytes} from 'node:crypto';
 import {Pool} from 'pg';
 import {createPool} from '../../packages/db/index.js';
 import {migrate} from '../../scripts/database.js';
@@ -102,6 +102,8 @@ test('every operation with a response schema parses its live REST agent answer o
   const savedPos=await req('/api/v1/me/positioning',{session,body:{real_world_occupations:['軟體工程師'],background:'十年系統開發',strengths:['TypeScript'],goals:'打造開源協作工具',weekly_minutes:180,desired_roles:['creator'],selected_tracks:['open_source_developer'],confirmed:true}});
   assert.equal(savedPos.status,201,JSON.stringify(savedPos.data));
  }
+ const seededDraft=await req('/api/v1/me/skill-submissions/manual',{session,body:{repository_url:'https://github.com/example/project',title:'列表測試技能書',description:'列表測試技能書介紹',use_notes:'先讀 README',relationship:'curator'}});
+ assert.equal(seededDraft.status,201,JSON.stringify(seededDraft.data));
  const routes:Record<string,string>={
   'guilds.list':'/api/v1/guilds',
   'tools.list':'/api/v1/public/guilds/guild_games/tools',
@@ -119,6 +121,9 @@ test('every operation with a response schema parses its live REST agent answer o
   'posts.list':'/api/v1/social-posts',
   'posts.comments':`/api/v1/social-posts/${postId}/comments`,
   'services.mine':'/api/v1/member-services/mine',
+  'skills.drafts':'/api/v1/me/skill-submissions',
+  'skills.draft_read':`/api/v1/me/skill-submissions/${seededDraft.data.submission_id}`,
+  'development.status':'/api/v1/me/development/skill/video-autopilot',
   'profile.read':'/api/v1/me/positioning',
  };
  for(const op of agentOperations.filter(op=>op.granted!==false&&op.method==='GET'&&agentResponseSchemas[op.id])){
@@ -126,7 +131,7 @@ test('every operation with a response schema parses its live REST agent answer o
   assert.ok(path,`missing route mapping for ${op.id}`);
   const r=await req(path,{token});
   verifyContractResponse(op.id,r.status,r.data,200);
-  if(op.id==='posts.list'||op.id==='posts.comments'||op.id==='services.mine')assert.ok(r.data.items.length>=1,`expected seeded item for ${op.id}`);
+  if(op.id==='posts.list'||op.id==='posts.comments'||op.id==='services.mine'||op.id==='skills.drafts')assert.ok(r.data.items.length>=1,`expected seeded item for ${op.id}`);
  }
  const filteredPosts=await req(`/api/v1/social-posts?kind=note&post_id=${postId}`,{token});
  verifyContractResponse('posts.list',filteredPosts.status,filteredPosts.data,200);
@@ -235,6 +240,45 @@ test('every write operation with a response schema parses its live REST agent an
  const deletedService=await req(`/api/v1/member-services/${serviceId}`,{token,method:'DELETE',body:{},headers:{'If-Match':`"${resumedService.data.aggregate_version}"`}});
  verifyContractResponse('services.delete',deletedService.status,deletedService.data,200);seen.add('services.delete');
  await runPublicItem(session,'works.create','/api/v1/showcases',{title:'測試分享作品',description:'完整作品介紹與使用方法',public_url:'https://example.com/work',consent_to_share:true},201,seen);
+
+ const draftBody={repository_url:'https://github.com/example/project',title:'測試技能書草稿',description:'技能書草稿介紹',use_notes:'先讀 README',relationship:'curator'};
+ const createdDraft=await req('/api/v1/me/skill-submissions/manual',{token,body:draftBody});
+ verifyContractResponse('skills.draft',createdDraft.status,createdDraft.data,201);seen.add('skills.draft');
+ const revisedDraft=await req(`/api/v1/me/skill-submissions/${createdDraft.data.submission_id}/manual`,{token,body:{...draftBody,title:'更新後技能書草稿'},headers:{'If-Match':`"${createdDraft.data.aggregate_version}"`}});
+ verifyContractResponse('skills.revise',revisedDraft.status,revisedDraft.data,200);seen.add('skills.revise');
+
+ const devGithubFetch:typeof fetch=async input=>{
+  const u=String(input);
+  if(u==='https://github.com/login/oauth/access_token')return Response.json({access_token:'ghu_synthetic',token_type:'bearer',scope:''});
+  if(u==='https://api.github.com/user')return Response.json({id:42,login:'contributor'});
+  if(u.startsWith('https://api.github.com/applications/'))return new Response(null,{status:204});
+  if(u.startsWith('https://api.github.com/user/installations?'))return Response.json({installations:[{id:77,app_id:9,account:{id:42},suspended_at:null,permissions:{metadata:'read'}}]});
+  if(u.includes('/repositories?'))return Response.json({repositories:[{id:200,full_name:'contributor/video-autopilot-kit',private:false,permissions:{push:true}}]});
+  if(u.includes('/repos/')){
+   const name=u.split('/repos/')[1],own=name.startsWith('contributor/');
+   return Response.json({id:own?200:100,full_name:name,private:false,archived:false,owner:{id:own?42:7},permissions:{push:true},...(own?{source:{id:100}}:{})});
+  }
+  throw new Error('Unexpected dev GitHub fixture: '+u);
+ };
+ const devApp=createApp(pool,origin,'local',{eventParticipationEnabled:true,socialAchievementsEnabled:true,githubSocial:{config:{clientId:'Iv1.synthetic',clientSecret:'synthetic-secret',tokenKey:randomBytes(32).toString('base64'),redirectUri:origin+'/github/callback',appId:'9',appSlug:'synthetic-app'},fetcher:devGithubFetch}});
+ const guildCheck=(await pool.query("SELECT aggregate_version,state FROM positioning_profession_memberships WHERE user_id=$1 AND guild_key='guild_ai_vibe'",[session.user.user_id])).rows[0];
+ if(guildCheck?.state!=='active'){
+  const joined=await req('/api/v1/guilds/guild_ai_vibe/join',{app:devApp,session,body:{},...(guildCheck?{headers:{'If-Match':`"${guildCheck.aggregate_version}"`}}:{})});
+  assert.equal(joined.status,200,JSON.stringify(joined.data));
+ }
+ await pool.query("UPDATE positioning_profession_memberships SET member_tier='full' WHERE user_id=$1 AND guild_key='guild_ai_vibe'",[session.user.user_id]);
+ const ghStart=await req('/api/v1/me/github/connect',{app:devApp,session,body:{return_to:'#skills'}});
+ assert.equal(ghStart.status,200,JSON.stringify(ghStart.data));
+ const ghComplete=await req('/api/v1/me/github/complete',{app:devApp,session,body:{state:new URL(ghStart.data.authorization_url).searchParams.get('state')!,code:'synthetic-code'}});
+ assert.equal(ghComplete.status,200,JSON.stringify(ghComplete.data));
+ const devConsent=await req('/api/v1/me/development/skill/video-autopilot/consent',{app:devApp,session,body:{policy_version:'development-proposal-v1',accepted:true}});
+ assert.equal(devConsent.status,200,JSON.stringify(devConsent.data));
+ const devActivate=await req('/api/v1/me/development/skill/video-autopilot/activate',{app:devApp,session,body:{working_repository_url:'https://github.com/contributor/video-autopilot-kit'}});
+ assert.equal(devActivate.status,200,JSON.stringify(devActivate.data));
+ const devProposal=await req('/api/v1/me/development/skill/video-autopilot/proposals',{app:devApp,token,body:{title:'改善開發說明測試',summary:'補充測試步驟與指引。',pr_url:null}});
+ verifyContractResponse('development.propose',devProposal.status,devProposal.data,200);seen.add('development.propose');
+ const populatedDevStatus=await req('/api/v1/me/development/skill/video-autopilot',{app:devApp,token});
+ verifyContractResponse('development.status',populatedDevStatus.status,populatedDevStatus.data,200);
 
  const expectedWrites=agentOperations.filter(op=>op.granted!==false&&op.method!=='GET'&&agentResponseSchemas[op.id]).map(op=>op.id).sort();
  assert.deepEqual([...seen].sort(),expectedWrites);

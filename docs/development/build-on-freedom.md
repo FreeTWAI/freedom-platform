@@ -33,7 +33,8 @@
 
 會員本人可建立金鑰，讓外部 Agent 透過 REST API、MCP 或 SDK 操作已授權的範圍。
 
-- **金鑰與權限範圍**：登入平台後到「自動化 → 我的 Agent」建立 `fw_agent_` 金鑰（僅顯示一次；90 天到期，每人最多 20 把有效金鑰，續期會撤銷舊金鑰）。可勾選範圍為 `read`（讀取）、`share`（分享）、`rsvp`（報名）、`react`（回應）。請帶 `Authorization: Bearer $FREEDOM_AGENT_TOKEN`，不可同時送出 Cookie 或 `X-CSRF-Token`。
+- **金鑰與權限範圍**：登入平台後到「自動化 → 我的 Agent」建立 `fw_agent_` 金鑰（僅顯示一次；90 天到期，每人最多 20 把有效金鑰，續期會撤銷舊金鑰）。可勾選範圍為 `read`（讀取）、`share`（分享、交私人草稿）、`rsvp`（報名）、`react`（回應）。請帶 `Authorization: Bearer $FREEDOM_AGENT_TOKEN`，不可同時送出 Cookie 或 `X-CSRF-Token`。
+  - **交私人草稿**：以同一把勾選 `share` 的 `fw_agent_` 金鑰，可透過 `skills.draft`、`skills.revise` 與 `development.propose`（搭配 `read` 讀取 `skills.drafts`、`skills.draft_read`、`development.status`）建立或修改私人技能書草稿與私人開發提案，不需首次公開確認；公開發布與權限啟用仍限會員本人。既有的技能上傳金鑰（`fpk_`／`fpg_`）與開發憑證（`fpd_`）仍維持可用。
 - **指引、契約與探索**：
   - 文字指引：[/agent.md](https://freetwai.com/agent.md)
   - OpenAPI 契約：[/agent/openapi.json](https://freetwai.com/agent/openapi.json)

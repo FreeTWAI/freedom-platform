@@ -42,7 +42,8 @@ const keyInput = z.object({
 const publishInput = z.object({ consent_to_share: z.literal(true, { message: '公開前需勾選同意分享。' }) }).strict();
 // Browser forms keep the agent protocol (including its 100 introductions) intact.
 // Manual submissions use one share introduction derived only from the author's text.
-const manualInput = projectInput.omit({ consent_to_share: true }).extend({
+const manualProvenance = (actor: Actor) => actor.agent ? { source: 'agent', connection_id: actor.agent.connection_id } : { source: 'browser_form' };
+export const manualInput = projectInput.omit({ consent_to_share: true }).extend({
   use_notes: z.string().trim().max(3000).default('請先閱讀原作 README，依其中的安裝步驟開始使用；使用條件與授權以原作文件為準。'),
   page_content: submissionPageContent.optional(),
   page_content_draft: z.unknown().refine(validSkillPageDraft, { message: '介紹頁草稿格式不符或欄位過長。' }).transform(value => value as SkillPageDraft).optional(),
@@ -151,7 +152,7 @@ export async function createManualSubmission(pool: Pool, input: Command) {
     const row = (await q.query(`INSERT INTO skill_submissions(submission_id,community_id,owner_ref,status,payload,payload_sha256,grant_consumed_at)
       VALUES($1,$2,$3,'ready_for_review',$4,$5,now()) RETURNING ${SUBMISSION_COLUMNS}`,
       [id, input.actor.community_id, input.actor.user_id, JSON.stringify(payload), digest(payload)])).rows[0];
-    await journal(q, input.actor, 'skill_submission', id, 1, 'save_manual_draft', { source: 'browser_form', payload_sha256: digest(payload) });
+    await journal(q, input.actor, 'skill_submission', id, 1, 'save_manual_draft', { ...manualProvenance(input.actor), payload_sha256: digest(payload) });
     return submissionView(row);
   });
 }
@@ -224,7 +225,7 @@ export async function reviseManualSubmission(pool: Pool, input: Command, id: str
     const payload = manualPayload(body);
     const row = (await q.query(`UPDATE skill_submissions SET payload=$2,payload_sha256=$3,aggregate_version=aggregate_version+1,updated_at=now()
       WHERE submission_id=$1 RETURNING ${SUBMISSION_COLUMNS}`, [id, JSON.stringify(payload), digest(payload)])).rows[0];
-    await journal(q, input.actor, 'skill_submission', id, row.aggregate_version, 'revise_manual_draft', { payload_sha256: digest(payload) });
+    await journal(q, input.actor, 'skill_submission', id, row.aggregate_version, 'revise_manual_draft', { ...manualProvenance(input.actor), payload_sha256: digest(payload) });
     return submissionView(row);
   });
 }

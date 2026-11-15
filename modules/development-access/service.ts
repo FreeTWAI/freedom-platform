@@ -2,8 +2,10 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
 import {transaction,digest,journal,type Command} from '../../packages/db/index.js';
+import {memberReceiptOperation} from '../../packages/db/member-command.js';
 import {Problem,requireCondition} from '../../packages/shared/problem.js';
 import {tokenHash,type Actor} from '../identity-membership/service.js';
+import {assertAgentClock,consumeAgentBudget,lockAgent} from '../client-connections/agent-authority.js';
 import {lockMemberGuilds} from '../positioning/onboarding.js';
 import {communityCatalog} from '../community/catalog.js';
 import {developmentPages} from '../development/pages.js';
@@ -14,9 +16,9 @@ export const DEVELOPMENT_POLICY='development-proposal-v1';
 import {developmentGuilds,type Capability} from './guild-eligibility.js';
 import {requireFullGuildMember} from '../positioning/member-tier.js';
 export {developmentGuilds,type Capability};
-const kind=z.enum(['skill','platform']);
+export const kind=z.enum(['skill','platform']);
 const empty=z.object({}).strict();
-const proposalInput=z.object({title:z.string().trim().min(1).max(150),summary:z.string().trim().min(1).max(8000),pr_url:z.string().max(500).nullable().default(null)}).strict();
+export const proposalInput=z.object({title:z.string().trim().min(1).max(150),summary:z.string().trim().min(1).max(8000),pr_url:z.string().max(500).nullable().default(null)}).strict();
 const ready='active AND (NOT onboarding_required OR onboarding_completed_at IS NOT NULL)';
 const grantColumns='grant_id,capability,target_key,target_repository,working_repository,guild_sources,policy_version,checked_at,expires_at,revoked_at,revoke_reason';
 function targetFor(capability:Capability,targetKey:string){
@@ -31,12 +33,12 @@ function targetFor(capability:Capability,targetKey:string){
 }
 export class DevelopmentAccess {
   constructor(private pool:Pool,private social:GitHubSocial){}
-  private async member<T>(actor:Actor,run:(q:PoolClient,beginEffects:()=>Promise<void>)=>Promise<T>,browser=true,finish?:(q:PoolClient)=>Promise<void>):Promise<T>{
+  private async member<T>(actor:Actor,run:(q:PoolClient,beginEffects:()=>Promise<void>)=>Promise<T>,authority:'browser'|'member'|'member-write'|'none'='browser',finish?:(q:PoolClient)=>Promise<void>):Promise<T>{
     const result=await transaction(this.pool,async q=>{
       requireCondition((await q.query(`SELECT 1 FROM users WHERE user_id=$1 AND community_id=$2 AND ${ready} FOR SHARE`,[actor.user_id,actor.community_id])).rowCount===1,403,'development_member_required','請先完成會員定位。');
-      if(browser)await this.assertBrowserSession(q,actor);
+      await this.lockAuthority(q,actor,authority,true);
       await lockMemberGuilds(q,actor);
-      if(browser)await this.assertBrowserSession(q,actor);
+      await this.lockAuthority(q,actor,authority,false);
       let effects=false;
       const beginEffects=async()=>{await q.query('SAVEPOINT development_effects');effects=true;};
       let outcome:{value:T}|{error:Problem};
@@ -49,7 +51,7 @@ export class DevelopmentAccess {
       }else{
         try{
           if(finish)await finish(q);
-          if(browser)await this.assertBrowserSession(q,actor);
+          await this.lockAuthority(q,actor,authority,false);
         }catch(error){
           if(!effects||!(error instanceof Problem))throw error;
           await q.query('ROLLBACK TO SAVEPOINT development_effects');outcome={error};
@@ -58,6 +60,19 @@ export class DevelopmentAccess {
       return outcome;
     });
     if('error' in result)throw result.error;return result.value;
+  }
+  private async lockAuthority(q:PoolClient,actor:Actor,authority:'browser'|'member'|'member-write'|'none',initial:boolean){
+    if(authority==='none')return;
+    if(authority==='browser'){
+      requireCondition(!actor.agent,403,'browser_required','此操作需使用瀏覽器登入。');
+      await this.assertBrowserSession(q,actor);return;
+    }
+    if(actor.agent){
+      if(initial)await lockAgent(q,actor,authority==='member-write');
+      else await assertAgentClock(q,actor);
+      return;
+    }
+    await this.assertBrowserSession(q,actor);
   }
   private async assertBrowserSession(q:PoolClient,actor:Actor){
     requireCondition((await q.query('SELECT 1 FROM sessions WHERE token_hash=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE',[actor.session_hash,actor.user_id])).rowCount===1,401,'session_expired','請重新登入。');
@@ -89,14 +104,14 @@ export class DevelopmentAccess {
   }
   private async receipt<T>(q:PoolClient,input:Command,run:()=>Promise<T>):Promise<T>{
     requireCondition(/^[A-Za-z0-9_-]{8,128}$/.test(input.key),400,'idempotency_required','請提供 Idempotency-Key。');
-    const hash=digest(input.body),prior=(await q.query('SELECT * FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3',[input.actor.user_id,input.operation,input.key])).rows[0];
+    const operation=memberReceiptOperation(input),hash=digest(input.body),prior=(await q.query('SELECT * FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3',[input.actor.user_id,operation,input.key])).rows[0];
     if(prior){
       requireCondition(prior.request_sha256===hash,409,'idempotency_conflict','同一操作識別碼不可搭配不同內容。');
       if(prior.response.grant_id)requireCondition((await q.query('SELECT 1 FROM development_grants WHERE grant_id=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>clock_timestamp()',[prior.response.grant_id,input.actor.user_id])).rowCount,403,'development_grant_required','舊授權已撤銷，請重新啟用。');
       return prior.response;
     }
     const value=await run();
-    await q.query('INSERT INTO command_receipts(user_id,operation,idempotency_key,request_sha256,response) VALUES($1,$2,$3,$4,$5)',[input.actor.user_id,input.operation,input.key,hash,JSON.stringify(value)]);
+    await q.query('INSERT INTO command_receipts(user_id,operation,idempotency_key,request_sha256,response) VALUES($1,$2,$3,$4,$5)',[input.actor.user_id,operation,input.key,hash,JSON.stringify(value)]);
     return value;
   }
   async status(actor:Actor,rawKind:string,targetKey:string){
@@ -113,7 +128,7 @@ export class DevelopmentAccess {
       const proposals=(await q.query('SELECT proposal_id,title,summary,pr_url,created_at FROM development_proposals WHERE user_id=$1 AND community_id=$2 AND capability=$3 AND target_key=$4 ORDER BY created_at DESC LIMIT 20',[actor.user_id,actor.community_id,capability,targetKey])).rows;
       return {capability,target,guilds,eligible,intern_blocked:internBlocked,github:connection?{id:connection.github_user_id,login:connection.github_login}:null,app:this.social.developmentApp(),policy_version:DEVELOPMENT_POLICY,consent,grant,
         enabled:Boolean(this.social.developmentApp().configured&&eligible&&consent&&connection&&grant&&grant.target_repository===target.repository&&grant.policy_version===DEVELOPMENT_POLICY&&!grant.revoked_at&&new Date(grant.expires_at)>new Date()),keys,proposals};
-    });
+    },'member');
   }
   async consent(input:Command,rawKind:string,targetKey:string){
     const capability=kind.parse(rawKind);targetFor(capability,targetKey);
@@ -170,7 +185,7 @@ export class DevelopmentAccess {
         secret='fpd_'+randomBytes(32).toString('base64url');
         return {...(await q.query(`INSERT INTO development_keys(key_id,source_grant_id,secret_hash,expires_at) VALUES($1,$2,$3,LEAST(now()+interval '60 minutes',$4)) RETURNING key_id,source_grant_id,scope,expires_at`,[randomUUID(),grant.grant_id,tokenHash(secret),grant.expires_at])).rows[0],working_repository:grant.working_repository,target_repository:grant.target_repository};
       });
-    },true,q=>this.assertGrantClock(q,input.actor,resultGrantId));
+    },'browser',q=>this.assertGrantClock(q,input.actor,resultGrantId));
     return {...result,token:secret};
   }
   async revoke(input:Command,rawKind:string,targetKey:string){
@@ -187,16 +202,17 @@ export class DevelopmentAccess {
     if(body.pr_url)requireCondition(new RegExp('^https://github\\.com/'+grant.target_repository.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'/pull/[1-9][0-9]*$','i').test(body.pr_url),422,'development_pr_target','PR 連結必須指向本次原作 repo。');
     return this.receipt(q,input,async()=>{
       const row=(await q.query('INSERT INTO development_proposals(proposal_id,source_grant_id,community_id,user_id,capability,target_key,title,summary,pr_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING proposal_id,title,summary,pr_url,created_at',[randomUUID(),grant.grant_id,input.actor.community_id,input.actor.user_id,grant.capability,grant.target_key,body.title,body.summary,body.pr_url])).rows[0];
-      await journal(q,input.actor,'development_proposal',row.proposal_id,1,'save_private_proposal',{source_grant_id:grant.grant_id});return row;
+      await journal(q,input.actor,'development_proposal',row.proposal_id,1,'save_private_proposal',{source_grant_id:grant.grant_id,...(input.actor.agent?{source:'agent',connection_id:input.actor.agent.connection_id}:{})});return row;
     });
   }
   async saveProposal(input:Command,rawKind:string,targetKey:string){
     proposalInput.parse(input.body);const capability=kind.parse(rawKind);let grantId!:string;
     return this.member(input.actor,async(q,beginEffects)=>{
+      if(input.actor.agent)await consumeAgentBudget(q,input.actor,input.operation,input.key,input.body,input.expected);
       const grant=await this.authorizeGrant(q,input.actor,capability,targetKey);grantId=grant.grant_id;
       await beginEffects();
       return this.proposal(q,input,grant);
-    },true,q=>this.assertGrantClock(q,input.actor,grantId));
+    },'member-write',q=>this.assertGrantClock(q,input.actor,grantId));
   }
   async agent(authorization:string|undefined,body:unknown,key:string){
     const match=authorization?.match(/^[Bb][Ee][Aa][Rr][Ee][Rr] +(fpd_[A-Za-z0-9_-]{43})$/);
@@ -212,6 +228,6 @@ export class DevelopmentAccess {
       await this.assertKeyClock(q,stored.key_id,stored.grant_id);
       await beginEffects();
       return this.proposal(q,{actor,operation:`agent-development/${stored.key_id}`,body,key},grant);
-    },false,q=>this.assertGrantClock(q,actor,stored.grant_id,stored.key_id));
+    },'none',q=>this.assertGrantClock(q,actor,stored.grant_id,stored.key_id));
   }
 }

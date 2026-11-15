@@ -205,7 +205,7 @@ test('contract and MCP tools/list expose response, 202 pending and 4xx error sch
  const defs=Object.values(agentContract.paths).flatMap((p:any)=>Object.values(p)) as any[];
  for(const op of agentOperations.filter(op=>op.granted!==false)){
   const def=defs.find(d=>d.operationId===op.id)!;
-  const successStatus=['events.share','repositories.share','posts.note','posts.link','posts.comment','services.create','works.create'].includes(op.id)?'201':'200';
+  const successStatus=['events.share','repositories.share','posts.note','posts.link','posts.comment','services.create','works.create','skills.draft'].includes(op.id)?'201':'200';
   assert.ok(def.responses[successStatus],op.id);
   const expected=schemas.agentResponseSchemas[op.id];
   if(expected)assert.deepEqual(def.responses[successStatus].content?.['application/json']?.schema,agentJsonSchema(expected),op.id);
