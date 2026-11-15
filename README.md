@@ -1,6 +1,7 @@
 # Freedom Platform
 
 想貢獻一個功能？從[模組貢獻指南](docs/development/module-contributions.md)查詢模組、建立骨架與提交 PR。
+要在自己的 Repo 做公會工具、遊戲或串接 Agent，先看[在自己的 Repo 基於自由工坊開發](docs/development/build-on-freedom.md)。
 
 共同基礎收尾從 [Foundation Complete](docs/platform-plan/execution/unified-foundation/closeout.md) 開始；
 [現況快照](docs/platform-plan/execution/unified-foundation/current-state.json)區分已合併、已部署與實際驗收，

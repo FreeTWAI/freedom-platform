@@ -74,5 +74,8 @@ test('the public guild tool guide describes supported Worker hosts, signer and t
  const guide=guildToolGuide('https://platform.example'),readme=readFileSync('templates/guild-tool/README.md','utf8');
  for(const expected of ['github.io','pages.dev','netlify.app','vercel.app','workers.dev','小寫 DNS','不得明寫 port','Node','FREEDOM_GUILD_TOOL_SIGNING_KEY','generate-guild-tool-signing-key.mjs','GitHub Actions','npm run check','npm run build','預覽','加入啟動台'])assert.ok(guide.includes(expected),expected);
  assert.doesNotMatch(guide,/未安裝任意公開網站安全 egress 的 Worker 會拒絕註冊|沒有新增部署 secret/);
+ assert.ok(guide.includes('提出工具草稿'),'guide mentions member draft proposals');
+ assert.ok(guide.includes('會長或獲發布委任的成員可接受'),'guide mentions leader or publish delegate accepting drafts');
+ assert.doesNotMatch(guide,/只有會長可修改既有登錄及接受修訂/);
  assert.match(readme,/guild-tool\.md/);
 });
