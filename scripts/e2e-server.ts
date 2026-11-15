@@ -228,3 +228,6 @@ const app=createApp(productPool??pool,origin,'local',{guildToolSigner:{privateKe
 app.use('/*',serveStatic({root:'./apps/portal-web/dist'}));
 app.get('*',serveStatic({path:'./apps/portal-web/dist/index.html'}));
 server=serve({fetch:request=>(['/__e2e/ecpay/','/__e2e/commerce/'].some(path=>new URL(request.url).pathname.startsWith(path)))?paymentFixture.routes.fetch(request):app.fetch(request),hostname:'127.0.0.1',port});
+// Node closes an idle keep-alive socket after 6 s (5 s plus a 1 s buffer). A test's API context that reuses
+// the socket at that moment gets "socket hang up". Leave idle sockets open; clients close them with their context.
+(server as import('node:http').Server).keepAliveTimeout=0;
