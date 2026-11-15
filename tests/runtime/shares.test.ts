@@ -13,6 +13,8 @@ import { repositoryFacts } from '../../modules/shares/adapters/repository.js';
 import { creditPromotionClick,promotionGo } from '../../modules/community/promotion.js';
 import { createShowcase, withdrawOwnShowcase, updateOwnShowcase, publishOwnShowcase } from '../../modules/opportunity-project-work/business.js';
 import { readPublicWork, setShowcaseSharing } from '../../modules/opportunity-project-work/public-sharing.js';
+// Text outside tags, read one character at a time (a test reading of trusted markup, not a sanitizer).
+const textOutsideTags=(html:string)=>{let text='',inTag=false;for(const char of html){if(char==='<')inTag=true;else if(char==='>')inTag=false;else if(!inTag)text+=char;}return text;};
 const url=process.env.TEST_DATABASE_URL;
 assert.ok(url,'Set an isolated TEST_DATABASE_URL');
 const schema=`fp_shares_${randomUUID().replaceAll('-','')}`;
@@ -892,7 +894,7 @@ test('public /s/:id and /events/:id have one primary CTA, unique link destinatio
   assert.match(eventHtml, /href="\/#explore\/events"/);
   assert.doesNotMatch(eventHtml, /\sstyle=/i);
   const mainSlice = eventHtml.split('<main>')[1] ?? '';
-  const beforeFirstAction = mainSlice.slice(0, mainSlice.search(/<(?:a|button)\b/)).replace(/<[^>]*>/g, '').replace(event.title, '').trim();
+  const beforeFirstAction = textOutsideTags(mainSlice.slice(0, mainSlice.search(/<(?:a|button)\b/))).replace(event.title, '').trim();
   assert.ok(beforeFirstAction.length <= 20, `expected <=20 static chars before first action, got ${beforeFirstAction.length}: ${beforeFirstAction}`);
 });
 

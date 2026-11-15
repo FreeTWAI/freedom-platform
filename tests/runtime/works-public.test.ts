@@ -5,6 +5,8 @@ import { Pool } from 'pg';
 import { migrate } from '../../scripts/database.js';
 import { DEMO_COMMUNITY, DEMO_PASSWORD, DEMO_USERS, seedLocal } from '../../packages/testing/seed.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
+// Text outside tags, read one character at a time (a test reading of trusted markup, not a sanitizer).
+const textOutsideTags=(html:string)=>{let text='',inTag=false;for(const char of html){if(char==='<')inTag=true;else if(char==='>')inTag=false;else if(!inTag)text+=char;}return text;};
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL must name a disposable database');
@@ -661,7 +663,7 @@ test('UX-V-15: /works/:id has one btn-primary, unique hrefs, short pre-action co
   const foundHrefs = [...foundHtml.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m => m[1]);
   assert.equal(new Set(foundHrefs).size, foundHrefs.length, `duplicate hrefs on /works/:id: ${foundHrefs.join(', ')}`);
   const foundMain = foundHtml.slice(foundHtml.indexOf('<main'), foundHtml.indexOf('</main>'));
-  const foundPre = foundMain.slice(0, foundMain.search(/<a\b[^>]*btn-primary/)).replace(/<[^>]*>/g, '')
+  const foundPre = textOutsideTags(foundMain.slice(0, foundMain.search(/<a\b[^>]*btn-primary/)))
     .replaceAll(DEMO_USERS[0].display_name, '').replace(Array.from(DEMO_USERS[0].display_name)[0] ?? '', '')
     .replaceAll('公開作品測試標題', '').replaceAll('測試摘要內容', '').replaceAll('前往作品外部連結', '').replaceAll('外部連結', '').replace(/\s+/g, '');
   assert.ok(foundPre.length <= 20, `expected <=20 static chars before btn-primary, got ${foundPre.length}: ${foundPre}`);
@@ -682,7 +684,7 @@ test('UX-V-15: /works/:id has one btn-primary, unique hrefs, short pre-action co
     const hrefs = [...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m => m[1]);
     assert.equal(new Set(hrefs).size, hrefs.length, `duplicate hrefs on /works 404: ${hrefs.join(', ')}`);
     const missMain = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
-    const missPre = missMain.slice(0, missMain.search(/<a\b[^>]*btn-primary/)).replace(/<[^>]*>/g, '').replace(/\s+/g, '');
+    const missPre = textOutsideTags(missMain.slice(0, missMain.search(/<a\b[^>]*btn-primary/))).replace(/\s+/g, '');
     assert.ok(missPre.length <= 20, `expected <=20 chars before 404 primary, got ${missPre.length}: ${missPre}`);
   }
 });

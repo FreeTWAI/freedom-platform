@@ -74,7 +74,7 @@ test('published changes persist and mandatory notices deduplicate for members an
  const command=cmd(actors[4],{...fields(current),location:'更新場地',starts_at:'2099-02-02T10:00:00Z',ends_at:'2099-02-02T11:00:00Z'},current.aggregate_version);
  const changed=await updateEvent(pool,command,e.event_id);await updateEvent(pool,command,e.event_id);
  const notice=(await pool.query('SELECT * FROM member_notifications WHERE recipient_ref=$1 AND action_resource_id=$2',[actors[1].user_id,e.event_id])).rows;
- assert.equal(notice.length,1);assert.match(notice[0].body,/更新場地/);assert.match(notice[0].body,/2099/);assert.ok(!JSON.stringify(notice).includes('example.com'));assert.ok(!JSON.stringify(changed).includes('私人訪客'));
+ assert.equal(notice.length,1);assert.match(notice[0].body,/更新場地/);assert.match(notice[0].body,/2099/);assert.doesNotMatch(JSON.stringify(notice),/example\.com/);assert.ok(!JSON.stringify(changed).includes('私人訪客'));
  const changes=(await pool.query('SELECT * FROM community_event_changes WHERE event_id=$1',[e.event_id])).rows;assert.equal(changes.length,1);assert.ok(changes[0].changed_fields.includes('location'));assert.equal(changes[0].event_version,changed.aggregate_version);
  const {readNotificationReminders,saveNotificationPreferences,readNotificationSummary}=await import('../../modules/member-communications/notification-preferences.js');
  const preferences={categories:{friends:'instant',squads:'instant',events:'off',following:'instant'},quiet_hours:{enabled:false,time_zone:'Asia/Taipei',start:'22:00',end:'08:00'},muted_channel_ids:[]};
@@ -109,7 +109,7 @@ test('announcements are owner-only, bounded, replay-safe and limited to three pe
  await assert.rejects(announceEvent(pool,cmd(actors[4],{message:'超過次數'},await version()),e.event_id),{status:429,code:'event_announcement_limit'});
  const sent:string[]=[];await processEventNotices(pool,async(to,_subject,body)=>{assert.equal(to,'announcement@example.com');sent.push(body);},'https://example.org',e.event_id);
  await processEventNotices(pool,async()=>{assert.fail('duplicate guest announcement');},'https://example.org',e.event_id);
- assert.equal(sent.length,3);assert.ok(sent.every(body=>body.includes(`/events/${e.event_id}`)));assert.ok(!sent.some(body=>body.includes('https://example.com/extra')));
+ assert.equal(sent.length,3);assert.ok(sent.every(body=>body.includes(`/events/${e.event_id}`)));assert.ok(!sent.some(body=>body.includes('example.com/extra')));
  assert.equal((await pool.query('SELECT count(*)::int n FROM community_event_announcements WHERE event_id=$1',[e.event_id])).rows[0].n,3);
  assert.equal((await pool.query("SELECT count(*)::int n FROM member_notifications WHERE action_resource_id=$1 AND recipient_ref=$2 AND kind='event_announcement'",[e.event_id,actors[1].user_id])).rows[0].n,3);
  assert.equal((await pool.query("SELECT count(*)::int n FROM member_notifications WHERE action_resource_id=$1 AND recipient_ref=$2",[e.event_id,actors[2].user_id])).rows[0].n,0);

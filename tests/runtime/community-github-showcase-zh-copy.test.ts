@@ -257,7 +257,7 @@ test('UX-M-09: CommunityPanel, GitHubSocial, and ShowcasePanel use Traditional C
   assert.equal(/\bStar\b|\bFork\b|\bIssues?\b|\bWatch\b/.test(fullText), false, `no English Star/Fork/Issue/Watch in rendered UI: ${fullText}`);
 
   const links = walk(container).filter((n) => n.nodeName === 'A');
-  const rawUrlLink = links.find((a) => a.textContent.includes('https://example.com/works/uuid-12345'));
+  const rawUrlLink = links.find((a) => a.textContent.includes('example.com/works/uuid-12345'));
   assert.equal(Boolean(rawUrlLink), false, 'ShowcaseCard link must not print raw URL text');
   const workLink = links.find((a) => a.getAttribute('href') === 'https://example.com/works/uuid-12345');
   assert.equal(workLink?.textContent.trim(), '查看作品 ↗');

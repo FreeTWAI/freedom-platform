@@ -105,7 +105,7 @@ test('agentDiscovery returns public machine-readable discovery metadata without 
   assert.deepEqual(emails, []);
   for (const item of urls) {
     if (item.key === 'template') continue;
-    assert.equal(item.value.startsWith(origin), true, `${item.key}: ${item.value}`);
+    assert.equal(new URL(item.value).origin, origin, `${item.key}: ${item.value}`);
   }
 });
 

@@ -378,10 +378,10 @@ test('I1: step 1 collects repository URL (required, max 300) then step 2 offers 
     const instructionBox = host.nodes().find(n => n.type === 'textarea' && n.props['data-private'] === 'true');
     assert.ok(instructionBox, 'renders private instruction textarea');
     const instr = String(instructionBox.props.value ?? '');
-    assert.equal(instr.includes('https://example.test/agent-api/v1/skill-submissions/agent-draft-1'), true);
+    assert.equal(instr.includes('POST https://example.test/agent-api/v1/skill-submissions/agent-draft-1\n'), true);
     assert.equal(instr.includes('fpg_synthetic_token'), true);
     assert.equal(instr.includes(formatIsoLocal('2030-01-01T00:00:00Z')), true);
-    assert.equal(instr.includes('https://github.com/example/skill'), true);
+    assert.equal(instr.includes('目標專案網址：https://github.com/example/skill\n'), true);
     const copyAgentBtns = host.nodes().filter(n => n.type === 'button' && String(n.props.className ?? '').includes('btn-primary'));
     assert.equal(copyAgentBtns.length, 1, 'has one primary button in agent step');
     assert.equal(textOf(copyAgentBtns[0]).includes('複製給 agent'), true);
@@ -815,7 +815,7 @@ test('I2 (p3-l3b): 更多 in the agent path is closed by default and provides du
     assert.equal(host.text().includes('已撤銷'), true, 'marks revoked key');
 
     // Chat bot prompt + file load + upload to preview
-    const chatPromptBox = host.nodes().find(n => n.type === 'textarea' && n.props.readOnly && String(n.props.value ?? '').includes('https://github.com/example/chat-skill') && !String(n.props.value ?? '').includes('Bearer'));
+    const chatPromptBox = host.nodes().find(n => n.type === 'textarea' && n.props.readOnly && String(n.props.value ?? '').includes('repository_url：https://github.com/example/chat-skill') && !String(n.props.value ?? '').includes('Bearer'));
     assert.ok(chatPromptBox, 'renders chatSkillInstruction prompt with repo URL and without credentials');
     const copyChatBtn = host.nodes().find(n => n.type === 'button' && textOf(n).includes('複製給聊天 AI'))!;
     await copyChatBtn.props.onClick();

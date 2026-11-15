@@ -9,6 +9,7 @@ import {resolve} from 'node:path';
 import {ApiError} from '../../apps/portal-web/src/api.js';
 import * as prizeRules from '../../modules/community/event-prize-details.js';
 import * as prizeIcons from '../../modules/community/event-prize-icons.js';
+import * as shareUrl from '../../packages/shared/share-url.js';
 const {transformSync}=createRequire(resolve(process.cwd(),'package.json'))('esbuild');
 // Actual TSX and shared mutation with deterministic hooks/transport ports.
 // This proves handler behavior, not React DOM, browser, real mail or hosted CI.
@@ -52,6 +53,7 @@ function harness(options:{deferPassiveCleanup?:boolean;deferPrepare?:boolean;pre
     if(name==='./event-banner-client')return {prepareEventMedia:async(c:any,value:any,file:any,kind:string)=>{const command:any={eventId:value.event_id,version:value.aggregate_version,file,kind,key:webcrypto.randomUUID(),generation:c.sessionGeneration,csrfToken:c.csrfToken};preparations.push(command);if(options.prepareFailure)throw options.prepareFailure;if(options.deferPrepare)return new Promise(resolve=>{command.resolve=()=>resolve(command);});return command;},sendEventMedia:(c:any,command:any)=>new Promise((resolve,reject)=>media.push({client:c,command,resolve,reject})),readEventMedia:(c:any,command:any)=>c.get(`/events/${command.eventId}`),currentMediaEvent:(a:any,b:any)=>a.aggregate_version>b.aggregate_version?a:b};
     if(name==='./EventPrizeFields')return prizeFields.exports;if(name==='./EventPrizePhoto')return {EventPrizePhotoEditor:()=>null};if(name==='./event-prize-photo-client')return prizePhotoRules;if(name==='./EventPrizeDetails')return {EventPrizeDetails:()=>null};if(name.includes('modules/community/event-prize-details'))return prizeRules;
     if(name==='../share/ShareButton')return {ShareButton:()=>null,promotionLink:()=>async()=>({path:''})};
+    if(name==='../../../../packages/shared/share-url')return shareUrl;
     if(name.endsWith('.css'))return {};if(['./EventCalendar','./EventParticipation','./EventAttendees','./EventHelpers','./EventAttendance'].includes(name))return new Proxy({},{get:()=>()=>null});throw Error(name);
   };
   runInNewContext(compiled,{module,exports:module.exports,require,crypto:webcrypto,Error,Date,Intl,URL,URLSearchParams,Event:class{},window:{location:{pathname:'/',hash:'#events',search:'',origin:'http://synthetic.test'},confirm:()=>false,addEventListener:(name:string,fn:any)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name),dispatchEvent:()=>notices.push('world')},localStorage:{getItem:()=>null,setItem:()=>{}},navigator:{}});

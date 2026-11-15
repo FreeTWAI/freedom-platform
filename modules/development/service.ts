@@ -33,7 +33,7 @@ export function markdownHttpsUrl(value:string):string{
 }
 function readmePlainText(html:string|null|undefined,maxChars=1600):string|null{
  if(!html)return null;
- const text=html.replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<\/(p|div|h[1-6]|li|pre|blockquote|tr)>/gi,'\n').replace(/<[^>]+>/g,' ').replace(/^[ \t]+/gm,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+ const text=html.replace(/<style\b[\s\S]*?<\/style[^>]*>/gi,' ').replace(/<script\b[\s\S]*?<\/script[^>]*>/gi,' ').replace(/<\/(p|div|h[1-6]|li|pre|blockquote|tr)>/gi,'\n').replace(/<[^>]+>/g,' ').replace(/^[ \t]+/gm,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
  if(!text)return null;
  return text.length>maxChars?text.slice(0,maxChars).trimEnd()+'\n…':text;
 }

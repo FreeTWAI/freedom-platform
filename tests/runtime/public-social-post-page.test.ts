@@ -5,6 +5,10 @@ import {publicPostCatalogResources,publicSocialPostHtml,unavailableSocialPostHtm
 import {communityCatalog} from '../../modules/community/catalog.js';
 import type {PublicSocialPostPage} from '../../modules/community/public-social-posts.js';
 import {anonymousSharedPost,memberPostReturn,publicPostReturn} from '../../apps/portal-web/src/modules/public-post-return.js';
+// Text outside tags, read one character at a time (a test reading of trusted markup, not a sanitizer).
+const textOutsideTags=(html:string)=>{let text='',inTag=false;for(const char of html){if(char==='<')inTag=true;else if(char==='>')inTag=false;else if(!inTag)text+=char;}return text;};
+// Markup without its script elements, found by position (case-insensitive), not by a pattern.
+const withoutScripts=(html:string)=>{const lower=html.toLowerCase();let text='',at=0;for(;;){const start=lower.indexOf('<script',at);if(start<0)return text+html.slice(at);text+=html.slice(at,start);const end=lower.indexOf('</script',start);const close=end<0?-1:lower.indexOf('>',end);if(close<0)return text;at=close+1;}};
 
 const id='17c80987-1d06-4eb3-9cc4-5cc03a4987ec';
 const other='4c80966b-af02-4173-93d3-943fda1c9242';
@@ -188,10 +192,10 @@ test('UX-V-15: public post and unavailable HTML have one btn-primary, unique des
   const hrefs=[...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m=>m[1]);
   assert.equal(new Set(hrefs).size,hrefs.length,`duplicate hrefs: ${hrefs.join(', ')}`);
   const mainHtml=html.slice(html.indexOf('<main'),html.indexOf('</main>'));
-  const beforePrimary=mainHtml.slice(0,mainHtml.search(/<a\b[^>]*btn-primary/)).replace(/<[^>]*>/g,'')
+  const beforePrimary=textOutsideTags(mainHtml.slice(0,mainHtml.search(/<a\b[^>]*btn-primary/)))
     .replace(source.post.author.display_name,'').replace(source.post.note,'').replace(/\d{4}年\d+月\d+日/,'').trim();
   assert.ok(beforePrimary.length<=20,`expected <=20 static chars before btn-primary, got ${beforePrimary.length}: ${beforePrimary}`);
-  let staticOnly=html.slice(html.indexOf('<body'),html.indexOf('</body>')).replace(/<script[\s\S]*?<\/script>/g,'').replace(/<[^>]*>/g,'');
+  let staticOnly=textOutsideTags(withoutScripts(html.slice(html.indexOf('<body'),html.indexOf('</body>'))));
   for(const dyn of [source.post.author.display_name,source.post.note,book.title,...source.related.flatMap(r=>[r.author.display_name,r.title,r.summary])]){
     staticOnly=staticOnly.replaceAll(dyn,'');
   }
@@ -205,7 +209,7 @@ test('UX-V-15: public post and unavailable HTML have one btn-primary, unique des
     const missHrefs=[...miss.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m=>m[1]);
     assert.equal(new Set(missHrefs).size,missHrefs.length,`duplicate 404 hrefs: ${missHrefs.join(', ')}`);
     const missMain=miss.slice(miss.indexOf('<main'),miss.indexOf('</main>'));
-    const missPre=missMain.slice(0,missMain.search(/<a\b[^>]*btn-primary/)).replace(/<[^>]*>/g,'').trim();
+    const missPre=textOutsideTags(missMain.slice(0,missMain.search(/<a\b[^>]*btn-primary/))).trim();
     assert.ok(missPre.length<=20,`expected <=20 chars before 404 primary, got ${missPre.length}: ${missPre}`);
   }
 });

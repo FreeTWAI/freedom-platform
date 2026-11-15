@@ -10,6 +10,8 @@ import {collaborationCss,indexHtml,pageHtml,skillMarkdown,skillPageCss} from '..
 import {SKILL_SHARE_CARD_SIZE,SKILL_SHARE_MANIFEST,skillShareCardSource} from '../../modules/development/skill-share-card.js';
 import {wrapFlowText} from '../../modules/development/skill-flow.js';
 import {skillPageUsage} from '../../modules/development/skill-page.js';
+// Text outside tags, read one character at a time (a test reading of trusted markup, not a sanitizer).
+const textOutsideTags=(html:string)=>{let text='',inTag=false;for(const char of html){if(char==='<')inTag=true;else if(char==='>')inTag=false;else if(!inTag)text+=char;}return text;};
 
 const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const sha256=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex');
@@ -145,7 +147,7 @@ test('UX-V-09: public skill page has one btn-primary, no inline style, no duplic
   assert.equal((html.match(/class="public-share-platforms"/g)??[]).length,1,book.id);
   const bodyStart=visible.slice(visible.indexOf('<body>')+6);
   const firstAction=bodyStart.search(/<(?:a|button)\b/);
-  const preActionText=bodyStart.slice(0,firstAction).replace(/<[^>]+>/g,'').trim();
+  const preActionText=textOutsideTags(bodyStart.slice(0,firstAction)).trim();
   assert.ok(preActionText.length<=20,`${book.id} pre-action text too long: ${preActionText}`);
  }
  const cached=pageHtml('Video Autopilot',skillMarkdown('video-autopilot')!,'/development/skills/video-autopilot.md',undefined,undefined,undefined,undefined,undefined,undefined,false,'',{full_name:'Hao0321/video-autopilot-kit',url:'https://github.com/Hao0321/video-autopilot-kit',original_author:'Hao0321',description:'desc',topics:[],license_spdx:null,default_branch:null,stars:42,quick_start:'npx run',readme_html:'<p>hi</p>',latest_release:{tag_name:'v1.0.0',name:'v1.0.0',html_url:'https://github.com/Hao0321/video-autopilot-kit/releases/tag/v1.0.0',published_at:null},head_sha:null,ahead_of_pin:true,latest_version_label:'v1.0.0',latest_version_url:'https://github.com/Hao0321/video-autopilot-kit/releases',fetched_at:null,fetch_state:null,stale:false});

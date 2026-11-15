@@ -6,6 +6,8 @@ import {runInNewContext} from 'node:vm';
 import * as React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {transformSync} from 'esbuild';
+// Text outside tags, read one character at a time (a test reading of trusted markup, not a sanitizer).
+const textOutsideTags=(html:string)=>{let text='',inTag=false;for(const char of html){if(char==='<')inTag=true;else if(char==='>')inTag=false;else if(!inTag)text+=char;}return text;};
 
 registerHooks({
   load(url, context, nextLoad) {
@@ -82,7 +84,7 @@ test('UX-M-08: WorkbenchPanel keeps all empty states <= 24 Chinese characters an
     assert.doesNotMatch(html, /目前沒有項目/);
     assert.doesNotMatch(html, /可在「接下來」或「其他社群工作」認領/);
     assert.doesNotMatch(html, /你可以在頁尾發布一張/);
-    const plainText = html.replace(/<[^>]+>/g, '');
+    const plainText = textOutsideTags(html);
     const zhCount = (plainText.match(/[\u4e00-\u9fff]/g) ?? []).length;
     assert.ok(zhCount <= 120, `Static Chinese character count too high: ${zhCount}`);
   }
