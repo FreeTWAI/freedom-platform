@@ -997,3 +997,172 @@ test('F7: limits 10 pings per sweep for 12 due rows and concurrent sweeps ping e
   assert.equal(r1.claimed + r2.claimed, 1);
   assert.equal(r1.sent + r2.sent, 1);
 });
+
+test('F7: a sweep held at the member cursor re-checks every claim before sending, so stop, re-save, revoke, renew, expiry, suspension, lost read and member state changes send nothing', async () => {
+  const owner = await ready(0);
+  const userId = owner.user.user_id;
+  await pool.query('INSERT INTO agent_change_cursors(user_id) VALUES($1) ON CONFLICT DO NOTHING', [userId]);
+  const holder = await pool.connect();
+  const holderPid = (await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid as number;
+
+  async function waitForSweepToBlock() {
+    for (let i = 0; i < 500; i++) {
+      const waiting = (
+        await pool.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE $1::int=ANY(pg_blocking_pids(pid))', [
+          holderPid,
+        ])
+      ).rows[0].n;
+      if (waiting > 0) return;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.fail('the sweep never waited for the held cursor row');
+  }
+
+  // Hold the member's cursor row, start a sweep (its claim commits, then it waits for that row), make
+  // the change while it waits, then let it go on.
+  async function heldSweep(change: () => Promise<unknown>) {
+    const urls: string[] = [];
+    await holder.query('BEGIN');
+    await holder.query('SELECT last_cursor FROM agent_change_cursors WHERE user_id=$1 FOR UPDATE', [userId]);
+    const sweeping = sweepAgentPings(pool, async target => {
+      urls.push(String(target));
+      return { status: 200 };
+    });
+    try {
+      await waitForSweepToBlock();
+      const done = await Promise.race([
+        change().then(() => true),
+        new Promise<boolean>(resolve => setTimeout(resolve, 5000, false).unref()),
+      ]);
+      assert.equal(done, true, 'the change must not wait for the held cursor row');
+    } finally {
+      await holder.query('ROLLBACK');
+    }
+    return { result: await sweeping, urls };
+  }
+
+  async function subscribed(index: number, scopes = ['read']) {
+    await pool.query('DELETE FROM agent_change_pings');
+    const key = await issue(owner, scopes);
+    const url = `https://held-${index}.example-user.workers.dev/ping`;
+    const saved = await req(`/api/v1/me/agent-tokens/${key.connection_id}/ping`, { session: owner, body: { notify_url: url } });
+    assert.equal(saved.status, 200, JSON.stringify(saved.data));
+    await pool.query("SELECT record_agent_change($1,$2,'message.received',$3,$4)", [
+      owner.user.community_id,
+      userId,
+      `msg:${randomUUID()}`,
+      randomUUID(),
+    ]);
+    return { key, url };
+  }
+
+  const row = async (connectionId: string) =>
+    (
+      await pool.query('SELECT notify_url,lease_token,last_attempt_at FROM agent_change_pings WHERE connection_id=$1', [
+        connectionId,
+      ])
+    ).rows[0];
+
+  try {
+    // Control: with no change, the held sweep still sends once, after the wait.
+    {
+      const { key, url } = await subscribed(0);
+      const held = await heldSweep(async () => {});
+      assert.deepEqual(held.result, { claimed: 1, sent: 1, failed: 0 });
+      assert.deepEqual(held.urls, [url]);
+      assert.ok((await row(key.connection_id)).last_attempt_at);
+    }
+
+    const browserChanges: Array<[string, (key: any) => Promise<{ status: number }>]> = [
+      ['stop', key => req(`/api/v1/me/agent-tokens/${key.connection_id}/ping`, { session: owner, body: { notify_url: null } })],
+      [
+        're-save',
+        key =>
+          req(`/api/v1/me/agent-tokens/${key.connection_id}/ping`, {
+            session: owner,
+            body: { notify_url: 'https://moved.example-user.workers.dev/ping' },
+          }),
+      ],
+      ['revoke', key => req(`/api/v1/me/agent-tokens/${key.connection_id}/revoke`, { session: owner, body: {} })],
+      [
+        'renew',
+        key => req(`/api/v1/me/agent-tokens/${key.connection_id}/renew`, { session: owner, body: { name: '續期', scopes: ['read'] } }),
+      ],
+    ];
+    for (const [index, [name, change]] of browserChanges.entries()) {
+      const { key, url } = await subscribed(index + 1);
+      let answer: { status: number; data?: any } | undefined;
+      const held = await heldSweep(async () => {
+        answer = await change(key);
+      });
+      assert.ok(answer && answer.status >= 200 && answer.status < 300, `${name}: ${JSON.stringify(answer)}`);
+      assert.deepEqual(held.result, { claimed: 1, sent: 0, failed: 0 }, name);
+      assert.deepEqual(held.urls, [], name);
+      const after = await row(key.connection_id);
+      if (name === 'stop' || name === 'renew') assert.equal(after, undefined, name);
+      else {
+        assert.equal(after.lease_token, null, name);
+        assert.equal(after.last_attempt_at, null, name);
+      }
+      // The next sweep follows the current state only.
+      const next: Array<{ url: string; body: string }> = [];
+      await sweepAgentPings(pool, async (target, init) => {
+        next.push({ url: String(target), body: init.body });
+        return { status: 200 };
+      });
+      if (name === 're-save') assert.deepEqual(next.map(n => n.url), ['https://moved.example-user.workers.dev/ping']);
+      else if (name === 'renew') {
+        assert.deepEqual(next.map(n => n.url), [url]);
+        assert.equal(JSON.parse(next[0].body).connection_id, answer!.data.connection_id);
+      } else assert.deepEqual(next, [], name);
+    }
+
+    const stateChanges: Array<[string, string[], (key: any) => Promise<unknown>, () => Promise<unknown>]> = [
+      [
+        'expiry',
+        ['read'],
+        key =>
+          pool.query("UPDATE agent_token_connections SET expires_at=clock_timestamp()-interval '1 second' WHERE connection_id=$1", [
+            key.connection_id,
+          ]),
+        async () => {},
+      ],
+      [
+        'suspension',
+        ['read'],
+        key => pool.query('UPDATE agent_token_connections SET suspended_at=clock_timestamp() WHERE connection_id=$1', [key.connection_id]),
+        async () => {},
+      ],
+      [
+        'lost read',
+        ['read', 'share'],
+        key => pool.query("UPDATE agent_token_connections SET scopes='{share}' WHERE connection_id=$1", [key.connection_id]),
+        async () => {},
+      ],
+      [
+        'inactive member',
+        ['read'],
+        () => pool.query('UPDATE users SET active=false WHERE user_id=$1', [userId]),
+        () => pool.query('UPDATE users SET active=true WHERE user_id=$1', [userId]),
+      ],
+      [
+        'onboarding pending',
+        ['read'],
+        () => pool.query('UPDATE users SET onboarding_required=true,onboarding_completed_at=NULL WHERE user_id=$1', [userId]),
+        () => pool.query('UPDATE users SET onboarding_completed_at=now() WHERE user_id=$1', [userId]),
+      ],
+    ];
+    for (const [index, [name, scopes, change, restore]] of stateChanges.entries()) {
+      const { key } = await subscribed(index + 10, scopes);
+      const held = await heldSweep(() => change(key));
+      await restore();
+      assert.deepEqual(held.result, { claimed: 1, sent: 0, failed: 0 }, name);
+      assert.deepEqual(held.urls, [], name);
+      const after = await row(key.connection_id);
+      assert.equal(after.lease_token, null, name);
+      assert.equal(after.last_attempt_at, null, name);
+    }
+  } finally {
+    holder.release();
+  }
+});

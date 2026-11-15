@@ -340,7 +340,17 @@ export interface SweepAgentPingsOptions {
   publicOrigin?: string;
 }
 
-/** Claim due ping subscriptions, assign pending feed cursors, send concurrently, and record fenced outcomes. */
+/**
+ * Who may be pinged: a live agent key with `read`, of an active member who has finished onboarding
+ * (`c` is agent_token_connections, `u` is users). The claim and the re-check before sending share it.
+ */
+const PINGABLE_KEY_SQL = `c.kind='agent' AND c.revoked_at IS NULL AND c.suspended_at IS NULL AND c.expires_at>clock_timestamp() AND 'read'=ANY(c.scopes)
+         AND u.active AND (NOT u.onboarding_required OR u.onboarding_completed_at IS NOT NULL)`;
+
+/**
+ * Claim due ping subscriptions, assign pending feed cursors, re-check every claim, send concurrently,
+ * and record fenced outcomes.
+ */
 export async function sweepAgentPings(
   pool: Pool,
   send: AgentPingFetch,
@@ -352,36 +362,28 @@ export async function sweepAgentPings(
       connection_id: string;
       user_id: string;
       community_id: string;
-      notify_url: string;
       pinged_cursor: string;
-      token_hash: string;
     }>(
       `UPDATE agent_change_pings p SET lease_until=clock_timestamp()+interval '2 minutes',lease_token=$1
        FROM (
-        SELECT d.connection_id,c.token_hash FROM agent_change_pings d
+        SELECT d.connection_id FROM agent_change_pings d
         JOIN agent_token_connections c ON c.connection_id=d.connection_id AND c.user_id=d.user_id AND c.community_id=d.community_id
         JOIN users u ON u.user_id=c.user_id AND u.community_id=c.community_id
         WHERE d.paused_at IS NULL AND (d.next_attempt_at IS NULL OR d.next_attempt_at<=clock_timestamp())
          AND (d.lease_until IS NULL OR d.lease_until<=clock_timestamp())
-         AND c.kind='agent' AND c.revoked_at IS NULL AND c.suspended_at IS NULL AND c.expires_at>clock_timestamp() AND 'read'=ANY(c.scopes)
-         AND u.active AND (NOT u.onboarding_required OR u.onboarding_completed_at IS NOT NULL)
+         AND ${PINGABLE_KEY_SQL}
          AND (EXISTS(SELECT 1 FROM agent_change_events e WHERE e.user_id=d.user_id AND e.community_id=d.community_id AND e.cursor IS NULL)
           OR EXISTS(SELECT 1 FROM agent_change_events e WHERE e.user_id=d.user_id AND e.community_id=d.community_id AND e.cursor>d.pinged_cursor))
         ORDER BY d.next_attempt_at NULLS FIRST,d.connection_id LIMIT $2
         FOR UPDATE OF d SKIP LOCKED
        ) due WHERE p.connection_id=due.connection_id
-       RETURNING p.connection_id,p.user_id,p.community_id,p.notify_url,p.pinged_cursor::text AS pinged_cursor,due.token_hash`,
+       RETURNING p.connection_id,p.user_id,p.community_id,p.pinged_cursor::text AS pinged_cursor`,
       [leaseToken, limit],
     )
   ).rows;
   if (claimedRows.length === 0) return { claimed: 0, sent: 0, failed: 0 };
 
-  const ready: Array<{
-    connection_id: string;
-    notify_url: string;
-    end: string;
-    built: BuiltAgentPing;
-  }> = [];
+  const ready: Array<{ connection_id: string; end: string }> = [];
   for (const row of claimedRows) {
     const { end } = await transaction(pool, async q => {
       const last = await lockAgentChangeCursor(q, row.user_id);
@@ -394,23 +396,47 @@ export async function sweepAgentPings(
       );
       continue;
     }
-    ready.push({
-      connection_id: row.connection_id,
+    ready.push({ connection_id: row.connection_id, end });
+  }
+
+  // The claim checked the key and the member, but every step since can wait on a lock (each member's
+  // cursor row, the lease releases above). Meanwhile the member may stop or re-save the address,
+  // revoke or renew the key, or the key may expire. So re-read every claim now, after all of that,
+  // with the claim's own rules and this sweep's lease, and send only to the URL and with the key read
+  // here. A plain SELECT never waits for row locks, so nothing can block between it and the sends.
+  const current = new Map<string, { notify_url: string; token_hash: string }>();
+  if (ready.length > 0) {
+    const rows = (
+      await pool.query<{ connection_id: string; notify_url: string; token_hash: string }>(
+        `SELECT p.connection_id,p.notify_url,c.token_hash FROM agent_change_pings p
+         JOIN agent_token_connections c ON c.connection_id=p.connection_id AND c.user_id=p.user_id AND c.community_id=p.community_id
+         JOIN users u ON u.user_id=c.user_id AND u.community_id=c.community_id
+         WHERE p.connection_id=ANY($1::uuid[]) AND p.lease_token=$2 AND p.lease_until>clock_timestamp() AND p.paused_at IS NULL
+          AND ${PINGABLE_KEY_SQL}`,
+        [ready.map(item => item.connection_id), leaseToken],
+      )
+    ).rows;
+    for (const row of rows) current.set(row.connection_id, row);
+  }
+  const sends: Array<{ connection_id: string; notify_url: string; end: string; built: BuiltAgentPing }> = [];
+  const stale: string[] = [];
+  for (const item of ready) {
+    const row = current.get(item.connection_id);
+    if (!row) {
+      stale.push(item.connection_id);
+      continue;
+    }
+    sends.push({
+      ...item,
       notify_url: row.notify_url,
-      end,
-      built: buildAgentPing({
-        connectionId: row.connection_id,
-        tokenHash: row.token_hash,
-        test: false,
-        now,
-      }),
+      built: buildAgentPing({ connectionId: item.connection_id, tokenHash: row.token_hash, test: false, now }),
     });
   }
 
   let sent = 0;
   let failed = 0;
   const settled = await Promise.allSettled(
-    ready.map(async item => {
+    sends.map(async item => {
       const outcome = await deliverAgentPing(send, item.notify_url, item.built, timeoutMs, publicOrigin);
       if (outcome.ok) {
         await pool.query(
@@ -433,6 +459,14 @@ export async function sweepAgentPings(
       }
     }),
   );
+  // A stale claim sends nothing and records no attempt. Its lease is given back after the sends, so
+  // this write cannot delay them.
+  if (stale.length > 0) {
+    await pool.query(
+      'UPDATE agent_change_pings SET lease_until=NULL,lease_token=NULL WHERE connection_id=ANY($1::uuid[]) AND lease_token=$2',
+      [stale, leaseToken],
+    );
+  }
   for (const result of settled) {
     if (result.status === 'rejected') throw result.reason;
   }
