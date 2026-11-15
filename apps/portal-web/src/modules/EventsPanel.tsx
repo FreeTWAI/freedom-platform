@@ -349,7 +349,9 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
   },[client]);
   useEffect(()=>{void load();return()=>{loadRequest.current++;};},[load]);
   useEffect(()=>{
-    if(!selectedId||items.some(item=>item.event_id===selectedId)){setSelectedRead(null);return;}
+    // An opened event waits for the first list read. A listed event needs no detail read, and an
+    // unlisted one gets a single read after it, not one at mount plus another when the list lands.
+    if(!selectedId||initialLoadPending||items.some(item=>item.event_id===selectedId)){setSelectedRead(null);return;}
     let active=true;
     const owner={client,generation:client.sessionGeneration,eventId:selectedId,attempt:selectedAttempt};
     const current=()=>active&&client.sessionGeneration===owner.generation;
@@ -358,7 +360,7 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
       .then(item=>{if(current())setSelectedRead({...owner,item:item?.event_id===selectedId?item:null,loading:false,failed:false});})
       .catch(cause=>{if(current())setSelectedRead({...owner,item:null,loading:false,failed:!(cause instanceof ApiError&&[401,403,404].includes(cause.status))});});
     return()=>{active=false;};
-  },[client,client.sessionGeneration,items,selectedId,selectedAttempt]);
+  },[client,client.sessionGeneration,initialLoadPending,items,selectedId,selectedAttempt]);
   useEffect(()=>{if(selectedId)referralCode(selectedId)},[selectedId]);
   const resumedEvent=useRef<string|null>(null);
   useEffect(()=>{

@@ -63,3 +63,52 @@ for(const width of [1280,390])for(const status of [403,404] as const)test(`${wid
  await page.setViewportSize({width,height:900});const routes=new ReadRoutes(page,new URL(baseURL!).origin,status);
  try{await routes.install();await login(page);await page.goto(`/#events/${routes.b.event_id}`);await expect(detail(page).getByText('找不到這場活動，或目前無法查看。',{exact:true})).toBeVisible();await expect(detail(page)).not.toContainText('PRIVATE');await expect(detail(page)).not.toContainText(routes.a.title);await expect(detail(page)).not.toContainText(routes.b.title);await expect(detail(page).getByRole('button',{name:'重新讀取活動',exact:true})).toHaveCount(0);await expect(detail(page).getByRole('button',{name:'我要參加',exact:true})).toHaveCount(0);}finally{await routes.cleanup();}
 });
+test('1280px path detail waits for initial list load before reading B once and retrying once',async({page,baseURL})=>{
+ await page.setViewportSize({width:1280,height:900});
+ const origin=new URL(baseURL!).origin,routes=new ReadRoutes(page,origin,503);
+ const directoryStarted=deferred(),directoryHeld=deferred(),directoryTasks=new Set<Promise<void>>();
+ let holdDirectory=true,directoryInstalled=false;
+ const directoryMatches=(url:URL)=>url.origin===origin&&url.pathname==='/api/v1/guilds/directory';
+ const directoryHandle=(route:Route)=>{
+  // Every directory read is held, not just the first: other screens read it too, and the list read
+  // must be among the held ones for the detail read to have nothing to wait on but the list.
+  const task=(async()=>{if(holdDirectory&&route.request().method()==='GET'){directoryStarted.resolve();await directoryHeld.promise;}await route.fallback();})();
+  directoryTasks.add(task);void task.then(()=>directoryTasks.delete(task),()=>{directoryTasks.delete(task);});return task;
+ };
+ try{
+  await routes.install();await login(page);
+  await page.route(directoryMatches,directoryHandle);directoryInstalled=true;
+  await page.goto(eventAppPath(`/events/${routes.b.event_id}`));
+  await directoryStarted.promise;
+  await page.waitForTimeout(500);
+  await expect(detail(page).getByText('正在載入活動…',{exact:true})).toBeVisible();
+  expect(routes.detailReads).toBe(0);
+  holdDirectory=false;directoryHeld.resolve();
+  const url=page.url(),timeOrigin=await page.evaluate(()=>performance.timeOrigin);
+  await expect(detail(page).getByText('活動暫時無法載入，請重新讀取。',{exact:false})).toBeVisible();
+  await expect(detail(page)).not.toContainText('找不到這場活動');
+  await expect(detail(page)).not.toContainText('PRIVATE');
+  await expect(detail(page).getByRole('heading',{name:routes.a.title,exact:true})).toHaveCount(0);
+  const listReads=routes.listReads,detailReads=routes.detailReads;
+  routes.allowRetry=true;
+  await detail(page).getByRole('button',{name:'重新讀取活動',exact:true}).click();
+  await routes.requested.promise;
+  await expect(detail(page).getByText('正在載入活動…',{exact:true})).toBeVisible();
+  await expect(detail(page).getByRole('button',{name:'重新讀取活動',exact:true})).toHaveCount(0);
+  await expect(detail(page).getByRole('button',{name:'我要參加',exact:true})).toHaveCount(0);
+  expect(routes.detailReads).toBe(detailReads+1);
+  expect(routes.listReads).toBe(listReads);
+  routes.released.resolve();
+  await expect(detail(page).getByRole('heading',{name:routes.b.title,exact:true})).toBeVisible();
+  await expect(page).toHaveURL(url);
+  expect(await page.evaluate(()=>performance.timeOrigin)).toBe(timeOrigin);
+  await expect(detail(page).getByRole('button',{name:'我要參加',exact:true})).toBeEnabled();
+  expect(routes.writes).toEqual([]);
+  expect(routes.detailReads).toBe(2);
+ }finally{
+  holdDirectory=false;directoryHeld.resolve();
+  while(directoryTasks.size)await Promise.allSettled([...directoryTasks]);
+  if(directoryInstalled)await page.unroute(directoryMatches,directoryHandle);
+  await routes.cleanup();
+ }
+});

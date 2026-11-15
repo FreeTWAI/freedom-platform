@@ -177,11 +177,13 @@ for(const loss of ['late_list_owner','late_fallback_missing'])test(`actual Event
  const h=host(t,EventsPanel,{client,session:{user:{user_id:OWNER}},locationHash:'#events/'+ID+'/manage/attendance',registerLeave:(value:any)=>{guard=value;},onList(){}});
  const settle=async(r:any,value:any,reject=false)=>{assert(r);await React.act(async()=>{r[reject?'reject':'resolve'](value);await new Promise(resolve=>setImmediate(resolve));});};
  const data={event_id:ID,organizer_ref:OWNER,title:'合成活動',description:'活動內容',starts_at:'2026-01-01T00:00:00Z',ends_at:'2026-01-01T01:00:00Z',mode:'online',location:'合成教室',capacity:null,state:'published',visibility:'open',event_kind:'other',topic:null,online_url:null,guild_key:null,review_guild_key:null,can_review:false,review_reason:null,banner_url:null,banner_orientation:null,video_url:null,video_mime:null,attending_count:1,my_rsvp:null,aggregate_version:1,registration_policy:'community_member',prize_details:[]};
+ for(const r of requests.filter(r=>['/events','/guilds/directory','/events/bulletins'].includes(r.path))){r.done=true;await settle(r,r.path==='/events'?new Error('list down'):{items:[]},r.path==='/events');}
  await settle(requests.find(r=>r.path==='/events/'+ID),data);
  await settle(requests.find(r=>r.path.includes('/attendance?')),page());
+ h.click(h.button('重試'));
  h.click(h.button('確認 合成會員 到場'));h.click(h.button('確定記錄到場'));const first=requests.find(r=>r.method==='post');assert(first);
  // The original write has started before the parent's unrelated list returns.
- for(const r of requests.filter(r=>['/events','/guilds/directory','/events/bulletins'].includes(r.path)))await settle(r,{items:r.path==='/events'&&loss==='late_list_owner'?[{...data,organizer_ref:PEER}]:[]});
+ for(const r of requests.filter(r=>!r.done&&['/events','/guilds/directory','/events/bulletins'].includes(r.path))){r.done=true;await settle(r,{items:r.path==='/events'&&loss==='late_list_owner'?[{...data,organizer_ref:PEER}]:[]});}
  if(loss==='late_fallback_missing')await settle(requests.filter(r=>r.path==='/events/'+ID).at(-1),new ApiError({status:404,code:'not_found',message:'missing',definitiveResponse:true}),true);
  assert.doesNotMatch(h.text(),/合成會員/);assert.match(h.text(),/已隱藏名單/);
  let leave=true;flush(()=>{leave=guard!();});assert.equal(leave,false);

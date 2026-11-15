@@ -187,7 +187,7 @@ function panel(t:TestContext,options:Record<string,unknown>={}){
  const {client,requests}=transport();let guard:(()=>boolean)|null=null;
  const props:any={client,session:{user:{user_id:OWNER}},locationHash:`#events/${ID}/manage`,registerLeave:(value:any)=>guard=value,onList:()=>{},...options};
  const h=host(t,EventsPanel,props),reads=()=>requests.filter(r=>r.method==='get'),writes=()=>requests.filter(r=>r.method==='post'||r.method==='photo');
- const ready=async(items=[stored()])=>{for(const [path,value] of [['/events',{items}],['/guilds/directory',{items:[]}],['/events/bulletins',{items:[]}]]){const request=reads().find(r=>r.path===path);if(request)await settle(request,value);}};
+ const ready=async(items=[stored()])=>{for(const [path,value] of [['/events',{items}],['/guilds/directory',{items:[]}],['/events/bulletins',{items:[]}]]){const request=reads().find(r=>r.path===path&&!r.done);if(request){request.done=true;await settle(request,value);}}};
  const choose=async()=>{const r=requests.filter(r=>r.method==='availability').at(-1);if(r&&!r.done){r.done=true;await settle(r,{event_id:r.eventId,prize_id:r.prizeId,organizer_ref:OWNER,upload_available:true});}flush(()=>propsOf(h.field('選擇獎品照片')).onChange({target:{files:[file()]}}));};
  const submit=()=>{const form=h.nodes().find(n=>n.nodeName==='FORM');assert(form);flush(()=>propsOf(form).onSubmit({preventDefault(){}}));};
  return {...h,props,client,requests,reads,writes,ready,choose,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
@@ -290,10 +290,12 @@ test('legacy omitted photo sidecar still permits a saved activity edit and metad
 });
 
 for(const bad of [null,{},[null],[photo(),photo()],[{...photo(),asset_id:OTHER}]])test(`same-version list refresh with malformed sidecar ${JSON.stringify(bad)} blocks an already-open prize deletion`,async t=>{
- // A detail response opens the editor while the original list read is still
- // pending; the later real list response replaces it without changing CAS.
+ // After the initial list load fails, a detail response opens the editor and
+ // a subsequent real list refresh replaces it without changing CAS.
  const h=panel(t,{locationHash:`#events/${ID}/manage`});
+ for(const path of ['/events','/guilds/directory','/events/bulletins']){const r=h.reads().find(req=>req.path===path&&!req.done);assert(r);r.done=true;await settle(r,path==='/events'?new Error('list down'):{items:[]},path==='/events');}
  await settle(h.reads().find(r=>r.path===`/events/${ID}`),stored({aggregate_version:4,prize_photos:[photo()]}));
+ h.click(h.button('重試'));
  h.click(h.button('編輯活動'));h.click(h.button('移除獎品 1'));h.click(h.button('確認移除'));
  await h.ready([stored({aggregate_version:4,prize_photos:bad})]);
  const confirmation=t.mock.method(window,'confirm',()=>true);h.submit();
