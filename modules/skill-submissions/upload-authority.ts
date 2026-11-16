@@ -1,7 +1,7 @@
 import type {PoolClient} from 'pg';
 import {Problem,requireCondition} from '../../packages/shared/problem.js';
 export interface SkillUploadGrant {readonly user_id:string;readonly community_id:string;readonly grant_hash:string;readonly submission_id:string;}
-export const invalidSkillUploadGrant=()=>new Problem(401,'upload_grant_invalid','上傳授權無效、已過期、已撤銷或不屬於這份草稿。請會員按「重新產生指令」重新產生授權，不要重送同一個授權，改用新指令裡的 Authorization: Bearer fpg_…。');
+export const invalidSkillUploadGrant=()=>new Problem(401,'upload_grant_invalid','上傳授權無效、已過期、已撤銷或不屬於這份草稿。請會員按「重新建立指令」重新產生授權，不要重送同一個授權，改用新指令裡的 Authorization: Bearer fpg_…。');
 /** Original owner/key/grant authority. No session Actor or generic machine scope. */
 export async function lockSkillUploadGrant(q:PoolClient,grant:SkillUploadGrant){
  const member=(await q.query('SELECT active,active AND (NOT onboarding_required OR onboarding_completed_at IS NOT NULL) AS ready FROM users WHERE user_id=$1 AND community_id=$2 FOR SHARE',[grant.user_id,grant.community_id])).rows[0];

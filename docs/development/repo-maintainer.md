@@ -13,7 +13,7 @@
 這一階段不做這些事：
 
 - 不在 GitHub 上送審查、留言、標籤或合併。
-- 平台不呼叫 AI；本機 AI 交接只產生任務檔。
+- 平台不呼叫 AI；「交給我的 Agent…」只建立任務檔。
 - 儲存庫 mode 只有 `off` 與 `observe`。其他值回 422。
 - 把認領鏡像成 GitHub requested reviewer 已經接上。沒有另外設定時，認領會請求審查者。本機 Worker 變數仍是 `off`；staging 與 production 是 `requested_reviewers`。三個條件都成立才會寫，見「要求審查者」。
 

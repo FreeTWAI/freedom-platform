@@ -489,7 +489,7 @@ function bearerHash(header: string | undefined, prefix: string, code: string, me
   return tokenHash(match[1]);
 }
 const keyInvalid = () => new Problem(401, 'upload_key_invalid', '上傳金鑰無效、已過期或已撤銷；請到自由工坊網站重新建立。');
-const grantInvalid = () => new Problem(401, 'upload_grant_invalid', '上傳授權無效、已過期、已撤銷或不屬於這份草稿。請會員按「重新產生指令」重新產生授權，不要重送同一個授權，改用新指令裡的 Authorization: Bearer fpg_…。');
+const grantInvalid = () => new Problem(401, 'upload_grant_invalid', '上傳授權無效、已過期、已撤銷或不屬於這份草稿。請會員按「重新建立指令」重新產生授權，不要重送同一個授權，改用新指令裡的 Authorization: Bearer fpg_…。');
 
 export async function findUploadKey(pool: Pool, authorization: string | undefined): Promise<Owner & { key_hash: string }> {
   const hash = bearerHash(authorization, KEY_PREFIX, 'upload_key_invalid', '需要有效的技能上傳金鑰（Bearer fpk_…）。');

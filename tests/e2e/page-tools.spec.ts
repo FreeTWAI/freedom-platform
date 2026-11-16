@@ -112,6 +112,7 @@ test('unlinked member gets GitHub guidance and screenshot handoff',async({page})
   await expect(idea.getByRole('status')).toHaveText('目前顯示上次同步的資料，請稍後重新同步。');
   await expect(idea.getByText('站內發布前，先連結 GitHub')).toBeVisible();
   await idea.getByRole('button',{name:'交給聊天 AI'}).click();
+  await expect(idea.getByRole('button',{name:'已複製',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>(window as typeof window&{copiedInstruction?:string}).copiedInstruction)).toContain('GitHub');
   await idea.getByRole('textbox',{name:'標題'}).fill('首頁截圖建議');
   await idea.getByRole('textbox',{name:'想法與期待'}).fill('希望首頁的入口更容易閱讀，截圖標示了目前的問題。');

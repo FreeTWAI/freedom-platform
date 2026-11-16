@@ -588,7 +588,7 @@ test('agent upload problems name the next step and do not echo the grant',async(
  const rotated=await api(`/me/skill-submissions/${id}/grant`,owner,{},current.aggregate_version);
  assert.equal(rotated.status,200,JSON.stringify(rotated.data));
  const stale=await agent(`/skill-submissions/${id}`,grant,payload());
- assert.equal(stale.status,401);assert.match(stale.data.detail,/重新產生指令/);assert.match(stale.data.detail,/重新產生授權/);assert.equal(stale.data.detail.includes(grant),false);
+ assert.equal(stale.status,401);assert.match(stale.data.detail,/重新建立指令/);assert.match(stale.data.detail,/重新產生授權/);assert.equal(stale.data.detail.includes(grant),false);
  const invalid=await agent(`/skill-submissions/${id}`,rotated.data.upload_grant.token,{title:'太短'});
  assert.equal(invalid.status,422);assert.match(invalid.data.detail,/授權尚未被消耗/);assert.match(invalid.data.detail,/repository_url|share_introductions/);
  assert.equal(JSON.stringify(invalid.data).includes(rotated.data.upload_grant.token),false);

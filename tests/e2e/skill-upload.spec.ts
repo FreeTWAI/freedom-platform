@@ -161,7 +161,7 @@ test('replayed, expired and off-origin grants never display a token and offer a 
   await login(page); await navigate(page, '開源投稿');
   const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
   await openAgentUpload(page);
-  await expect(panel.getByRole('alert')).toContainText('重新產生指令');
+  await expect(panel.getByRole('alert')).toContainText('重新建立指令');
   await panel.getByRole('button', { name: '重新建立指令', exact: true }).click();
   await expect(panel.getByRole('alert')).toContainText('已過期');
   const regrant = requests.find(request => request.path.endsWith('/grant'))!;
@@ -354,7 +354,7 @@ for (const viewport of [
       agentCalls += 1;
       agentBodies.push(route.request().postDataJSON());
       if (agentCalls === 1) return route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ code: 'validation_failed', detail: 'title: 太短; share_introductions: 需要剛好 100 則' }) });
-      if (agentCalls === 2) return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'upload_grant_invalid', detail: '上傳授權已過期。請按「重新產生指令」重新產生授權。' }) });
+      if (agentCalls === 2) return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'upload_grant_invalid', detail: '上傳授權已過期。請按「重新建立指令」重新產生授權。' }) });
       uploaded = true;
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ submission_id: 'sub-waiting', status: 'ready_for_review' }) });
     });

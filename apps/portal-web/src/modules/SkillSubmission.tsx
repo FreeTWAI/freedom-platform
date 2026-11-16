@@ -220,7 +220,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     const timer = window.setInterval(() => {
       if (isExpired(agentSecret.expiresAt)) {
         setAgentSecret(null);
-        setAgentIssue('一次性上傳憑證已過期，請重新產生指令。');
+        setAgentIssue('一次性上傳憑證已過期，請重新建立指令。');
       }
     }, 15_000);
     return () => window.clearInterval(timer);
@@ -268,9 +268,9 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     setDrafts(list => [result.submission, ...list.filter(item => item.submission_id !== result.submission.submission_id)]
       .filter(item => item.status === 'awaiting_upload' || item.status === 'ready_for_review'));
     const grant = result.upload_grant, submitUrl = grant ? sameOriginSubmitUrl(grant.submit_url) : null;
-    if (!grant) { setAgentSecret(null); setAgentIssue('草稿已建立，但憑證只在第一次回應顯示。請重新產生指令。'); return; }
-    if (!submitUrl) { setAgentSecret(null); setAgentIssue('上傳網址不是本站位址，已停止顯示憑證。請重新產生指令。'); return; }
-    if (isExpired(grant.expires_at)) { setAgentSecret(null); setAgentIssue('一次性上傳憑證已過期，請重新產生指令。'); return; }
+    if (!grant) { setAgentSecret(null); setAgentIssue('草稿已建立，但憑證只在第一次回應顯示。請重新建立指令。'); return; }
+    if (!submitUrl) { setAgentSecret(null); setAgentIssue('上傳網址不是本站位址，已停止顯示憑證。請重新建立指令。'); return; }
+    if (isExpired(grant.expires_at)) { setAgentSecret(null); setAgentIssue('一次性上傳憑證已過期，請重新建立指令。'); return; }
     setAgentIssue(null); setAgentCopied('');
     setAgentSecret({ submissionId: result.submission.submission_id, token: grant.token, expiresAt: grant.expires_at, submitUrl, repositoryUrl: result.submission.seed?.repository_url ?? repositoryUrl, seed: result.submission.seed ?? null });
   }
@@ -384,7 +384,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     if (agentSecret?.submissionId === id) setAgentSecret(null);
     const result = await client.post<GrantResult>(`/me/skill-submissions/${encodeURIComponent(id)}/grant`, {}, { ifMatch: version });
     const grant = rememberGrant(result);
-    if (!grant) throw new Error('無法取得新的上傳授權。請按「重新產生指令」後再貼一次 JSON。');
+    if (!grant) throw new Error('無法取得新的上傳授權。請按「重新建立指令」後再貼一次 JSON。');
     return grant;
   }
   async function grantForPaste(repositoryUrl: unknown) {
@@ -398,7 +398,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     if (held && !drafts.some(item => item.submission_id === held.id && item.seed)) return held;
     const created = await client.post<GrantResult>('/me/skill-submissions', {});
     const grant = rememberGrant(created);
-    if (!grant) throw new Error('草稿已建立，但沒有可使用的上傳授權。請按「重新產生指令」後再貼一次 JSON。');
+    if (!grant) throw new Error('草稿已建立，但沒有可使用的上傳授權。請按「重新建立指令」後再貼一次 JSON。');
     return grant;
   }
   async function agentDetail(response: Response) {
@@ -406,7 +406,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
       const body = await response.json() as { detail?: unknown };
       if (typeof body.detail === 'string' && body.detail.trim()) return body.detail.trim();
     } catch { /* Status fallback is sufficient. */ }
-    if (response.status === 401) return '上傳授權已失效。請按「重新產生指令」後再貼一次 JSON。';
+    if (response.status === 401) return '上傳授權已失效。請按「重新建立指令」後再貼一次 JSON。';
     return `上傳沒有完成（${response.status}）。`;
   }
   async function submitChat(event: FormEvent) {
@@ -624,7 +624,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
       {agentMutation.error && <p role="alert" className="banner banner-error">{agentMutation.error}</p>}
     </div> : activeStep === 'agent' ? <div className="stack">
       <div className="section-head">
-        <h2 ref={agentHeading} tabIndex={-1}>交給我的 agent</h2>
+        <h2 ref={agentHeading} tabIndex={-1}>用我的 Agent 上傳</h2>
         <p className="field-hint">Agent 只會上傳一份私人草稿，回到這裡預覽並確認後才會公開。</p>
       </div>
       {activeAgentDraft?.seed && <p className="status-note">正在補完：{activeAgentDraft.seed.title}</p>}
@@ -635,7 +635,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
         <label className="field">給 Agent 的私人上傳指令
           <textarea aria-label="給 Agent 的私人上傳指令" ref={agentField} readOnly rows={8} value={agentPrompt} spellCheck={false} autoComplete="off" data-private="true"/>
         </label>
-        <p className="field-hint">憑證 {formatIsoLocal(agentSecret.expiresAt)} 到期，只能上傳這份草稿；只貼給你選擇的 Agent。</p>
+        <p className="field-hint">憑證 {formatIsoLocal(agentSecret.expiresAt)} 到期，只能上傳這份草稿；只貼給你的 Agent。</p>
         <div className="actions">
           <button type="button" className="btn btn-primary" onClick={() => void copyAgentInstruction()}>交給我的 Agent</button>
           <a href={`${SKILL_UPLOAD_GUIDE}/SKILL.md`} target="_blank" rel="noopener noreferrer">Agent 說明 ↗</a>
