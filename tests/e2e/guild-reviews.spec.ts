@@ -392,7 +392,7 @@ async function generatedCommand(scope: Locator, cli: string) {
   const text = (await code.innerText()).trim();
   const id = text.match(/freedom-handoff-([0-9a-f]{8})\.md/)?.[1];
   expect(id, text).toBeTruthy();
-  await expect(scope).toContainText(`任務已產生（交接編號 ${id}）。`);
+  await expect(scope).toContainText(`任務已建立（交接編號 ${id}）。`);
   return id!;
 }
 
@@ -436,11 +436,11 @@ test('a guild leader hands a pull and an issue to a local AI', async ({ page, e2
     await page.getByRole('button', { name: 'PR 審核', exact: true }).click();
     const own = page.locator(`[data-pull-id="${PULLS.own}"]`);
     await own.getByRole('button', { name: '詳情', exact: true }).click();
-    await own.getByRole('button', { name: '交給本機 AI…', exact: true }).click();
+    await own.getByRole('button', { name: '交給我的 Agent…', exact: true }).click();
     await expect(own.locator('option[value="merge"]')).toHaveAttribute('disabled', '');
     await expect(own).toContainText('只有已核准（有效核准落在目前的提交上）而且 CI 通過的 PR，才能交給 AI 合併。');
     const created = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes(`/guild-reviews/${PULLS.own}/handoffs`));
-    await own.getByRole('button', { name: '產生任務', exact: true }).click();
+    await own.getByRole('button', { name: '建立任務', exact: true }).click();
     const createdResponse = await created;
     expect(createdResponse.status()).toBe(201);
     const firstKey = createdResponse.request().headers()['idempotency-key'];
@@ -471,11 +471,11 @@ test('a guild leader hands a pull and an issue to a local AI', async ({ page, e2
     await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
     await page.setViewportSize({ width: 1280, height: 900 });
     await own.getByRole('button', { name: '再產生一個', exact: true }).click();
-    await expect(own.getByRole('button', { name: '產生任務', exact: true })).toBeVisible();
+    await expect(own.getByRole('button', { name: '建立任務', exact: true })).toBeVisible();
     await expect(own.getByLabel('工作')).toHaveValue('fix');
     await expect(own.getByLabel('工具')).toHaveValue('claude');
     const again = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes(`/guild-reviews/${PULLS.own}/handoffs`));
-    await own.getByRole('button', { name: '產生任務', exact: true }).click();
+    await own.getByRole('button', { name: '建立任務', exact: true }).click();
     const againResponse = await again;
     expect(againResponse.status()).toBe(201);
     expect(againResponse.request().headers()['idempotency-key']).not.toBe(firstKey);
@@ -483,11 +483,11 @@ test('a guild leader hands a pull and an issue to a local AI', async ({ page, e2
     await page.getByRole('tab', { name: '已核准', exact: true }).click();
     const ready = page.locator(`[data-pull-id="${PULLS.open}"]`);
     await ready.getByRole('button', { name: '詳情', exact: true }).click();
-    await ready.getByRole('button', { name: '交給本機 AI…', exact: true }).click();
+    await ready.getByRole('button', { name: '交給我的 Agent…', exact: true }).click();
     await expect(ready.locator('option[value="merge"]')).not.toHaveAttribute('disabled');
-    await ready.getByLabel('工作').selectOption({ label: '讓 AI 合併這個 PR' });
+    await ready.getByLabel('工作').selectOption({ label: '讓 Agent 合併這個 PR' });
     const merged = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes(`/guild-reviews/${PULLS.open}/handoffs`));
-    await ready.getByRole('button', { name: '產生任務', exact: true }).click();
+    await ready.getByRole('button', { name: '建立任務', exact: true }).click();
     expect((await merged).status()).toBe(201);
     await generatedCommand(ready, 'claude');
     await ready.getByText('預覽任務內容', { exact: true }).click();
@@ -508,7 +508,7 @@ test('a guild leader hands a pull and an issue to a local AI', async ({ page, e2
     await issue.getByLabel('Issue 編號').fill('18');
     await issue.getByLabel('工具').selectOption({ label: 'grok CLI' });
     const issued = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes(`/guild-reviews/repositories/${REPOS.own}/issue-handoffs`));
-    await issue.getByRole('button', { name: '產生任務', exact: true }).click();
+    await issue.getByRole('button', { name: '建立任務', exact: true }).click();
     const issuedResponse = await issued;
     expect(issuedResponse.status()).toBe(201);
     const issueKey = issuedResponse.request().headers()['idempotency-key'];
@@ -517,13 +517,13 @@ test('a guild leader hands a pull and an issue to a local AI', async ({ page, e2
     await expect(issue.locator('pre')).toContainText('Closes #18');
     await expect(issue.locator('pre')).not.toContainText('平台觀察到的資料');
     await issue.getByRole('button', { name: '再產生一個', exact: true }).click();
-    await expect(issue.getByRole('button', { name: '產生任務', exact: true })).toBeVisible();
+    await expect(issue.getByRole('button', { name: '建立任務', exact: true })).toBeVisible();
     await expect(issue.getByLabel('Issue 編號')).toHaveValue('');
     await expect(issue.getByLabel('交接儲存庫')).toHaveValue(REPOS.own);
     await expect(issue.getByLabel('工具')).toHaveValue('grok');
     await issue.getByLabel('Issue 編號').fill('19');
     const issuedAgain = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes(`/guild-reviews/repositories/${REPOS.own}/issue-handoffs`));
-    await issue.getByRole('button', { name: '產生任務', exact: true }).click();
+    await issue.getByRole('button', { name: '建立任務', exact: true }).click();
     const issuedAgainResponse = await issuedAgain;
     expect(issuedAgainResponse.status()).toBe(201);
     expect(issuedAgainResponse.request().headers()['idempotency-key']).not.toBe(issueKey);

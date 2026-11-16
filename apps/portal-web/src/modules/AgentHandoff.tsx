@@ -13,6 +13,6 @@ export function agentHandoffText({screen,task,resourceId,origin,features=[]}:{sc
 }
 export function AgentHandoff(props:{screen:'events'|'credit';task:string;resourceId?:string;features?:string[]}){
  const [fallback,setFallback]=useState(''),[notice,setNotice]=useState('');
- async function copy(){const text=agentHandoffText({...props,origin:window.location.origin});try{await navigator.clipboard.writeText(text);setNotice('已複製');setFallback('');}catch{setFallback(text);setNotice('請複製下方文字');}}
+ async function copy(){const text=agentHandoffText({...props,origin:window.location.origin});try{await navigator.clipboard.writeText(text);setNotice('已複製，貼給你的 Agent。');setFallback('');}catch{setFallback(text);setNotice('無法自動複製，請選取下方文字。');}}
  return <div><button type="button" className="btn btn-ghost btn-sm" onClick={()=>void copy()}>交給我的 Agent</button>{notice&&<span role="status">{notice}</span>}{fallback&&<label className="field">交接文字<textarea readOnly rows={8} value={fallback} onFocus={e=>e.currentTarget.select()}/></label>}</div>;
 }

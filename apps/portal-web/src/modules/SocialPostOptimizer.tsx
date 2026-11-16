@@ -52,7 +52,7 @@ export function SocialPostOptimizer({client,job,draft,disabled,onApply,onRecover
     </>:<>
       <label className="field">我的 AI 工具<select value={tool} disabled={disabled||locked} onChange={event=>setTool(event.target.value)}>{['Codex','Claude Code','Grok','其他 LLM'].map(value=><option key={value}>{value}</option>)}</select></label>
       <p className="optimizer-fine-print">複製任務到你自己的工具執行，使用該工具的本人帳號或 API Key，再貼回結果。</p>
-      <button type="button" className="btn btn-ghost" aria-busy={copyAction.pending!==null} disabled={disabled||locked||!draft.trim()||copyAction.pending!==null} onClick={()=>void copyTask()}>{copyAction.pending?t('action.copying'):'複製文案優化任務'}</button>
+      <button type="button" className="btn btn-ghost" aria-busy={copyAction.pending!==null} disabled={disabled||locked||!draft.trim()||copyAction.pending!==null} onClick={()=>void copyTask()}>{copyAction.pending?t('action.copying'):'交給我的 Agent'}</button>
       <details className="optimizer-export"><summary>查看／手動複製任務</summary><textarea aria-label="文案優化任務" readOnly value={prompt} rows={5} onFocus={event=>{job.rememberHandoff(draft);event.target.select();}} onCopy={()=>job.rememberHandoff(draft)}/></details>
       <label className="field" htmlFor={`${id}-manual-result`}><span id={`${id}-manual-label`}>貼回 AI 優化結果</span><textarea id={`${id}-manual-result`} aria-labelledby={`${id}-manual-label`} rows={4} maxLength={2000} value={state.evidence==='manual_handoff'?state.result:''} disabled={disabled||locked} onChange={event=>job.manualResult(event.target.value,draft,tool)}/></label>
     </>}

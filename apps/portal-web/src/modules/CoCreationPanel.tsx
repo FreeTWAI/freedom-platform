@@ -212,7 +212,7 @@ function CoCreationContent({ client, session, onNavigate }: ModulePanelProps) {
       if (sequence !== requestSequence.current || !current()) return;
       logConsoleEvent({channel:consoleChannel('ai_prompt'),level:'success',kind:'prompt',source:'AI 指令',message:issue?`已準備議題 #${issue.number} 的 AI 工作說明。`:`已準備「${selected.title}」的專案開發提示詞。`,detail:value.text});
       setBrief({ project_id: projectId, number: issue?.number ?? null, title: issue?.title ?? selected.title, text: value.text });
-      try { await navigator.clipboard.writeText(value.text); if (sequence === requestSequence.current && current()) setNotice(issue ? '工作說明已複製，可以交給你的協作夥伴或 AI 助手。' : '專案開發指令已複製，貼給你的 Agent 就能開始了解任務。'); }
+      try { await navigator.clipboard.writeText(value.text); if (sequence === requestSequence.current && current()) setNotice(issue ? '工作說明已複製，可以交給你的協作夥伴或 AI 助手。' : '已複製，貼給你的 Agent。'); }
       catch { if (sequence === requestSequence.current && current()) setNotice('指令已準備好。瀏覽器未允許複製，請從下方自行選取複製。'); }
     } catch (cause) { if (sequence === requestSequence.current && current()) setBriefError(message(cause)); }
     finally { if (sequence === requestSequence.current && current()) setBriefLoading(null); }
@@ -238,7 +238,7 @@ function CoCreationContent({ client, session, onNavigate }: ModulePanelProps) {
       <h3 id="cocreation-project-title" ref={detailHeading} tabIndex={-1}>{selected.title}</h3><p className="multiline-text">{selected.goal}</p>
       <div className="actions"><GitHubLink href={`${selected.repository_url}/issues`} primary>到 GitHub 查看任務</GitHubLink><button className="btn btn-ghost btn-small" disabled={activityLoading} onClick={()=>void loadActivity(selected.project_id)}>更新任務與成果</button></div>
       <p className="field-hint">查看或複製說明不會替你認領。要參與時，請到 GitHub 任務頁留言協調範圍。</p>
-      <details className="module-optional"><summary>用 AI 協助開發（選用）</summary><div className="actions"><button className="btn btn-secondary btn-small" disabled={briefLoading!==null} onClick={()=>void copyBrief()}>{briefLoading==='project'?'準備開發指令…':'複製專案開發指令'}</button><GitHubLink href={selected.upstream_url||selected.repository_url}>{selected.upstream_url?'開啟原作':'查看專案'}</GitHubLink></div><p className="field-hint">把指令交給自己的 AI，先了解專案與任務；不會自動取得 repo 權限或提交修改。</p></details>
+      <details className="module-optional"><summary>用 Agent 協助開發（選用）</summary><div className="actions"><button className="btn btn-secondary btn-small" disabled={briefLoading!==null} onClick={()=>void copyBrief()}>{briefLoading==='project'?'準備開發指令…':'交給我的 Agent'}</button><GitHubLink href={selected.upstream_url||selected.repository_url}>{selected.upstream_url?'開啟原作':'查看專案'}</GitHubLink></div><p className="field-hint">把指令交給自己的 Agent，先了解專案與任務；不會自動取得 repo 權限或提交修改。</p></details>
       <p className="field-hint">{selected.upstream_url ? `原作：${selected.upstream_url.replace('https://github.com/', '')} · ` : ''}邀請發起：{selected.coordinator_name}</p>
       <details className="module-optional"><summary>參與方式與協作分工</summary><div className="stack"><div className="tag-list">{selected.help_wanted.map(role => <span className="pill" key={role}>{roleLabel(role)}</span>)}</div><p className="cocreation-copy">{selected.contribution_notes}</p><p className="field-hint">通用改善優先回饋原作；工坊專用整合依任務範圍提交。修改由 repo 維護者審查，邀請發起人不一定有合併權限。</p><div className="actions">{selected.upstream_url && <GitHubLink href={selected.repository_url}>查看工坊整合版本</GitHubLink>}<GitHubLink href={`${selected.repository_url}/issues/new`}>提出新任務</GitHubLink></div></div></details>
     </div>

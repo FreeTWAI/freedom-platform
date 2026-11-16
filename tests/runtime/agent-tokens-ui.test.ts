@@ -204,10 +204,10 @@ test('UX-F-03: AgentTokens hides 複製連線設定 without a token and keeps on
   await ui.submit();
   assert.equal(ui.textareas().length, 1);
   assert.equal(ui.primaryButtons().length, 1);
-  assert.equal(ui.primaryButtons()[0].textContent, '複製這段指令');
+  assert.equal(ui.primaryButtons()[0].textContent, '交給我的 Agent');
   assert.equal(ui.buttons('複製連線設定').length, 1);
 
-  await ui.click('複製這段指令');
+  await ui.click('交給我的 Agent');
   assert.ok(copiedText.includes('/agent.md'));
   assert.ok(copiedText.includes(`Bearer ${TOKEN}`));
   assert.equal(ui.textareas().length, 1);
@@ -262,7 +262,7 @@ test('AgentTokens offers 回應 checked by default and keeps existing token scop
   await ui.submit();
   assert.deepEqual([...(ui.posts[0].body as any).scopes], ['read', 'share', 'rsvp', 'react']);
   await ui.click('已保存');
-  await ui.click('續期換新');
+  await ui.click('換新金鑰');
   assert.deepEqual([...(ui.posts[1].body as any).scopes], ['read', 'share', 'rsvp']);
 });
 

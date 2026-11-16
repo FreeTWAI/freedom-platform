@@ -37,7 +37,7 @@ async function openAgentUpload(page: Page, repo = 'https://github.com/example/sk
   if (await backToUrl.isVisible().catch(() => false)) await backToUrl.click();
   const backToChoice = panel.getByRole('button', { name: '返回選擇方式', exact: true });
   if (await backToChoice.isVisible().catch(() => false)) await backToChoice.click();
-  const agentBtn = panel.getByRole('button', { name: '交給我的 agent', exact: true });
+  const agentBtn = panel.getByRole('button', { name: '用我的 Agent 上傳', exact: true });
   if (await agentBtn.isVisible().catch(() => false)) {
     await panel.getByRole('button', { name: '修改網址', exact: true }).click();
   }
@@ -299,7 +299,7 @@ test('completing a seeded draft keeps the target line and copy button in view', 
     await expect(panel.getByRole('heading', { name: '交給我的 agent', exact: true })).toBeFocused();
     await expectInView(target);
     await panel.locator('details.skill-upload-cli > summary').click();
-    const copy = panel.getByRole('button', { name: '複製給聊天 AI', exact: true });
+    const copy = panel.getByRole('button', { name: '交給聊天 AI', exact: true });
     await copy.scrollIntoViewIfNeeded();
     await expectInView(copy);
   }
@@ -554,9 +554,9 @@ test('handing a seeded draft to an agent brings the instruction into view', asyn
   await navigate(page, '開源投稿');
   const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
   await panel.getByRole('button', { name: '繼續：升級：種子技能', exact: true }).click();
-  await panel.getByRole('button', { name: '產生私人上傳指令', exact: true }).click();
+  await panel.getByRole('button', { name: '建立上傳指令', exact: true }).click();
   const instruction = panel.getByLabel('給 Agent 的私人上傳指令', { exact: true });
-  const copy = panel.getByRole('button', { name: '複製給 agent', exact: true });
+  const copy = panel.getByRole('button', { name: '交給我的 Agent', exact: true });
   await expect(instruction).toBeVisible();
   await expect(copy).toBeVisible();
   await copy.scrollIntoViewIfNeeded();
