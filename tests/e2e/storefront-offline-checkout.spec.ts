@@ -452,7 +452,7 @@ test('with supplier console OFF, a merchant publishes public service information
   await expect(bp.locator('body')).not.toContainText('shop@example.test');
   await storeArea(sp,'店面');
   await sp.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布更新',exact:true}).click();
-  await expect(sp.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 2 版');
+  await expect(sp.getByRole('region',{name:'公開狀態'})).toContainText('已公開第 2 版。');
   await bp.setViewportSize({width:390,height:844});
   for(const path of ['', '/products/P0001', '/cart', '/checkout', '/order-access']){
    await bp.goto(`/shops/${store.slug}${path}`);
@@ -1232,7 +1232,7 @@ test('all store flags compose from owner setup through bank payment and meetup d
       expect(StorePublicationReviewSchema.parse(await (await refreshed).json())).toMatchObject({
         appearance_changed: false, policies_changed: false, gallery_changed: false, variants_changed: false, categories_changed: false,
       });
-      await expect(op.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 1 版');
+      await expect(op.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 1 版。');
     });
     await test.step('independent operator admits the published store', async () => {
       await bp.goto('/shops/' + slug + '/products/' + products[0].sku);

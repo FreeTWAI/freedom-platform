@@ -67,6 +67,7 @@ test('HostedStorePublishBar renders unpublished states and primary actions', () 
     productCount: 1,
   })));
   assert.match(stopped, /<p>已停止公開。下一步：發布商店。<\/p>/);
+  assert.doesNotMatch(stopped, /上次發布/);
   assert.match(stopped, />發布<\/button>/);
 
   const noPublish = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({
@@ -86,7 +87,7 @@ test('HostedStorePublishBar renders published clean, dirty, share actions, and d
     publicPath: '/shops/demo-shop',
     storeCopyUrl: 'https://example.test/shops/demo-shop',
   })));
-  assert.match(publishedClean, /<p>已公開第 2 版。<\/p>/);
+  assert.match(publishedClean, /<p>已公開第 2 版。 <small class="hosted-store-publish-bar-time">上次發布 [^<]+<\/small><\/p>/);
   assert.doesNotMatch(publishedClean, />發布更新</);
   assert.match(publishedClean, /href="\/shops\/demo-shop"[^>]*>查看公開頁<\/a>/);
   assert.match(publishedClean, />複製連結<\/button>/);
@@ -98,7 +99,7 @@ test('HostedStorePublishBar renders published clean, dirty, share actions, and d
     publicPath: '/shops/demo-shop',
     storeCopyUrl: 'https://example.test/shops/demo-shop',
   })));
-  assert.match(publishedDirty, /<p>已公開第 2 版。有變更還沒公開。<\/p>/);
+  assert.match(publishedDirty, /<p>已公開第 2 版。有變更還沒公開。 <small class="hosted-store-publish-bar-time">上次發布 [^<]+<\/small><\/p>/);
   assert.match(publishedDirty, />發布更新<\/button>/);
   assert.match(publishedDirty, />查看公開頁<\/a>/);
 

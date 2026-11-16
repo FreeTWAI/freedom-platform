@@ -8,7 +8,7 @@ import type {Pool} from 'pg';
 
 test.use({memberFeatures:{guildLaunchpadEnabled:true,storePoliciesEnabled:true}});
 const section=(page:Page)=>page.locator('.hosted-store-policies');
-const sellerPublicationHint='賣方資訊只顯示最新發布的內容；移除電話或地址後，公開頁就不再顯示。';
+const sellerPublicationHint='賣方資訊只顯示最新發布的內容；移除電話或地址並發布更新後，公開頁就不再顯示。';
 const policyHistoryWarning='政策內文一經發布，就會留下有公開網址的版本。之後修改或清空，舊版仍可透過原網址查看，目前無法撤下。請不要在政策內文寫入個人電話、住址等個人資料；聯絡方式請填在上方的賣方資訊。';
 function input(){const v=emptySellerPolicies();v.seller={...syntheticSeller};for(const k of POLICY_KINDS)v.policies[k].body='合成'+k+'政策\n單一換行\n\n第二段';return v;}
 async function save(page:Page,root:string,body=input()){
@@ -31,7 +31,7 @@ test('POL-E2E-themes editor at 390 in bright night and RPG themes',async({page,e
 });
 test('POL-E2E-01 owner saves drafts, previews and publishes immutable policy history then withdraws contact',async({page,e2eAuthPool})=>{
  const s=await setup(page,e2eAuthPool,false);await section(page).getByLabel('營業名稱',{exact:true}).fill('合成測試商行');await section(page).getByLabel('地址',{exact:true}).fill('測試市範例路 1 號');await section(page).getByLabel('配送政策內容',{exact:true}).fill('合成第一版配送\n下一行');await section(page).getByRole('button',{name:'儲存賣方資訊與商店政策',exact:true}).click();await expect(section(page)).toContainText('已儲存賣方資訊與商店政策。');
- expect(await(await page.request.get('/shops/'+s.slug)).text()).not.toContain('本店由合成測試商行經營');const preview=await page.request.get('/api/v1'+s.root+'/preview-page/about');expect(await preview.text()).toContain('測試市範例路 1 號');await storeArea(page,'店面');const publishBar=page.getByRole('region',{name:'公開狀態'});await expect(publishBar).toContainText('有變更還沒公開。');await publishBar.getByRole('button',{name:'發布更新',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 2 版');
+ expect(await(await page.request.get('/shops/'+s.slug)).text()).not.toContain('本店由合成測試商行經營');const preview=await page.request.get('/api/v1'+s.root+'/preview-page/about');expect(await preview.text()).toContain('測試市範例路 1 號');await storeArea(page,'店面');const publishBar=page.getByRole('region',{name:'公開狀態'});await expect(publishBar).toContainText('有變更還沒公開。');await publishBar.getByRole('button',{name:'發布更新',exact:true}).click();await expect(page.getByRole('region',{name:'公開狀態'})).toContainText('已公開第 2 版。');
  const first=(await e2eAuthPool.query("SELECT version_id FROM commerce_storefront_policy_versions WHERE instance_id=$1 AND kind='shipping' ORDER BY version_no",[s.hash.split('/')[2]])).rows[0].version_id;
  await storeArea(page,'商店資料');await section(page).getByLabel('配送政策內容',{exact:true}).fill('合成第二版配送');await section(page).getByLabel('地址',{exact:true}).fill('');await section(page).getByRole('button',{name:'儲存賣方資訊與商店政策',exact:true}).click();await expect(section(page)).toContainText('已儲存賣方資訊與商店政策。');await publish(page,s.root);
  const history=await page.request.get('/shops/'+s.slug+'/policies/shipping/v/'+first);const text=await history.text();expect(text).toContain('合成第一版配送');expect(text).toContain('歷史版本');expect(text).not.toContain('測試市範例路 1 號');expect(await(await page.request.get('/shops/'+s.slug+'/products/P0001')).text()).toContain('配送與退換貨政策');
