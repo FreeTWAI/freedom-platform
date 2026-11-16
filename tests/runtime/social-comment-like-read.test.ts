@@ -238,3 +238,16 @@ test('an old-session like ACK cannot invalidate a read started under the new ses
  await h.answer(1,{liked:true,like_count:1});await h.answer(2,page(h.comment));
  assert.equal(h.like().getAttribute('aria-pressed'),'false');assert.equal(h.requests.length,3,'obsolete ACK must not trigger an extra read in the newer session');
 });
+test('reply on another member comment tags that member once, focuses the composer and sends the mention',async t=>{
+ const h=fixture(t);await h.answer(0,page({...h.comment,mine:false}));
+ const reply=()=>h.find(n=>n.nodeName==='BUTTON'&&n.getAttribute('aria-label')==='回覆 synthetic author')!;
+ h.change(h.textarea(),'thanks');h.click(reply());
+ assert.equal(props(h.textarea()).value,'@synthetic author thanks');assert.equal(document.activeElement,h.textarea());
+ h.click(reply());assert.equal(props(h.textarea()).value,'@synthetic author thanks');
+ h.submit(h.find(n=>n.nodeName==='FORM'&&n.getAttribute('class')==='social-comment-composer')!);
+ assert.equal(h.requests[1].method,'POST');assert.equal(JSON.stringify(h.requests[1].body),JSON.stringify({text:'@synthetic author thanks',mention_ids:[h.comment.author.user_id]}));
+});
+test('own comments offer no reply button',async t=>{
+ const h=fixture(t);await h.answer(0,page(h.comment));
+ assert.equal(h.find(n=>n.nodeName==='BUTTON'&&n.textContent==='回覆'),undefined);
+});

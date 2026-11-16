@@ -79,7 +79,7 @@ async function gameTextHarness(){
 
  const {readFileSync}=await import('node:fs'),{runInNewContext}=await import('node:vm'),{transformSync}=await import('esbuild');
  let origin:string|undefined,injected=false;
- const module={exports:{} as {gameChallengeLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};externalShareLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};SocialRichText:React.ComponentType<any>}};
+ const module={exports:{} as {gameChallengeLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};externalShareLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};SocialRichText:React.ComponentType<any>;pendingMentionQuery:(text:string,mentions:readonly {user_id:string;display_name:string}[])=>string|undefined}};
  const hooks={...React,useState:(initial:unknown)=>{if(origin!==undefined&&!injected){injected=true;return [origin,()=>{}];}return React.useState(initial);}};
  const source=readFileSync(new URL('../../apps/portal-web/src/modules/SocialTools.tsx',import.meta.url),'utf8');
  runInNewContext(transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,URL,require:(name:string)=>{
@@ -414,4 +414,10 @@ test('registered arcade canonical links and guided legacy links retain bounded c
  for(const path of [base+'?game=cash&seed=42',base+'?game=kitchen&recipe=egg-fried-rice&practice=1&seed=42','/play?game=kitchen&recipe=egg-fried-rice&practice=1&seed=42'])assert.equal(parse(origin+path,origin)?.href,path);
  for(const tail of ['?game=cash&seed=0','?game=cash&seed=42&url=https://evil.test','?game=kitchen&recipe=egg-fried-rice&practice=2&seed=42','?game=kitchen&recipe=egg-fried-rice&seed=42&practice=1'])assert.equal(parse(origin+base+tail,origin),null);
  assert.equal(parse(origin+'/#guilds/guild_ar/tools/arcade?game=cash&seed=42',origin),null);
+});
+test('a chosen mention followed by a space no longer reopens the member search',async()=>{
+ const {pendingMentionQuery:query}=await gameTextHarness(),amanda={user_id:'30000000-0000-4000-8000-000000000001',display_name:'Amanda'};
+ assert.equal(query('@Amanda ',[amanda]),undefined);assert.equal(query('thanks @Amanda ',[amanda]),undefined);
+ assert.equal(query('@Amanda ',[]),'Amanda ');assert.equal(query('@Aman',[amanda]),'Aman');assert.equal(query('@',[amanda]),'');
+ assert.equal(query('@Amanda thanks',[amanda]),'Amanda thanks');assert.equal(query('no mention',[amanda]),undefined);
 });

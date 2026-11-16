@@ -107,6 +107,8 @@ export function SocialRichText({client,text,mentions=[],onTag}:{client:PortalCli
  parts.push(plain(text.slice(cursor),text.length));
  return <>{parts}</>;
 }
+// The trailing @query still being typed; a chosen member followed by a space is complete, not a query.
+export function pendingMentionQuery(text:string,mentions:readonly Mention[]){const at=/(?:^|\s)@([^@#\n]{0,40})$/.exec(text);if(!at)return undefined;const typed=at[1];return /\s$/.test(typed)&&mentions.some(m=>m.display_name===typed.trimEnd())?undefined:typed;}
 export function SocialTextTools({client,text,onChange,mentions,onMentions,disabled,maxLength=1000}:{client:PortalClient;text:string;onChange:(s:string)=>void;mentions:Mention[];onMentions:(v:Mention[])=>void;disabled:boolean;maxLength?:number}){
  const {language}=useLanguage();
  const t=(key:keyof typeof textToolMessages)=>textToolMessages[key][textToolLanguageIndex[language]];
@@ -143,7 +145,7 @@ export function SocialTextTools({client,text,onChange,mentions,onMentions,disabl
  }
  const selectedLength=emojiSelection?.value===text?emojiSelection.end-emojiSelection.start:0;
  const at=/(?:^|\s)@([^@#\n]{0,40})$/.exec(text);
- const query=mode==='mention'?search:text===dismissed?undefined:at?.[1],showMention=mode!=='emoji'&&(mode==='mention'||query!==undefined);
+ const query=mode==='mention'?search:text===dismissed?undefined:pendingMentionQuery(text,mentions),showMention=mode!=='emoji'&&(mode==='mention'||query!==undefined);
  // A dismissal belongs to the unchanged draft, not a later edit back to the same text.
  useEffect(()=>{if(dismissed!==null&&text!==dismissed)setDismissed(null);},[text,dismissed]);
  function toggleMention(){if(showMention){setMode(null);setDismissed(text);}else setMode('mention');}
