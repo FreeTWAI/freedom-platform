@@ -1117,7 +1117,7 @@ test('SC-E2E-72 a partner image becomes the seller\'s storefront photo only afte
     await expect(useDialog).toBeVisible();
     await useDialog.getByRole('button', {name: '複製並使用', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText(
-      '已更新店面草稿，發布店面後才會生效。',
+      '已更新店面草稿。',
     );
     expect(useRequests).toBe(1);
 
@@ -1225,7 +1225,7 @@ test('SC-E2E-72 a partner image becomes the seller\'s storefront photo only afte
     await expect(useDialog).toContainText(`「${productTitle}」`);
     await useDialog.getByRole('button', {name: '複製並使用', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText(
-      '已更新店面草稿，發布店面後才會生效。',
+      '已更新店面草稿。',
     );
     await expect(distBlock.locator('.badge')).toHaveText('店面使用中（第 2 版）');
 
@@ -1340,7 +1340,7 @@ test('SC-E2E-73 a withdrawn or closed source keeps the published photo until the
     await expect(useDialog).toBeVisible();
     await useDialog.getByRole('button', {name: '複製並使用', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText(
-      '已更新店面草稿，發布店面後才會生效。',
+      '已更新店面草稿。',
     );
 
     await storeArea(sellerB.page, '店面');
@@ -1395,7 +1395,7 @@ test('SC-E2E-73 a withdrawn or closed source keeps the published photo until the
     await storeArea(sellerB.page, '供貨合作');
     await unavailableWarning.getByRole('button', {name: '停止使用', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText(
-      '已更新店面草稿，發布店面後才會生效。',
+      '已更新店面草稿。',
     );
     await expect(unavailableWarning).toHaveCount(0);
 
@@ -1434,7 +1434,7 @@ test('SC-E2E-73 a withdrawn or closed source keeps the published photo until the
     await expect(useDialog).toBeVisible();
     await useDialog.getByRole('button', {name: '複製並使用', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText(
-      '已更新店面草稿，發布店面後才會生效。',
+      '已更新店面草稿。',
     );
 
     await storeArea(sellerB.page, '店面');
@@ -1559,7 +1559,7 @@ test('SC-E2E-74 a use with an unknown result is retried with the same key and ma
 
     await storeRetryBtn.click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText(
-      '已更新店面草稿，發布店面後才會生效。',
+      '已更新店面草稿。',
     );
     await expect(distBlock.locator('.badge')).toHaveText('店面使用中（第 1 版）');
 
@@ -1733,7 +1733,7 @@ test('SC-E2E-75 viewers, the flag off and the layout', async ({
     await expect(useDialog).toBeVisible();
     await useDialog.getByRole('button', {name: '複製並使用', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText(
-      '已更新店面草稿，發布店面後才會生效。',
+      '已更新店面草稿。',
     );
     await expect(distBlock.locator('.badge')).toHaveText('店面使用中（第 1 版）');
 
@@ -2642,9 +2642,9 @@ test('SC-E2E-84 a malformed committed use or detach ack keeps the original attem
     await expect.poll(() => refreshReached).toBe(true);
     await expect(block.getByRole('button', {name:'停止使用', exact:true})).toBeDisabled();
     const commandStatus = seller.page.locator('.hosted-store > [role="status"]');
-    await expect(commandStatus).not.toContainText('已更新店面草稿，發布店面後才會生效。');
+    await expect(commandStatus).not.toContainText('已更新店面草稿。');
     releaseRefresh();
-    await expect(commandStatus).toContainText('已更新店面草稿，發布店面後才會生效。');
+    await expect(commandStatus).toContainText('已更新店面草稿。');
     // announce() focuses on the next frame; wait for its scroll before the next pointer click.
     await expect(commandStatus).toBeFocused();
     const afterUse = await photoFacts(e2eAuthPool, seller.store, productId);
