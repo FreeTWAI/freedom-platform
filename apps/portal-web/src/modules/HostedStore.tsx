@@ -163,8 +163,6 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
   const areaLocked=locked||!!otherDraft;
   if (missing) return <MissingStore/>;
   const store = view?.store;
-  const publicationText = publication?.state === 'published' ? `已發布・第 ${publication.current_revision} 版・${formatIsoLocal(publication.published_at)}`
-    : publication?.state === 'unpublished' ? '已停止公開' : '尚未發布';
   const productCopyUrl = (sku: string) => store && publishedSkus?.has(sku) ? absoluteUrl(productSharePath(store.slug, sku)) : null;
   if (offerId) return <div className="hosted-store stack">
     <p ref={statusLine} tabIndex={-1} role="status" aria-live="polite">{status}</p>
@@ -174,7 +172,7 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
   </div>;
   return <div className={appearanceEnabled?"hosted-store hosted-store-appearance-enabled stack":"hosted-store stack"}>
     <BackLink/>
-    <p ref={statusLine} tabIndex={-1} role="status" aria-live="polite">{loading && !view ? '正在載入商店…' : [status, store ? publicationText : ''].filter(Boolean).join(' ')}</p>
+    <p ref={statusLine} tabIndex={-1} role="status" aria-live="polite">{loading && !view ? '正在載入商店…' : status}</p>
     {error && <p className="banner banner-error" role="alert">{readFailed ? '目前顯示上次讀取的資料，重新載入成功前暫停修改。' : ''}{error}</p>}
     <div className="actions">{retry ? <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void send(retry)}>重試</button>
       : error && <button type="button" className="btn btn-ghost" disabled={busy || loading} onClick={retryRead}>重新載入</button>}</div>

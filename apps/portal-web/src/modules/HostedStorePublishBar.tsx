@@ -1,4 +1,5 @@
 import type {RefObject} from 'react';
+import {formatIsoLocal} from '../format';
 import {PublicationReview, ManualCopy} from './hosted-store-area-shared';
 import type {StoreAreaData} from './hosted-store-area-shared';
 
@@ -86,7 +87,7 @@ export function HostedStorePublishBar({
 
   return (
     <section className="hosted-store-publish-bar" aria-label="公開狀態">
-      <p>{statusText}</p>
+      <p>{statusText}{published && <> <small className="hosted-store-publish-bar-time">上次發布 {formatIsoLocal(publication.published_at)}</small></>}</p>
       {showReview && publicationReview && <PublicationReview review={publicationReview}/>}
       {showActionRow && (
         <div className="actions">

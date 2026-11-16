@@ -99,7 +99,7 @@ test('registered commerce intern opens a store, publishes a template and returns
     const publicPage = await publicContext.newPage(); await publicPage.goto('/shops/' + slug);
     await expect(publicPage.getByRole('heading', {name: '新會員選物店', exact: true})).toHaveCount(0);
     await publishBar.getByRole('button', {name: '發布', exact: true}).click();
-    await expect(page.locator('.hosted-store').getByRole('status')).toContainText('已發布・第 1 版');
+    await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 1 版。');
     await expect(publishBar).toContainText('已公開第 1 版。');
     await expect(publishBar.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
     await publicPage.reload(); await expect(publicPage.locator('.shop-products-list article')).toHaveCount(1);

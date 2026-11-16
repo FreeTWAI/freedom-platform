@@ -41,7 +41,7 @@ test('a merchant publishes service information that buyers can read on mobile wi
   await expect(preview.getByRole('navigation', {name: '商店導覽'})).toHaveCount(0);
   await preview.close();
   await page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true}).click();
-  await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
+  await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 1 版。');
   const anonymous = await browser.newContext({baseURL, javaScriptEnabled: false, viewport: {width: 390, height: 844}});
   try {
     const buyer = await anonymous.newPage();
@@ -70,7 +70,7 @@ test('a merchant publishes service information that buyers can read on mobile wi
     await expect(buyer.locator('body')).not.toContainText('updated@example.test');
     await storeArea(page, '店面');
     await page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布更新', exact: true}).click();
-    await expect(storePage(page).getByRole('status')).toContainText('已發布・第 2 版');
+    await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 2 版。');
     await buyer.reload();
     await expect(buyer.getByRole('region', {name: '商店說明與聯絡', exact: true})).toContainText('updated@example.test');
     await buyer.setViewportSize({width: 1280, height: 900});
@@ -161,7 +161,7 @@ test('a commerce member opens, stocks, publishes and re-enters their own store',
   await preview.close();
   const publishBar = page.getByRole('region', {name: '公開狀態'});
   await publishBar.getByRole('button', {name: '發布', exact: true}).click();
-  await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
+  await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 1 版。');
   await expect(publishBar.getByRole('link', {name: '查看公開頁', exact: true})).toHaveAttribute('href', `/shops/${slug.toLowerCase()}`);
   const anonymous = await browser.newContext({baseURL});
   try {
@@ -245,7 +245,7 @@ test('store pages stay readable in every theme and width', async ({page, browser
   StoreViewSchema.parse(await post(page, ready.root + '/publish', {}, 200, created.version!));
   for (const mode of ['light', 'dark']) {await theme(page, mode); for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({width, height: 900});
-    await open(page, ready.hash); await expect(storePage(page)).toContainText('已發布・第 1 版'); await expect(storePage(page).locator('.hosted-store-product')).toHaveCount(2);
+    await open(page, ready.hash); await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 1 版。'); await expect(storePage(page).locator('.hosted-store-product')).toHaveCount(2);
     await expect(page.getByRole('navigation', {name:'商店工作區'}).getByRole('button')).toHaveText(['商品','店面','商店資料','供貨合作']);
     await expect(page.getByRole('region', {name:'預留設定',exact:true})).toBeHidden();
     for (const [index, area] of (['商品', '供貨合作', '店面', '商店資料'] as const).entries()) {
@@ -347,7 +347,7 @@ test('unsaved store settings survive publication controls until saved', async ({
   await expect(publish).toBeEnabled();
   await storeArea(page,'店面');
   await publish.click();
-  await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
+  await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 1 版。');
   const publicPage = await page.request.get(`/shops/${nextSlug}`);
   expect(publicPage.status()).toBe(200);
   const publicHtml = await publicPage.text();
@@ -528,7 +528,7 @@ test('saved store template survives login and matches private preview and the pu
     expect((await anonymous.request.get('/api/v1' + ready.root + '/preview-page')).status()).not.toBe(200);
     await storeArea(page,'店面');
     await publishBar.getByRole('button', {name: '發布更新', exact: true}).click();
-    await expect(storePage(page).getByRole('status')).toContainText('已發布・第 2 版'); await pub.reload();
+    await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 2 版。'); await pub.reload();
     await expect(pub.locator('.shop-products-list article')).toHaveCount(2);
     expect(await pub.locator('.shop-brand-header').innerHTML()).toBe(await preview.locator('.shop-brand-header').innerHTML());
     expect(await pub.locator('article h3').allTextContents()).toEqual(await preview.locator('article h3').allTextContents());
@@ -618,7 +618,7 @@ test('published store and product links can be copied from the editor', async ({
   await expect(productLinks).toHaveCount(0);
   await expect(page.getByText(heldLine, {exact: true})).toHaveCount(0);
   await publication.getByRole('button', {name: '發布', exact: true}).click();
-  await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
+  await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 1 版。');
   await expect(publication.getByRole('link', {name: '查看公開頁', exact: true})).toHaveAttribute('href', `/shops/${slug}`);
   await storeArea(page,'商品');
   await expect(productLinks).toHaveCount(2);
@@ -704,7 +704,7 @@ test('published store and product links can be copied from the editor', async ({
   await expect(publication.getByRole('status')).toHaveText('無法自動複製，請選取並複製下方內容');
   await expect(storePage(page).getByText('無法自動複製，請選取並複製下方內容', {exact: true})).toHaveCount(1);
   await publication.getByRole('button', {name: '發布更新', exact: true}).click();
-  await expect(storePage(page).locator('p[role="status"][tabindex="-1"]')).toContainText('已發布・第 2 版');
+  await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 2 版。');
   await storeArea(page,'商品');
   await expect(productLinks).toHaveCount(2);
   await page.addInitScript(() => {
