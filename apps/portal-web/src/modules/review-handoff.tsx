@@ -13,7 +13,7 @@ const CLI_KEY = 'freedom-handoff-cli';
 const CLI_OPTIONS: Array<[HandoffCli, string]> = [
   ['claude', 'Claude Code'], ['codex', 'Codex CLI'], ['grok', 'grok CLI'],
 ];
-const HINT = 'AI 會用你自己的 GitHub 登入（gh）操作；權限不夠時 GitHub 會拒絕，AI 會停下來回報。合併前 AI 會重新檢查 CI、核准與 migration 編號，有一項不符就不合併。';
+const HINT = 'Agent 會用你自己的 GitHub 登入（gh）操作；權限不夠時 GitHub 會拒絕，Agent 會停下來回報。合併前 Agent 會重新檢查 CI、核准與 migration 編號，有一項不符就不合併。';
 const KIND_LABEL: Record<string, string> = { fix: '讓 AI 修', merge: '讓 AI 合併', issue: '把 Issue 做成 PR' };
 
 function readCli(): HandoffCli {
@@ -27,7 +27,7 @@ function rememberCli(cli: HandoffCli) {
   try { localStorage.setItem(CLI_KEY, cli); } catch { /* private mode or a blocked storage */ }
 }
 function failure(error: unknown) {
-  return error instanceof Error ? error.message : '無法產生任務。';
+  return error instanceof Error ? error.message : '無法建立任務。';
 }
 
 function HandoffResultView({ result, onAgain }: { result: HandoffResult; onAgain: () => void }) {
@@ -52,7 +52,7 @@ function HandoffResultView({ result, onAgain }: { result: HandoffResult; onAgain
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   return <div className="stack">
-    <p>任務已產生（交接編號 {result.handoff_id.slice(0, 8)}）。在這個 repo 的本機資料夾執行：</p>
+    <p>任務已建立（交接編號 {result.handoff_id.slice(0, 8)}）。在這個 repo 的本機資料夾執行：</p>
     <code className="handoff-command">{result.command}</code>
     <div className="actions">
       <button type="button" className="btn btn-ghost" onClick={download}>下載任務檔</button>
@@ -80,7 +80,7 @@ function CliField({ cli, onChange }: { cli: HandoffCli; onChange: (cli: HandoffC
 }
 
 export function PullHandoffButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  return <button type="button" className="btn btn-ghost" aria-expanded={open} onClick={onToggle}>交給本機 AI…</button>;
+  return <button type="button" className="btn btn-ghost" aria-expanded={open} onClick={onToggle}>交給我的 Agent…</button>;
 }
 
 export function PullHandoffForm({ detail, submit, onRefresh }: {
@@ -122,13 +122,13 @@ export function PullHandoffForm({ detail, submit, onRefresh }: {
       {error && <p className="banner banner-error" role="alert">{error}</p>}
       <label className="field">工作
         <select aria-label="工作" value={kind} onChange={event => setKind(event.target.value === 'merge' ? 'merge' : 'fix')}>
-          <option value="fix">讓 AI 修這個 PR</option>
-          <option value="merge" disabled={!handoff.merge_allowed}>讓 AI 合併這個 PR</option>
+          <option value="fix">讓 Agent 修這個 PR</option>
+          <option value="merge" disabled={!handoff.merge_allowed}>讓 Agent 合併這個 PR</option>
         </select>
       </label>
       {!handoff.merge_allowed && handoff.merge_reason && <p className="field-hint">{handoff.merge_reason}</p>}
       <CliField cli={cli} onChange={setCli} />
-      <div className="actions"><button className="btn btn-primary" disabled={pending}>產生任務</button></div>
+      <div className="actions"><button className="btn btn-primary" disabled={pending}>建立任務</button></div>
     </form>}
     {result && <HandoffResultView result={result} onAgain={again} />}
     {!!handoff.recent.length && <div className="stack">
@@ -196,7 +196,7 @@ export function IssueHandoff({ repositories, submit, blockedReason }: {
           <input aria-label="Issue 編號" inputMode="numeric" value={issue} onChange={event => setIssue(event.target.value)} required />
         </label>
         <CliField cli={cli} onChange={setCli} />
-        <div className="actions"><button className="btn btn-primary" disabled={pending || !repositoryId}>產生任務</button></div>
+        <div className="actions"><button className="btn btn-primary" disabled={pending || !repositoryId}>建立任務</button></div>
       </form>}
     </div>
   </details>;

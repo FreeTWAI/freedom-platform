@@ -446,12 +446,13 @@ test('with supplier console OFF, a merchant publishes public service information
   const storeForm=sp.getByRole('form',{name:'商店資料',exact:true});
   await storeForm.getByRole('textbox',{name:'商店介紹',exact:true}).fill(description);
   await storeForm.getByRole('button',{name:'儲存商店資料',exact:true}).click();
-  await expect(sp.locator('.hosted-store').getByRole('status')).toContainText('重新發布後，公開頁才會更新。');
+  await expect(sp.locator('.hosted-store > [role="status"]')).toContainText('已儲存。');
+  await expect(sp.getByRole('region',{name:'公開狀態'})).toContainText('有變更還沒公開。');
   await bp.goto(`/shops/${store.slug}`);
   await expect(bp.locator('body')).not.toContainText('shop@example.test');
-  await storeArea(sp,'店面與發布');
-  await sp.getByRole('button',{name:'發布更新',exact:true}).click();
-  await expect(sp.locator('.hosted-store').getByRole('status')).toContainText('已發布・第 2 版');
+  await storeArea(sp,'店面');
+  await sp.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布更新',exact:true}).click();
+  await expect(sp.getByRole('region',{name:'公開狀態'})).toContainText('已公開第 2 版。');
   await bp.setViewportSize({width:390,height:844});
   for(const path of ['', '/products/P0001', '/cart', '/checkout', '/order-access']){
    await bp.goto(`/shops/${store.slug}${path}`);
@@ -1125,7 +1126,7 @@ test('all store flags compose from owner setup through bank payment and meetup d
       }
       await policies.getByRole('button', {name: '儲存賣方資訊與商店政策', exact: true}).click();
       await expect(policies.getByRole('status')).toContainText('已儲存賣方資訊與商店政策。');
-      await storeArea(op, '店面與發布');
+      await storeArea(op, '店面');
       const appearance = op.locator('.hosted-store-appearance');
       await appearance.getByRole('radio', {name: /^直列目錄/}).check();
       await appearance.getByRole('radio', {name: '海洋藍', exact: true}).check();
@@ -1189,7 +1190,7 @@ test('all store flags compose from owner setup through bank payment and meetup d
       await expect(categories.getByRole('status')).toContainText('已儲存分類商品');
       expect(current).toMatchObject({appearance_changed: true, policies_changed: true, gallery_changed: true, variants_changed: true, categories_changed: true});
       // The acknowledgement precedes the parent's review refresh and leave guard.
-      await expect(op.locator('.hosted-store-publication').getByRole('button', {name: '一鍵上架商品', exact: true})).toBeEnabled();
+      await expect(op.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true})).toBeEnabled();
       return current;
     });
 
@@ -1207,7 +1208,7 @@ test('all store flags compose from owner setup through bank payment and meetup d
       await expect(payment).toHaveCount(0);
       await saveMeetup(op, meetupNote);
       await op.goto('/#' + store.hash);
-      await storeArea(op, '店面與發布');
+      await storeArea(op, '店面');
       const panel = op.locator('#store-publish-panel');
       const popup = op.waitForEvent('popup');
       await panel.getByRole('link', {name: '預覽已儲存的展示頁', exact: true}).click();
@@ -1217,20 +1218,21 @@ test('all store flags compose from owner setup through bank payment and meetup d
         await expect(preview.locator('.shop-products-list article')).toHaveCount(1);
         await expect(preview.getByRole('navigation', {name: '商品分類', exact: true})).toContainText('合成果醬');
       } finally {await preview.close();}
-      await panel.getByText('查看本次上架內容', {exact: true}).click();
+      const bar = op.getByRole('region', {name: '公開狀態'});
+      await bar.getByText('查看本次上架內容', {exact: true}).click();
       for (const label of ['店面外觀', '賣方資訊與商店政策', '商品圖組', '規格', '商品分類']) {
-        await expect(panel.locator('dl div').filter({has: op.locator('dt', {hasText: label})})).toContainText('有尚未發布的變更');
+        await expect(bar.locator('dl div').filter({has: op.locator('dt', {hasText: label})})).toContainText('有尚未發布的變更');
       }
       const publication = op.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/v1' + store.root + '/publish-reviewed');
       const refreshed = reviewResponse();
-      await panel.getByRole('button', {name: '發布展示頁', exact: true}).click();
+      await bar.getByRole('button', {name: '發布', exact: true}).click();
       const published = await publication;
       expect(published.status()).toBe(200);
       expect(published.request().postDataJSON()).toEqual({review_digest: review.review_digest});
       expect(StorePublicationReviewSchema.parse(await (await refreshed).json())).toMatchObject({
         appearance_changed: false, policies_changed: false, gallery_changed: false, variants_changed: false, categories_changed: false,
       });
-      await expect(op.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 1 版');
+      await expect(op.getByRole('region', {name: '公開狀態'})).toContainText('已公開第 1 版。');
     });
     await test.step('independent operator admits the published store', async () => {
       await bp.goto('/shops/' + slug + '/products/' + products[0].sku);
@@ -1360,9 +1362,10 @@ test('all store flags compose from owner setup through bank payment and meetup d
       await editor.getByLabel('商品組名稱', {exact: true}).fill('季節果醬');
       await editor.getByRole('button', {name: '儲存規格', exact: true}).click();
       await expect(editor.getByRole('status')).toContainText('已儲存規格');
-      const listing = op.locator('.hosted-store-publication');
-      await listing.getByRole('button', {name: '一鍵上架商品', exact: true}).click();
-      await expect(listing.getByRole('button', {name: '商品已全部上架', exact: true})).toBeDisabled();
+      const bar = op.getByRole('region', {name: '公開狀態'});
+      await bar.getByRole('button', {name: '發布更新', exact: true}).click();
+      await expect(bar).toContainText('已公開第 2 版。');
+      await expect(bar.getByRole('button', {name: '發布更新', exact: true})).toHaveCount(0);
       await bp.reload();
       await expect(bp.locator('.shop-order-line-title')).toHaveText('手工果醬（草莓）');
       await bp.goto('/shops/' + slug + '/products/' + products[0].sku);

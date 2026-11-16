@@ -19,7 +19,7 @@ test('optimization is off by default, personal tool handoff previews and restore
   await dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true}).click();
   await dialog.getByRole('button',{name:'到自己的 AI 工具',exact:true}).click();
   await dialog.getByRole('combobox',{name:'我的 AI 工具',exact:true}).selectOption('Claude Code');
-  await dialog.getByRole('button',{name:'複製文案優化任務',exact:true}).click();
+  await dialog.getByRole('button',{name:'交給我的 Agent',exact:true}).click();
   const task=await page.evaluate(()=>navigator.clipboard.readText());expect(task).toContain('/social-post');expect(task).toContain(original);
   const result='一起把作品完成。\n我正在找設計夥伴，歡迎交流。';
   await dialog.getByLabel('貼回 AI 優化結果',{exact:true}).fill(result);
@@ -53,7 +53,7 @@ test('stale preview cannot overwrite newly edited copy and model setup preserves
 
 test('copy edit paste keeps the handoff source across closing, while a fresh exported task can be adopted',async({page})=>{
   await page.context().grantPermissions(['clipboard-read','clipboard-write']);
-  const dialog=await composer(page),source=dialog.getByLabel('貼文內容',{exact:true}),copy=dialog.getByRole('button',{name:'複製文案優化任務',exact:true});
+  const dialog=await composer(page),source=dialog.getByLabel('貼文內容',{exact:true}),copy=dialog.getByRole('button',{name:'交給我的 Agent',exact:true});
   const original='週一在台北舉辦工作坊。',updated='週二改到台中舉辦工作坊。';await source.fill(original);
   await dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true}).click();await dialog.getByRole('button',{name:'到自己的 AI 工具',exact:true}).click();
   await copy.click();await expect(dialog.getByRole('status').filter({hasText:'任務已複製'})).toBeVisible();expect(await page.evaluate(()=>navigator.clipboard.readText())).toContain(original);

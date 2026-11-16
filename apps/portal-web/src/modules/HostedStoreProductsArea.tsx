@@ -9,7 +9,7 @@ import {HostedStoreGallery} from './HostedStoreGallery';
 import {HostedStorePhoto} from './HostedStorePhoto';
 import {ProductSearch,productMatches,MerchantInventorySummary,InventoryDefinition,STOCK_HINT} from '../../../../modules/agent-commerce/hosted-ui/CommerceTools';
 import {formatMinor, parseMajorToMinor} from '../format';
-import {PublicationReview, ManualCopy, currencyLabel} from './hosted-store-area-shared';
+import {ManualCopy, currencyLabel} from './hosted-store-area-shared';
 import type {PortalClient} from '../api';
 import type {StoreAreaData, StoreArea, StoreAreaStore} from './hosted-store-area-shared';
 
@@ -20,12 +20,8 @@ export interface HostedStoreProductsAreaProps {
   photoUploadsEnabled: boolean;
   galleryEnabled: boolean;
   publicationReview: StoreAreaData['publicationReview'];
-  publishDisabled: boolean;
   publication: NonNullable<StoreAreaData['view']>['publication'] | undefined;
   busy: StoreAreaData['busy'];
-  held: StoreAreaData['held'];
-  publishSaved: () => void;
-  publicPath: string | null | undefined;
   hasDraft: boolean;
   photoBlocking: StoreAreaData['photoBlocking'];
   loading: StoreAreaData['loading'];
@@ -69,8 +65,8 @@ export interface HostedStoreProductsAreaProps {
 }
 
 export function HostedStoreProductsArea({
-  area, can, photosEnabled, photoUploadsEnabled, galleryEnabled, publicationReview, publishDisabled,
-  publication, busy, held, publishSaved, publicPath, hasDraft, photoBlocking,
+  area, can, photosEnabled, photoUploadsEnabled, galleryEnabled, publicationReview,
+  publication, busy, hasDraft, photoBlocking,
   loading, view, products, query, setQuery, locked, preview,
   categoriesEnabled, client, userId, root, distributionRefresh, retry, otherDraft,
   photoBlocks, photoState, load, variantsEnabled, supplyEditing, editing, store,
@@ -79,23 +75,11 @@ export function HostedStoreProductsArea({
   galleries, hasFormDraft, media,
 }: HostedStoreProductsAreaProps) {
   return <section id="store-products-panel" tabIndex={-1} hidden={area!=='products'} className="hosted-supply-panel stack" aria-labelledby="store-products-title"><h3 id="store-products-title">商品</h3>
-          {can('store:publish') && <div className="hosted-store-publication stack">
-            <h4>儲存商品 → 確認上架</h4>
-            <p>先儲存商品資料{photosEnabled && photoUploadsEnabled && !galleryEnabled ? '，選圖後會自動儲存照片' : ''}。儲存不會自動更新公開商店，確認內容後再上架。</p>
-            {publicationReview && <PublicationReview review={publicationReview}/>}
-            <div className="actions"><button type="button" className="btn btn-primary" disabled={publishDisabled || (publication?.state==='published' && !publicationReview?.preview.dirty)} onClick={publishSaved}>
-              {busy && held.current?.path.endsWith('/publish-reviewed') ? '正在上架…' : publication?.state==='published' && publicationReview && !publicationReview.preview.dirty ? '商品已全部上架' : '一鍵上架商品'}
-            </button>{publicPath && <a href={publicPath} target="_blank" rel="noopener">查看公開商店</a>}</div>
-            {hasDraft ? <p className="field-hint">還有未儲存或尚未確認的內容，請先完成儲存或取消變更。</p>
-              : photoBlocking ? <p className="field-hint">照片正在儲存或等待確認，完成後就能上架。</p>
-              : loading ? <p className="field-hint">正在確認可上架內容…</p>
-              : publicationReview && !publicationReview.preview.projection.products.length ? <p className="field-hint">請先新增並儲存至少一件零售商品，或接受合作選品。</p> : null}
-          </div>}
           <p>{view.product_count}／{view.product_limit} 件商品</p>
           {galleryEnabled&&<p className="field-hint">自有商品每件最多 8 張照片。供貨合作商品的公開頁沿用你選用的公開素材照片，沒有時不顯示照片；供應商分享的照片只供私人評估。</p>}
           {!!products.length&&<ProductSearch value={query} onChange={setQuery} count={products.filter(product=>productMatches(product,query)).length} total={products.length} disabled={locked||hasDraft}/>}
           {!!products.length&&!products.some(product=>productMatches(product,query))&&<p>沒有符合的商品，清除搜尋即可查看全部。</p>}
-          {publication?.state === 'published' && preview?.dirty && <p>有尚未發布的變更；發布更新後才能複製商品連結。</p>}
+          {publication?.state === 'published' && preview?.dirty && <p>發布更新後才能複製商品連結。</p>}
           {!products.length && <p>{publicationReview?.preview.projection.products.length ? '這間店目前使用合作選品；可前往供貨合作管理。' : '還沒有自有零售商品。填寫下方資料，先儲存第一件商品。'}</p>}
           {categoriesEnabled&&<CategoriesEditor client={client} userId={userId} root={root} writable={can('store:write')} refresh={String(distributionRefresh)}
             locked={loading||busy||retry!==null||!!otherDraft||(photoBlocking&&!photoBlocks.categories)} onState={(dirty,blocking)=>photoState('categories',dirty,blocking)} onSaved={load}/>}
@@ -107,7 +91,7 @@ export function HostedStoreProductsArea({
               : <><h4>{product.title}</h4><p>{formatMinor(product.price_minor, product.currency)}</p><MerchantInventorySummary stock={product.stock} inventory={product.inventory} onRefresh={()=>void load()} disabled={locked||hasDraft}/><p className="hosted-store-description">{product.description}</p>
                 {can('store:write') && <div className="actions"><button type="button" className="btn btn-ghost" disabled={areaLocked} onClick={() => {if (leaveOk()) {setSupplyEditing(null); setEditing(product.product_id); markDirty('edit', false);}}}>編輯</button>
                   <button type="button" className="btn btn-ghost" disabled={areaLocked} onClick={() => {if (leaveOk()) {setEditing(null); setSupplyEditing(product.product_id);}}}>供貨條件</button>
-                  <button type="button" className="btn btn-ghost" disabled={areaLocked} onClick={() => {if (window.confirm(`要移除「${product.title}」嗎？已發布的展示頁要重新發布後才會更新。`)) void command({method: 'post', path: root + '/products/' + product.product_id + '/remove', body: {}, version: product.version, schema: ProductRemovedSchema, product: true, notice: '已移除商品。', success: () => {}});}}>移除</button></div>}
+                  <button type="button" className="btn btn-ghost" disabled={areaLocked} onClick={() => {if (window.confirm(`要移除「${product.title}」嗎？`)) void command({method: 'post', path: root + '/products/' + product.product_id + '/remove', body: {}, version: product.version, schema: ProductRemovedSchema, product: true, notice: '已移除商品。', success: () => {}});}}>移除</button></div>}
                 {productCopyUrl(product.sku) && <div className="actions"><button type="button" className="btn btn-ghost" aria-busy={copyAction.pending !== null} onClick={() => {const url = productCopyUrl(product.sku); if (url) void copyLink(url);}}>複製商品連結</button></div>}
               </>}
             {copyFeedback && copyFeedback.url === productCopyUrl(product.sku) && <p className="field-hint" role="status">{copyFeedback.message}</p>}
@@ -118,7 +102,7 @@ export function HostedStoreProductsArea({
               onState={(dirty,blocking)=>photoState(product.product_id,dirty,blocking)} onSaved={()=>load({throwOnError:true})}/></>}
           </article>)}</div>
           {can('store:write') && (view.product_count >= view.product_limit ? <p>已達 {view.product_limit} 件商品上限。</p>
-            : <ProductForm currency={store.currency} busy={areaLocked} primary={!products.length} onDirty={value => markDirty('add', value)} onSave={(body, success) => command({method: 'post', path: root + '/products', body, schema: ProductViewSchema, notice: photosEnabled && photoUploadsEnabled && !galleryEnabled ? '已新增商品。草稿已儲存，可選圖自動儲存照片，再按「一鍵上架商品」。' : '已新增商品。草稿已儲存，確認後可按「一鍵上架商品」。', success})}/>)}
+            : <ProductForm currency={store.currency} busy={areaLocked} primary={!products.length} onDirty={value => markDirty('add', value)} onSave={(body, success) => command({method: 'post', path: root + '/products', body, schema: ProductViewSchema, notice: photosEnabled && photoUploadsEnabled && !galleryEnabled ? '已新增商品。可選圖自動儲存照片。' : '已新增商品。', success})}/>)}
         </section>;
 }
 
@@ -146,8 +130,8 @@ function ProductForm({product, currency, busy, primary, onDirty, onSave, onCance
       await onSave(result.data, () => {if (!product) setFields(initial); onDirtyRef.current(false);});
     } catch (cause) {setError(cause instanceof Error ? cause.message : '有欄位格式不符，請檢查後再送出。');}
   }
-  return <form className="hosted-store-form stack" aria-label={product ? `編輯${product.title}` : '新增商品'} onSubmit={event => void submit(event)}>
-    {!product && <><h4>新增商品</h4><p className="field-hint">先儲存草稿，再加入照片與確認上架。新增商品不會立即公開。</p></>}
+  return <form id={product ? undefined : 'store-product-add'} tabIndex={product ? undefined : -1} className="hosted-store-form stack" aria-label={product ? `編輯${product.title}` : '新增商品'} onSubmit={event => void submit(event)}>
+    {!product && <h4>新增商品</h4>}
     <fieldset disabled={busy} className="hosted-store-fields stack"><legend className="sr-only">{product ? '編輯商品' : '新增商品'}</legend>
       <label className="field">商品名稱<input required maxLength={ProductInputSchema.shape.title.maxLength!} value={fields.title} onChange={event => change('title', event.target.value)}/></label>
       <label className="field">價格（{currencyLabel(currency)}）<input required inputMode="decimal" value={fields.price} onChange={event => change('price', event.target.value)}/></label>

@@ -47,14 +47,14 @@ test('private Agent instruction clears before dialog close, does not enter brows
  await page.route('**/api/v1/me/development/platform/cocreation',route=>route.fulfill({json:readyView()}));
  let delayed=false,release:(()=>void)|undefined;
  await page.route('**/api/v1/me/development/platform/cocreation/keys',async route=>{if(delayed)await new Promise<void>(resolve=>{release=resolve;});await route.fulfill({json:{key_id:keyId,token:secret,expires_at:new Date(Date.now()+3600000).toISOString(),working_repository:'contributor/freedom-platform',target_repository:'FreeTWAI/freedom-platform'}});});
- await login(page);const modal=await platform(page);await modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true}).click();
+ await login(page);const modal=await platform(page);await modal.getByRole('button',{name:'建立 Agent 指令',exact:true}).click();
  await expect(modal.getByLabel('私人開發指令',{exact:true})).toHaveValue(new RegExp(secret));
- await modal.getByRole('button',{name:'複製私人開發指令',exact:true}).click();expect(await page.evaluate(()=>navigator.clipboard.readText())).toContain(secret);
+ await modal.getByRole('button',{name:'交給我的 Agent',exact:true}).click();expect(await page.evaluate(()=>navigator.clipboard.readText())).toContain(secret);
  expect(await page.evaluate(()=>JSON.stringify({...sessionStorage,...localStorage}))).not.toContain(secret);
  await page.keyboard.press('Escape');expect(await page.content()).not.toContain(secret);
  await page.getByRole('button',{name:'啟用這一頁的開發',exact:true}).click();await expect(modal.getByLabel('私人開發指令',{exact:true})).toHaveCount(0);
- delayed=true;await modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true}).click();await expect.poll(()=>Boolean(release)).toBe(true);
- await page.keyboard.press('Escape');release!();await page.getByRole('button',{name:'啟用這一頁的開發',exact:true}).click();await expect(modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true})).toBeEnabled();expect(await page.content()).not.toContain(secret);
+ delayed=true;await modal.getByRole('button',{name:'建立 Agent 指令',exact:true}).click();await expect.poll(()=>Boolean(release)).toBe(true);
+ await page.keyboard.press('Escape');release!();await page.getByRole('button',{name:'啟用這一頁的開發',exact:true}).click();await expect(modal.getByRole('button',{name:'建立 Agent 指令',exact:true})).toBeEnabled();expect(await page.content()).not.toContain(secret);
 });
 
 test('a safe saved target resumes after reload without saving credentials or widening permissions',async({page})=>{
@@ -83,14 +83,14 @@ for(const refusal of [
    enabled=true;return route.fulfill({json:{grant_id:keyId}});
   });
   await login(page);const modal=await platform(page);
-  await expect(modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true})).toBeEnabled();
+  await expect(modal.getByRole('button',{name:'建立 Agent 指令',exact:true})).toBeEnabled();
   if(refusal.status===403)for(const width of [1440,768,390]){
    await page.setViewportSize({width,height:900});
    await page.screenshot({path:`test-results/development-recovery-before-${width}.png`,fullPage:true});
   }
-  await modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true}).click();
+  await modal.getByRole('button',{name:'建立 Agent 指令',exact:true}).click();
   await expect(modal.getByRole('alert')).toHaveText(refusal.detail);
-  await expect(modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true})).toHaveCount(0);
+  await expect(modal.getByRole('button',{name:'建立 Agent 指令',exact:true})).toHaveCount(0);
   await expect(modal.getByText('已啟用此目標的開發提案。',{exact:false})).toHaveCount(0);
   expect(keyWrites).toBe(1);expect(activations).toBe(0);
   if(refusal.status===409){
@@ -105,9 +105,9 @@ for(const refusal of [
    await page.screenshot({path:`test-results/development-recovery-after-${width}.png`,fullPage:true});
   }
   await modal.getByRole('button',{name:'驗證 Repo 並啟用開發',exact:true}).click();
-  await expect(modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true})).toBeEnabled();
+  await expect(modal.getByRole('button',{name:'建立 Agent 指令',exact:true})).toBeEnabled();
   await expect(modal.getByRole('alert')).toHaveCount(0);
-  await modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true}).click();
+  await modal.getByRole('button',{name:'建立 Agent 指令',exact:true}).click();
   await expect(modal.getByLabel('私人開發指令',{exact:true})).toHaveValue(/FreeTWAI\/freedom-platform/);
   expect(keyWrites).toBe(2);expect(activations).toBe(1);
  });
@@ -122,7 +122,7 @@ for(const status of [502,503])test(`a provider ${status} outage preserves develo
   return route.fulfill({json:{key_id:keyId,token:secret,expires_at:new Date(Date.now()+3600000).toISOString(),working_repository:'contributor/freedom-platform',target_repository:'FreeTWAI/freedom-platform'}});
  });
  await login(page);const modal=await platform(page);
- const issue=modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true});await expect(issue).toBeEnabled();const before=reads;
+ const issue=modal.getByRole('button',{name:'建立 Agent 指令',exact:true});await expect(issue).toBeEnabled();const before=reads;
  await issue.click();await expect(modal.getByRole('alert')).toHaveText('GitHub 暫時無法回覆，請稍後重新嘗試。');
  await expect(issue).toBeEnabled();await expect(modal.getByLabel('私人開發指令',{exact:true})).toHaveCount(0);
  expect(writes).toHaveLength(1);expect(reads).toBe(before);
@@ -139,9 +139,9 @@ test('a failed authority refresh removes the stale enabled claim and offers a re
  await page.route('**/api/v1/me/development/platform/cocreation/keys',route=>{
   keyWrites++;revoked=true;return route.fulfill({status:403,json:{code:'development_binding_changed',detail:'GitHub 連動已變更，請重新啟用。'}});
  });
- await login(page);const modal=await platform(page);await modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true}).click();
+ await login(page);const modal=await platform(page);await modal.getByRole('button',{name:'建立 Agent 指令',exact:true}).click();
  await expect(modal.getByRole('alert')).toHaveText('GitHub 連動已變更，請重新啟用。');
- await expect(modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true})).toHaveCount(0);
+ await expect(modal.getByRole('button',{name:'建立 Agent 指令',exact:true})).toHaveCount(0);
  const reload=modal.getByRole('button',{name:'重新讀取設定',exact:true});await expect(reload).toBeEnabled();
  recoveryUnavailable=false;await reload.click();
  await expect(modal.getByRole('button',{name:'驗證 Repo 並啟用開發',exact:true})).toBeEnabled();
@@ -155,7 +155,7 @@ test('closing a dialog before a denied key response prevents late authority read
   await new Promise<void>(resolve=>{release=resolve;});revoked=true;
   await route.fulfill({status:403,json:{code:'development_binding_changed',detail:'GitHub 連動已變更，請重新啟用。'}});
  });
- await login(page);const modal=await platform(page);await modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true}).click();
+ await login(page);const modal=await platform(page);await modal.getByRole('button',{name:'建立 Agent 指令',exact:true}).click();
  await expect.poll(()=>Boolean(release)).toBe(true);const before=reads;
  await page.keyboard.press('Escape');const returned=page.waitForResponse(response=>response.url().endsWith('/development/platform/cocreation/keys'));
  release!();await returned;await expect(modal).not.toBeVisible();expect(reads).toBe(before);
@@ -167,7 +167,7 @@ test('closing a dialog before a denied key response prevents late authority read
 test('development activation text stays readable and controls remain reachable across themes and viewports',async({page})=>{
  await page.route('**/api/v1/me/development/platform/cocreation',route=>route.fulfill({json:readyView()}));
  await login(page);const modal=await platform(page);
- await expect(modal.getByRole('button',{name:'產生私人 Agent 指令',exact:true})).toBeEnabled();
+ await expect(modal.getByRole('button',{name:'建立 Agent 指令',exact:true})).toBeEnabled();
  for(const theme of ['light','dark','versefolk'])for(const width of [320,390,768,1440]){
   await page.evaluate(value=>{document.documentElement.dataset.theme=value;},theme);
   await page.setViewportSize({width,height:900});

@@ -106,7 +106,7 @@ Content-Type: application/json
 
 `repository_mismatch`：這份草稿是為特定儲存庫建立的，上傳的 `repository_url` 必須是同一個儲存庫；請改傳該儲存庫的內容，或請會員撤銷草稿後重新建立。授權不會被消耗。
 
-401 `upload_grant_invalid`：請會員在網站按「重新產生指令」重新產生授權，再用新的 `Authorization: Bearer fpg_…` 上傳；不要重送舊授權。內容超過上限時縮小 JSON，不要分段。
+401 `upload_grant_invalid`：請會員在網站按「重新建立指令」重新產生授權，再用新的 `Authorization: Bearer fpg_…` 上傳；不要重送舊授權。內容超過上限時縮小 JSON，不要分段。
 
 ## 公開
 

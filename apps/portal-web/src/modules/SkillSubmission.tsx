@@ -220,7 +220,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     const timer = window.setInterval(() => {
       if (isExpired(agentSecret.expiresAt)) {
         setAgentSecret(null);
-        setAgentIssue('一次性上傳憑證已過期，請重新產生指令。');
+        setAgentIssue('一次性上傳憑證已過期，請重新建立指令。');
       }
     }, 15_000);
     return () => window.clearInterval(timer);
@@ -268,9 +268,9 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     setDrafts(list => [result.submission, ...list.filter(item => item.submission_id !== result.submission.submission_id)]
       .filter(item => item.status === 'awaiting_upload' || item.status === 'ready_for_review'));
     const grant = result.upload_grant, submitUrl = grant ? sameOriginSubmitUrl(grant.submit_url) : null;
-    if (!grant) { setAgentSecret(null); setAgentIssue('草稿已建立，但憑證只在第一次回應顯示。請重新產生指令。'); return; }
-    if (!submitUrl) { setAgentSecret(null); setAgentIssue('上傳網址不是本站位址，已停止顯示憑證。請重新產生指令。'); return; }
-    if (isExpired(grant.expires_at)) { setAgentSecret(null); setAgentIssue('一次性上傳憑證已過期，請重新產生指令。'); return; }
+    if (!grant) { setAgentSecret(null); setAgentIssue('草稿已建立，但憑證只在第一次回應顯示。請重新建立指令。'); return; }
+    if (!submitUrl) { setAgentSecret(null); setAgentIssue('上傳網址不是本站位址，已停止顯示憑證。請重新建立指令。'); return; }
+    if (isExpired(grant.expires_at)) { setAgentSecret(null); setAgentIssue('一次性上傳憑證已過期，請重新建立指令。'); return; }
     setAgentIssue(null); setAgentCopied('');
     setAgentSecret({ submissionId: result.submission.submission_id, token: grant.token, expiresAt: grant.expires_at, submitUrl, repositoryUrl: result.submission.seed?.repository_url ?? repositoryUrl, seed: result.submission.seed ?? null });
   }
@@ -329,7 +329,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const value = agentSecret ? agentInstruction(origin, agentSecret, instructionSeed(agentSecret.seed), agentSecret.repositoryUrl) : '';
     if (!value) return;
-    try { await navigator.clipboard.writeText(value); setAgentCopied('已複製，只貼給你選擇的 Agent。'); }
+    try { await navigator.clipboard.writeText(value); setAgentCopied('已複製，貼給你的 Agent。'); }
     catch { agentField.current?.select(); setAgentCopied('無法自動複製，已選取內容，請手動複製。'); }
   }
   async function loadKeys() {
@@ -356,7 +356,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
   }
   async function copyIssuedKey() {
     if (!issuedKey) return;
-    try { await navigator.clipboard.writeText(issuedKey.token); setKeyCopied('已複製，只貼給你選擇的 Agent。'); }
+    try { await navigator.clipboard.writeText(issuedKey.token); setKeyCopied('已複製，貼給你的 Agent。'); }
     catch { keyField.current?.select(); setKeyCopied('無法自動複製，已選取內容，請手動複製。'); }
   }
   function rememberGrant(result: GrantResult | undefined): HeldGrant | null {
@@ -384,7 +384,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     if (agentSecret?.submissionId === id) setAgentSecret(null);
     const result = await client.post<GrantResult>(`/me/skill-submissions/${encodeURIComponent(id)}/grant`, {}, { ifMatch: version });
     const grant = rememberGrant(result);
-    if (!grant) throw new Error('無法取得新的上傳授權。請按「重新產生指令」後再貼一次 JSON。');
+    if (!grant) throw new Error('無法取得新的上傳授權。請按「重新建立指令」後再貼一次 JSON。');
     return grant;
   }
   async function grantForPaste(repositoryUrl: unknown) {
@@ -398,7 +398,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
     if (held && !drafts.some(item => item.submission_id === held.id && item.seed)) return held;
     const created = await client.post<GrantResult>('/me/skill-submissions', {});
     const grant = rememberGrant(created);
-    if (!grant) throw new Error('草稿已建立，但沒有可使用的上傳授權。請按「重新產生指令」後再貼一次 JSON。');
+    if (!grant) throw new Error('草稿已建立，但沒有可使用的上傳授權。請按「重新建立指令」後再貼一次 JSON。');
     return grant;
   }
   async function agentDetail(response: Response) {
@@ -406,7 +406,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
       const body = await response.json() as { detail?: unknown };
       if (typeof body.detail === 'string' && body.detail.trim()) return body.detail.trim();
     } catch { /* Status fallback is sufficient. */ }
-    if (response.status === 401) return '上傳授權已失效。請按「重新產生指令」後再貼一次 JSON。';
+    if (response.status === 401) return '上傳授權已失效。請按「重新建立指令」後再貼一次 JSON。';
     return `上傳沒有完成（${response.status}）。`;
   }
   async function submitChat(event: FormEvent) {
@@ -456,7 +456,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
   }
   async function copyChat() {
     const value = chatSkillInstruction(chatRepo, instructionSeed(chatTarget?.seed));
-    try { await navigator.clipboard.writeText(value); setChatCopied('已複製給聊天 AI 的說明。'); }
+    try { await navigator.clipboard.writeText(value); setChatCopied('已複製，貼給聊天 AI。'); }
     catch { setChatCopied('無法自動複製，請選取說明後手動複製。'); }
   }
   useEffect(() => { if (review) previewHeading.current?.focus(); }, [review]);
@@ -618,13 +618,13 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
       <div className="section-head"><h2>選擇填寫方式</h2><p>專案網址：<span className="work-sharing-preview">{draft.repository_url.trim()}</span></p></div>
       <div className="actions">
         <button type="button" className="btn btn-primary" disabled={pending} onClick={() => { setError(null); clearAgentState(); setStep('manual'); }}>我自己填</button>
-        <button type="button" className="btn btn-secondary btn-small" disabled={pending} onClick={() => void startAgent()}>{agentMutation.busy ? '產生中…' : '交給我的 agent'}</button>
+        <button type="button" className="btn btn-secondary btn-small" disabled={pending} onClick={() => void startAgent()}>{agentMutation.busy ? '產生中…' : '用我的 Agent 上傳'}</button>
         <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => { setError(null); clearAgentState(); setStep('url'); }}>修改網址</button>
       </div>
       {agentMutation.error && <p role="alert" className="banner banner-error">{agentMutation.error}</p>}
     </div> : activeStep === 'agent' ? <div className="stack">
       <div className="section-head">
-        <h2 ref={agentHeading} tabIndex={-1}>交給我的 agent</h2>
+        <h2 ref={agentHeading} tabIndex={-1}>用我的 Agent 上傳</h2>
         <p className="field-hint">Agent 只會上傳一份私人草稿，回到這裡預覽並確認後才會公開。</p>
       </div>
       {activeAgentDraft?.seed && <p className="status-note">正在補完：{activeAgentDraft.seed.title}</p>}
@@ -635,10 +635,10 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
         <label className="field">給 Agent 的私人上傳指令
           <textarea aria-label="給 Agent 的私人上傳指令" ref={agentField} readOnly rows={8} value={agentPrompt} spellCheck={false} autoComplete="off" data-private="true"/>
         </label>
-        <p className="field-hint">憑證 {formatIsoLocal(agentSecret.expiresAt)} 到期，只能上傳這份草稿；只貼給你選擇的 Agent。</p>
+        <p className="field-hint">憑證 {formatIsoLocal(agentSecret.expiresAt)} 到期，只能上傳這份草稿；只貼給你的 Agent。</p>
         <div className="actions">
-          <button type="button" className="btn btn-primary" onClick={() => void copyAgentInstruction()}>複製給 agent</button>
-          <a href={`${SKILL_UPLOAD_GUIDE}/SKILL.md`} target="_blank" rel="noopener noreferrer">公開指南 ↗</a>
+          <button type="button" className="btn btn-primary" onClick={() => void copyAgentInstruction()}>交給我的 Agent</button>
+          <a href={`${SKILL_UPLOAD_GUIDE}/SKILL.md`} target="_blank" rel="noopener noreferrer">Agent 說明 ↗</a>
           {activeAgentDraft?.status === 'awaiting_upload' && <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => void revokeAgentDraft()}>撤銷這份草稿</button>}
           {draft.repository_url.trim()
             ? <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => { clearAgentState(); setStep('choice'); }}>返回選擇方式</button>
@@ -646,8 +646,8 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
         </div>
         {agentCopied && <p role="status" className="field-hint">{agentCopied}</p>}
       </div> : <div className="actions">
-        <button type="button" className="btn btn-primary" disabled={pending} onClick={() => activeAgentDraft ? void regrantDraft(activeAgentDraft) : void startAgent()}>{agentMutation.busy ? '產生中…' : activeAgentDraft && !agentIssue ? '產生私人上傳指令' : '重新產生指令'}</button>
-        <a href={`${SKILL_UPLOAD_GUIDE}/SKILL.md`} target="_blank" rel="noopener noreferrer">公開指南 ↗</a>
+        <button type="button" className="btn btn-primary" disabled={pending} onClick={() => activeAgentDraft ? void regrantDraft(activeAgentDraft) : void startAgent()}>{agentMutation.busy ? '產生中…' : activeAgentDraft && !agentIssue ? '建立上傳指令' : '重新建立指令'}</button>
+        <a href={`${SKILL_UPLOAD_GUIDE}/SKILL.md`} target="_blank" rel="noopener noreferrer">Agent 說明 ↗</a>
         {activeAgentDraft?.status === 'awaiting_upload' && <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => void revokeAgentDraft()}>撤銷這份草稿</button>}
         {draft.repository_url.trim()
           ? <button type="button" className="btn btn-ghost" disabled={pending} onClick={() => { clearAgentState(); setStep('choice'); }}>返回選擇方式</button>
@@ -685,7 +685,7 @@ export function SkillSubmission({ client, userId, resumeId = null, resumeTrigger
             {chatTarget?.seed && <div className="skill-upload-target"><p>正在補完：{chatTarget.seed.title}</p><button type="button" className="btn btn-ghost" onClick={() => { setChatTargetId(null); setChatRepo(draft.repository_url.trim()); }}>改為新草稿</button></div>}
             <label className="field">公開儲存庫網址<input value={chatRepo} maxLength={300} placeholder="https://github.com/擁有者/儲存庫" autoComplete="off" spellCheck={false} onChange={event => setChatRepo(event.target.value)}/></label>
             <label className="field">給聊天 AI 的說明<textarea aria-label="給聊天 AI 的說明" readOnly rows={7} value={chatSkillInstruction(chatRepo, instructionSeed(chatTarget?.seed))} spellCheck={false}/></label>
-            <div className="actions"><button type="button" className="btn btn-ghost" onClick={() => void copyChat()}>複製給聊天 AI</button>{chatCopied && <span role="status" className="field-hint">{chatCopied}</span>}</div>
+            <div className="actions"><button type="button" className="btn btn-ghost" onClick={() => void copyChat()}>交給聊天 AI</button>{chatCopied && <span role="status" className="field-hint">{chatCopied}</span>}</div>
             <form className="stack" onSubmit={event => void submitChat(event)}>
               <label className="field">貼上 JSON<textarea aria-label="貼上 JSON" rows={7} value={chatJson} spellCheck={false} placeholder={'貼上聊天 AI 回覆的 JSON。若包在 ```json 裡，整段貼上即可。'} onChange={event => { setChatJson(event.target.value); setChatError(null); }}/></label>
               <div className="actions">

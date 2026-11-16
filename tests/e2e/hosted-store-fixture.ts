@@ -8,7 +8,7 @@ import {CreateResultSchema} from '../../contracts/guild-launchpad/v1/tenant.js';
 import {InstallationViewSchema,LaunchPlanSchema,RegistryOperationSchema} from '../../contracts/guild-launchpad/v1/module-registry.js';
 const commerce='guild_commerce_sales',production='guild_commercial_production';
 const storePage=(page:Page)=>page.locator('.hosted-store');
-export async function storeArea(page:Page,area:'商品'|'供貨合作'|'店面與發布'|'商店資料'){
+export async function storeArea(page:Page,area:'商品'|'供貨合作'|'店面'|'商店資料'){
   await page.getByRole('navigation',{name:'商店工作區',exact:true}).getByRole('button',{name:area,exact:true}).click();
 }
 export async function person(db: Pool) {

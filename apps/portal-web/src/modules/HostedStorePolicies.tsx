@@ -17,7 +17,7 @@ export function HostedStorePolicies({client,userId,tenantId,instanceId,draft,wri
  useEffect(()=>{const next=policiesFields(draft);if(!equal(next,baseline.current)){if(equal(value,baseline.current)&&!held.current)setValue(next);baseline.current=next;}},[draft,value]);
  async function send(original:PoliciesAttempt){
   if(busy.current)return;busy.current=true;held.current=original;setAttempt(original);setPhase('sending');setMessage('正在儲存賣方資訊與商店政策…');holdPoliciesAttempt(client,userId,original);onState(true,true);
-  try{const ack=await sendPoliciesAttempt(client,original);releasePoliciesAttempt(client,userId,original);if(!current())return;held.current=null;setAttempt(null);setValue(policiesFields(ack.current));await onSaved();if(!current())return;setPhase('idle');setErrors({});setMessage('已儲存賣方資訊與商店政策。重新發布後，公開頁才會更新。');}
+  try{const ack=await sendPoliciesAttempt(client,original);releasePoliciesAttempt(client,userId,original);if(!current())return;held.current=null;setAttempt(null);setValue(policiesFields(ack.current));await onSaved();if(!current())return;setPhase('idle');setErrors({});setMessage('已儲存賣方資訊與商店政策。');}
   catch(error){const unknown=!(error instanceof ApiError)||error.network||error.timedOut||error.accessExpired,retained=retainedPoliciesFailure(original,unknown||heldPoliciesAttempt(client,userId,original)?.hadUnknown===true);
    if(retained.hadUnknown)holdPoliciesAttempt(client,userId,retained);else releasePoliciesAttempt(client,userId,original);
    if(!current())return;held.current=retained;setAttempt(retained);
@@ -40,7 +40,6 @@ export function HostedStorePolicies({client,userId,tenantId,instanceId,draft,wri
  const preview=`/api/v1/tenants/${tenantId}/storefronts/${instanceId}/preview-page`;
  return <section className="hosted-store-policies stack" aria-labelledby={id+'-title'}>
   <h4 id={id+'-title'}>賣方資訊與商店政策</h4>
-  <p className="field-hint">先儲存草稿，再預覽與發布。公開頁會保留目前發布的版本。</p>
   <p className="hosted-policies-warning">這些資料會公開顯示在商店頁尾與『關於本店』頁。</p>
   <p className="field-hint">平台只檢查格式，不認證賣方資料。請自行確認內容。</p>
   {!writable&&<p>你目前只有檢視權限，無法修改賣方資訊與商店政策。</p>}
@@ -50,7 +49,7 @@ export function HostedStorePolicies({client,userId,tenantId,instanceId,draft,wri
     <p id={id+'-'+field+'-hint'} className="field-hint">{key==='business_name'?'填寫任何賣方欄位時必填；這是零售負責方。填寫後，商店頁尾才會顯示賣方資訊、「關於本店」與政策連結。':key==='address'?'請填營業地址或可收受文書的地址。':key==='tax_id'?'選填，8 位半形數字；僅檢查格式。':'此階段選填。'}最多 {max} 個字。</p>{errorFor(field)}</div>;
    })}</div>
    <fieldset className="hosted-policies-fields stack"><legend>商店政策</legend>
-    <p className="field-hint">賣方資訊只顯示最新發布的內容；移除電話或地址並重新發布後，公開頁就不再顯示。</p>
+    <p className="field-hint">賣方資訊只顯示最新發布的內容；移除電話或地址並發布更新後，公開頁就不再顯示。</p>
     <p className="field-hint">政策內文一經發布，就會留下有公開網址的版本。之後修改或清空，舊版仍可透過原網址查看，目前無法撤下。請不要在政策內文寫入個人電話、住址等個人資料；聯絡方式請填在上方的賣方資訊。</p>
     <p className="field-hint">只接受純文字，不支援 Markdown、HTML 或自動連結。每項最多 10,000 個字。</p>
     {POLICY_KINDS.map(kind=>{const field='policies.'+kind+'.body',policy=value.policies[kind],count=[...policy.body.replace(/\r\n/g,'\n').trim()].length;return <details className="hosted-policies-policy" key={kind} open={kind==='shipping'}><summary>{POLICY_LABELS[kind]}{kind==='terms'?'（選填）':''}<small>{policy.body?'已填寫':'尚未填寫'}</small></summary><div className="stack"><div className="hosted-policies-policy-grid"><div><div className="field"><label htmlFor={id+'-'+kind}>{POLICY_LABELS[kind]}內容</label><textarea id={id+'-'+kind} rows={10} value={policy.body} aria-invalid={count>10000||Boolean(errors[field])||undefined} aria-describedby={id+'-'+kind+'-count'+(errors[field]?' '+id+'-'+field+'-error':'')} onChange={e=>updateBody(kind,e.target.value)}/></div><p id={id+'-'+kind+'-count'} className="field-hint">{count.toLocaleString('en-US')}／10,000 個字</p>{errorFor(field)}</div><aside className="hosted-policies-checklist" aria-label={POLICY_LABELS[kind]+'段落清單'}><p>建議涵蓋的段落</p><ul>{POLICY_CHECKLISTS[kind].map(heading=><li key={heading}>{heading}</li>)}</ul></aside></div>
@@ -64,7 +63,7 @@ export function HostedStorePolicies({client,userId,tenantId,instanceId,draft,wri
   {phase==='review'&&attempt&&<div className="stack"><p>最新已儲存的營業名稱：{draft.seller.business_name||'未填寫'}。輸入仍保留在上方。</p><details><summary>核對最新已儲存的賣方資訊與政策</summary><dl className="detail-list">{Object.entries(SELLER_FIELDS).map(([key,[label]])=><div key={key}><dt>{label}</dt><dd>{draft.seller[key as keyof typeof draft.seller]||'未填寫'}</dd></div>)}</dl>{POLICY_KINDS.map(kind=><section key={kind}><h5>{POLICY_LABELS[kind]}</h5><ReadonlyPolicy policy={draft.policies[kind]}/></section>)}</details><div className="actions"><button type="button" className="btn btn-ghost btn-sm" disabled={locked||!writable||draft.version===attempt.expected} onClick={()=>void send(reviewPoliciesAttempt(attempt,draft.version,crypto.randomUUID()))}>確認以最新版本儲存賣方資訊與商店政策</button><button type="button" className="btn btn-ghost btn-sm" disabled={locked} onClick={()=>{held.current=null;setAttempt(null);setValue(policiesFields(draft));setPhase('idle');setMessage('已取消這次賣方資訊與商店政策變更。');}}>取消這次變更</button></div></div>}
   {message&&<p role={phase==='error'?'alert':'status'} className="field-hint">{message}</p>}
   <div className="actions"><a href={preview+'/about'} target="_blank" rel="noopener">預覽已儲存的賣方資訊與政策</a></div>
-  {dirty&&<p className="field-hint">請先儲存這一節，再開啟預覽與發布。</p>}
+  {dirty&&<p className="field-hint">請先儲存這一節，再開啟預覽。</p>}
  </section>;
 }
 

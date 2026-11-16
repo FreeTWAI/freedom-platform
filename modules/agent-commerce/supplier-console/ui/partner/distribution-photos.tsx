@@ -48,7 +48,7 @@ export function useDistributionPhotos({client,userId,tenantId,instanceId,active,
   const started=scope,generation=client.sessionGeneration;
   void onCommand!({method:'post',path:`${root}/${product.product_id}/${material?'use':'detach'}`,
    body:material?{material_id:material.material_id,version_id:material.current.version_id}:{},version:product.version,
-   schema:DistributionPhotoCommandSchema,notice:'已更新店面草稿，發布店面後才會生效。',targetMissingIsStore:false,
+   schema:DistributionPhotoCommandSchema,notice:'已更新店面草稿。',targetMissingIsStore:false,
    success:()=>{if(mounted.current&&client.sessionGeneration===generation&&current.current===started)void load();}});
  }
  const choose=(material:PartnerMaterial,product:DistributionPhotoItem,event:React.MouseEvent<HTMLButtonElement>)=>{

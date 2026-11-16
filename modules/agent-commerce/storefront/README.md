@@ -123,7 +123,7 @@ sidecars/refs. `FREEDOM_STORE_APPEARANCE_ENABLED` defaults OFF in Node and Worke
 any environment or claim deployment, hosted CI, merchant adoption or full C1
 acceptance. Categories, variants, policies and seller disclosure remain later work.
 
-With the flag ON, 「店面與發布 → 店面外觀」 edits the existing template together
+With the flag ON, 「店面 → 店面外觀」 edits the existing template together
 with eight named accent presets, a one-line announcement of at most 80 Unicode
 characters, and an ordered list of up to eight own retail products. Supplied
 products remain outside the picker. All appearance writes require `store:manage`

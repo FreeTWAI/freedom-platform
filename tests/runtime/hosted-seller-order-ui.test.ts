@@ -109,7 +109,7 @@ for (const failure of ['network', '503', 'schema'] as const) test(`seller entry 
   const retry = h.buttons()[0]; assert.ok(retry); retry.props.onClick(); retry.props.onClick(); await h.flush();
   assert.equal(h.requests.length, 2); assert.equal(h.buttons().length, 0); assert.deepEqual(h.links(), ['開店準備']);
   retry.props.onClick(); await h.flush(); assert.equal(h.requests.length, 2, 'stale repeated click cannot issue another read');
-  h.requests[1].resolve(emptyPage); await h.flush(); assert.deepEqual(h.links(), ['開店準備', '預留訂單', '供貨訂單']);
+  h.requests[1].resolve(emptyPage); await h.flush(); assert.deepEqual(h.links(), ['開店準備', '訂單', '供貨訂單']);
   assert.equal(h.buttons().length, 0); h.unmount();
 });
 for (const status of [403, 404]) test(`seller entry ${status} hides owner links without offering retry`, async () => {
@@ -118,7 +118,7 @@ for (const status of [403, 404]) test(`seller entry ${status} hides owner links 
 });
 test('seller entry valid empty owner page enables links without duplicate unchanged-prop reads', async () => {
   const h = entryHarness(); h.render(); assert.equal(h.requests.length, 1); h.requests[0].resolve(emptyPage); await h.flush();
-  assert.deepEqual(h.links(), ['開店準備', '預留訂單', '供貨訂單']); h.render(); assert.equal(h.requests.length, 1); h.unmount();
+  assert.deepEqual(h.links(), ['開店準備', '訂單', '供貨訂單']); h.render(); assert.equal(h.requests.length, 1); h.unmount();
 });
 for (const outcome of ['success', 'failure'] as const) test(`seller entry ignores late ${outcome} after unmount or store change`, async () => {
   for (const unmount of [true, false]) {

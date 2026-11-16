@@ -78,7 +78,7 @@ async function skill(page:Page){
 
 test('positive control: a real caller shows success only after the controlled clipboard ACK',async({page})=>{
   await holdCapabilities(page);await login(page);const dialog=await pageHelp(page);
-  await dialog.getByRole('button',{name:'複製指令',exact:true}).click();await expect.poll(()=>calls(page)).toHaveLength(1);
+  await dialog.getByRole('button',{name:'交給我的 Agent',exact:true}).click();await expect.poll(()=>calls(page)).toHaveLength(1);
   await expect(dialog.getByRole('button',{name:'已複製',exact:true})).toHaveCount(0);expect((await calls(page))[0].value).toContain('頁面標記 page:home');
   await finish(page);await expect(dialog.getByRole('button',{name:'已複製',exact:true})).toBeVisible();
 });
@@ -103,17 +103,17 @@ test('closing and reopening page tools ignores the old copy ACK and keeps one pe
 for(const [id,name,pending] of languages)test(`${id}: Social Post handoff shows localized pending feedback and exports once`,async({page})=>{
   await page.setViewportSize({width:320,height:844});await holdCapabilities(page);await login(page);
   await page.locator('.settings-menu-button').click();await openSettingsPanel(page,'language');await page.getByRole('menuitemradio',{name,exact:true}).click();await closeSettingsMenu(page);await expect(page.locator('html')).toHaveAttribute('lang',id);
-  const dialog=await optimization(page,id),button=dialog.locator('.social-post-optimizer > button').filter({hasText:'複製文案優化任務'});
+  const dialog=await optimization(page,id),button=dialog.locator('.social-post-optimizer > button').filter({hasText:'交給我的 Agent'});
   await button.click();await capture(page,dialog,`optimizer-${id}-pending`);const pendingButton=dialog.getByRole('button',{name:pending,exact:true});
   await expect(pendingButton).toBeDisabled();await expect(pendingButton).toHaveAttribute('aria-busy','true');await pendingButton.dispatchEvent('click');expect(await calls(page)).toHaveLength(1);
   expect((await calls(page))[0].value).toContain('本週展示自己的作品');await expect(dialog.getByRole('status').filter({hasText:'任務已複製'})).toHaveCount(0);
-  await finish(page);await expect(dialog.getByRole('status').filter({hasText:'任務已複製'})).toBeVisible();await expect(dialog.getByRole('button',{name:'複製文案優化任務',exact:true})).toBeEnabled();
+  await finish(page);await expect(dialog.getByRole('status').filter({hasText:'任務已複製'})).toBeVisible();await expect(dialog.getByRole('button',{name:'交給我的 Agent',exact:true})).toBeEnabled();
 });
 
 test('editing during a handoff copy retains the captured original but suppresses stale completion feedback',async({page})=>{
   await holdCapabilities(page);await login(page);const dialog=await optimization(page),source=dialog.getByLabel('貼文內容',{exact:true});
-  await dialog.getByRole('button',{name:'複製文案優化任務',exact:true}).click();await source.fill('地點已更新，新的內容不能被舊結果覆蓋。');
-  await finish(page);await expect(dialog.getByRole('button',{name:'複製文案優化任務',exact:true})).toBeEnabled();await expect(dialog.getByRole('status').filter({hasText:'任務已複製'})).toHaveCount(0);
+  await dialog.getByRole('button',{name:'交給我的 Agent',exact:true}).click();await source.fill('地點已更新，新的內容不能被舊結果覆蓋。');
+  await finish(page);await expect(dialog.getByRole('button',{name:'交給我的 Agent',exact:true})).toBeEnabled();await expect(dialog.getByRole('status').filter({hasText:'任務已複製'})).toHaveCount(0);
   await dialog.getByLabel('貼回 AI 優化結果',{exact:true}).fill('這是依舊原稿寫成的版本。');await expect(dialog.getByRole('button',{name:'採用這版文案',exact:true})).toBeDisabled();
   await expect(source).toHaveValue('地點已更新，新的內容不能被舊結果覆蓋。');expect((await calls(page))[0].value).not.toContain('地點已更新');
 });

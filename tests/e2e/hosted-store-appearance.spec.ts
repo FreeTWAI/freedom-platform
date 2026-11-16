@@ -9,9 +9,9 @@ test('APPEARANCE-OFF editor and public page ignore retained appearance and prese
   await post(page,s.root+'/setup',{name:'合成預設外觀商店',description:'保持目前公開樣式。',slug,currency:'TWD'},201);
   const product=await post(page,s.root+'/products',{title:'合成手作杯',description:'合成展示商品',price_minor:12000,stock:5},201);
   const newRequests:string[]=[];page.on('request',request=>{if(/\/appearance-(?:settings|media)(?:\/|$)/.test(new URL(request.url()).pathname))newRequests.push(request.method());});
-  await open(page,s.hash);await storeArea(page,'店面與發布');await expect(page.locator('.hosted-store-appearance')).toHaveCount(0);
+  await open(page,s.hash);await storeArea(page,'店面');await expect(page.locator('.hosted-store-appearance')).toHaveCount(0);
   await page.getByRole('radio',{name:'直列目錄',exact:false}).check();await page.getByRole('button',{name:'儲存版型',exact:true}).click();
-  await expect(page.locator('.hosted-store')).toContainText('已儲存版型');await page.getByRole('button',{name:'發布展示頁',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 1 版');
+  await expect(page.locator('.hosted-store')).toContainText('已儲存版型');await page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布',exact:true}).click();await expect(page.getByRole('region',{name:'公開狀態'})).toContainText('已公開第 1 版。');
   const tenantId=s.hash.split('/')[1],instanceId=s.hash.split('/')[2],pub=(await e2eAuthPool.query('SELECT current_publication_id FROM commerce_storefront_profiles WHERE instance_id=$1',[instanceId])).rows[0].current_publication_id;
   const before=await page.request.get('/shops/'+slug),originalHtml=await before.text(),jsonBefore=await(await page.request.get('/api/v1/public/stores/'+slug)).text();
   const frozenDocument={profile:'freedom.hosted-store-appearance/v1',accent_preset:'rose',announcement:'旗標關閉時不應顯示的合成公告',
@@ -23,7 +23,7 @@ test('APPEARANCE-OFF editor and public page ignore retained appearance and prese
       [pub,tenantId,instanceId,frozenDocument,createHash('sha256').update(JSON.stringify(frozenDocument)).digest('hex')]);await q.query('COMMIT');
   }finally{await q.query('ROLLBACK');q.release();}
   expect(await(await page.request.get('/shops/'+slug)).text()).toBe(originalHtml);expect(await(await page.request.get('/api/v1/public/stores/'+slug)).text()).toBe(jsonBefore);
-  await page.reload();await storeArea(page,'店面與發布');await expect(page.locator('.hosted-store-appearance')).toHaveCount(0);expect(newRequests).toEqual([]);
+  await page.reload();await storeArea(page,'店面');await expect(page.locator('.hosted-store-appearance')).toHaveCount(0);expect(newRequests).toEqual([]);
   expect((await page.request.get('/api/v1'+s.root+'/appearance-settings')).status()).toBe(404);
   const anonymous=await browser.newContext({baseURL});try{
     const pubPage=await anonymous.newPage();await pubPage.goto('/shops/'+slug);await expect(pubPage.locator('body')).not.toHaveAttribute('data-store-appearance');

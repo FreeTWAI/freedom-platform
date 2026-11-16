@@ -83,8 +83,8 @@ test('owner setup, independent admin admission, safe scope receipt and immediate
   await form.getByRole('textbox',{name:'商店介紹',exact:true}).fill('合成公開服務說明：請先約定面交時間；交付與售後由店主處理。');
   await form.getByRole('button',{name:'儲存商店資料',exact:true}).click();
   await expect(page.locator('.hosted-store').getByRole('status')).toContainText('已儲存。');
-  await storeArea(page,'店面與發布');await page.getByRole('button',{name:'發布展示頁',exact:true}).click();
-  await expect(page.locator('.hosted-store').getByRole('status')).toContainText('已發布・第 1 版');
+  await page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布',exact:true}).click();
+  await expect(page.getByRole('region',{name:'公開狀態'})).toContainText('已公開第 1 版。');
   await page.getByRole('link',{name:'開店準備',exact:true}).click();
   for(const key of ['storefront','products','store_information'])await expect(row(key).getByText('完成',{exact:true})).toBeVisible();
   await row('payment').getByRole('link',{name:'前往收款設定',exact:true}).click();

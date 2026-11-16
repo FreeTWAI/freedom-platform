@@ -56,7 +56,7 @@ test('HO-SUI01 owner entry, committed stale cancel ACK, original tuple guards an
   test.setTimeout(120000);
   const s = await reserved(e2eAuthPool, browser, baseURL!); const hash = canonicalHash(`#stores/${s.tenant}/${s.instance}/orders`);
   await buyerLogin(page, s.seller.email, `#stores/${s.tenant}/${s.instance}`);
-  await surface(page).getByRole('link', {name: '預留訂單', exact: true}).click();
+  await surface(page).getByRole('link', {name: '訂單', exact: true}).click();
   await expect(surface(page).getByRole('button', {name: '查看這筆預留'})).toBeEnabled();
   await capture(page, testInfo, 'list');
   await surface(page).getByRole('button', {name: '查看這筆預留'}).click();
@@ -174,13 +174,13 @@ for (const fault of ['network', '503', 'schema'] as const) test(`owner entry rec
     await buyerLogin(page, s.seller.email, `#stores/${s.tenant}/${s.instance}`);
     const entry = page.locator('.hosted-seller-order-links');
     await expect(entry.getByRole('status')).toHaveText('暫時無法讀取訂單入口。');
-    await expect(entry.getByRole('link', {name: '預留訂單', exact: true})).toHaveCount(0);
+    await expect(entry.getByRole('link', {name: '訂單', exact: true})).toHaveCount(0);
     page.on('request', request => {if (request.url().includes(`${s.root}/reservations`) && request.method() !== 'GET') writes++;});
     if (fault === 'network') await capture(page, testInfo, 'entry-read-failed');
     await entry.getByRole('button', {name: '重試讀取訂單入口', exact: true}).click(); await started.promise;
-    await expect(entry.getByRole('button')).toHaveCount(0); await expect(entry.getByRole('link', {name: '預留訂單', exact: true})).toHaveCount(0);
+    await expect(entry.getByRole('button')).toHaveCount(0); await expect(entry.getByRole('link', {name: '訂單', exact: true})).toHaveCount(0);
     expect(reads).toBe(2); pending.resolve();
-    await expect(entry.getByRole('link', {name: '預留訂單', exact: true})).toHaveCount(1);
+    await expect(entry.getByRole('link', {name: '訂單', exact: true})).toHaveCount(1);
     await expect(entry.getByRole('link', {name: '供貨訂單', exact: true})).toHaveCount(1);
     await expect(entry.getByRole('status')).toHaveCount(0); expect(writes).toBe(0); expect(reads).toBe(2);
   } finally {pending.resolve(); await page.unroute(path);}
@@ -194,7 +194,7 @@ for (const status of [403, 404]) test(`owner entry ${status} remains hidden with
     await buyerLogin(page, s.seller.email, `#stores/${s.tenant}/${s.instance}`); await (await response).finished();
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     const entry = page.locator('.hosted-seller-order-links'); await expect(entry).toHaveCount(1);
-    await expect(entry.getByRole('link', {name: '預留訂單', exact: true})).toHaveCount(0);
+    await expect(entry.getByRole('link', {name: '訂單', exact: true})).toHaveCount(0);
     await expect(entry.getByRole('link', {name: '供貨訂單', exact: true})).toHaveCount(0);
     await expect(entry.getByRole('button')).toHaveCount(0); await expect(entry.getByRole('status')).toHaveCount(0); expect(reads).toBe(1);
   } finally {await page.unroute(path);}

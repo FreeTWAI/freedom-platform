@@ -387,10 +387,10 @@ test('a published member work is packaged as a community skill book like every c
   await expect(dialog.getByRole('link',{name:'開啟原作 ↗',exact:true})).toHaveAttribute('href',repo);
   await expect(dialog.locator('.skill-intro-primary-actions > .btn-primary')).toHaveCount(1);
   await expect(dialog.locator('.skill-intro-advanced')).not.toHaveAttribute('open');
-  await expect(dialog.getByRole('link',{name:'交給 Agent ↗',exact:true})).toBeHidden();
+  await expect(dialog.getByRole('link',{name:'Agent 說明 ↗',exact:true})).toBeHidden();
   await dialog.getByText('作者與共同開發（進階）',{exact:true}).click();
   await expect(dialog.getByRole('link',{name:'開啟展示 ↗',exact:true})).toHaveAttribute('href','https://example.com/event-form');
-  await expect(dialog.getByRole('link',{name:'交給 Agent ↗',exact:true})).toHaveAttribute('href',`${path}/SKILL.md`);
+  await expect(dialog.getByRole('link',{name:'Agent 說明 ↗',exact:true})).toHaveAttribute('href',`${path}/SKILL.md`);
   await expect(dialog).toContainText('分享者自行聲明為推薦／整理者');
   await expect(dialog.locator('.skill-intro-start')).toHaveAttribute('open','');await expect(dialog.locator('pre')).toHaveText('npm create event-form@latest');
   expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);

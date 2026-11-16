@@ -61,7 +61,7 @@ function PhotoEditor({client,userId,tenantId,instanceId,product,media,writable,u
     try{
       const ack=await sendProductPhoto(client,value);releasePhotoAttempt(client,userId,value);saved=true;
       if(!current())return;
-      clear();savedNotice.current=ack.changed?'已儲存照片變更。重新發布後，公開頁才會更新。':'這項商品已經沒有草稿照片。';setMessage(savedNotice.current);
+      clear();savedNotice.current=ack.changed?'已儲存照片變更。':'這項商品已經沒有草稿照片。';setMessage(savedNotice.current);
     }catch(error){
       const unknown=!(error instanceof ApiError)||error.network||error.timedOut||error.accessExpired;
       const retained=retainedPhotoFailure(value,unknown||heldPhotoAttempt(client,userId,value)?.hadUnknown===true);
@@ -87,7 +87,7 @@ function PhotoEditor({client,userId,tenantId,instanceId,product,media,writable,u
       {uploadsEnabled&&<label htmlFor={id}>商品照片<input ref={input} id={id} type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked} aria-describedby={id+'-hint'} onChange={event=>{
         const selected=event.target.files?.[0];if(selected)void choose(selected);
       }}/></label>}
-      {uploadsEnabled&&<p className="field-hint" id={id+'-hint'}>PNG、JPEG 或 WebP，原始照片最多 20 MB；大照片會在裝置上自動縮小。選好後自動上傳並儲存草稿；公開頁需重新發布。</p>}
+      {uploadsEnabled&&<p className="field-hint" id={id+'-hint'}>PNG、JPEG 或 WebP，原始照片最多 20 MB；大照片會在裝置上自動縮小。選好後自動上傳並儲存草稿。</p>}
       {file&&<p className="field-hint">已選擇：{file.name}</p>}
       {file&&previewUrl&&<figure className="hosted-photo-draft"><img src={previewUrl} alt="待儲存的完整商品照片"/><figcaption>裝置上的預覽・{(file.size/1024/1024).toFixed(2)} MB・{phase==='unknown'?'儲存結果尚未確認':phase==='sending'?'正在儲存':'尚未套用到商品'}</figcaption></figure>}
       <div className="actions">
@@ -95,7 +95,7 @@ function PhotoEditor({client,userId,tenantId,instanceId,product,media,writable,u
           :phase==='review'?<button type="button" className="btn btn-ghost" disabled={locked||!writable||!attempt||(attempt.action==='upload'&&!uploadsEnabled)} onClick={()=>attempt&&void send(reviewPhotoAttempt(attempt,product.version,crypto.randomUUID()))}>確認以最新商品套用照片變更</button>
           :phase==='refresh_failed'?<button type="button" className="btn btn-ghost" disabled={locked} onClick={()=>void refreshSaved()}>重新讀取已儲存照片</button>
           :<>{phase==='rejected'&&attempt&&<button type="button" className="btn btn-ghost" disabled={blocked||!writable||(attempt.action==='upload'&&!uploadsEnabled)} onClick={()=>void send(attempt)}>{attempt.action==='upload'?'重試儲存照片':'重試移除照片'}</button>}
-            {photo&&<button type="button" className="btn btn-ghost" disabled={blocked} onClick={()=>{if(window.confirm(`移除「${product.title}」的草稿照片？公開頁會保留到重新發布。`))remove();}}>移除照片</button>}</>}
+            {photo&&<button type="button" className="btn btn-ghost" disabled={blocked} onClick={()=>{if(window.confirm(`移除「${product.title}」的草稿照片？`))remove();}}>移除照片</button>}</>}
         {(file||attempt||preparing)&&phase!=='unknown'&&phase!=='sending'&&phase!=='refreshing'&&<button type="button" className="btn btn-ghost" disabled={locked} onClick={()=>{preparation.current++;setPreparing(false);clear();setMessage('已取消這次照片變更。');}}>取消照片變更</button>}
       </div>
     </>}

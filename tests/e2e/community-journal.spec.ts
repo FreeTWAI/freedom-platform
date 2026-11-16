@@ -60,7 +60,7 @@ test('assigned editor can issue a key, review, publish and withdraw an API submi
  await e2eAuthPool.query('DELETE FROM community_journal_publisher');
  await e2eAuthPool.query('INSERT INTO community_journal_publisher(community_id,owner_ref) VALUES($1,$2)',[owner.community_id,owner.user_id]);
  try{
-  await page.goto('/journal/manage');await page.getByRole('button',{name:'建立 30 天投稿金鑰'}).click();
+  await page.goto('/journal/manage');await page.getByRole('button',{name:'建立金鑰'}).click();
   const secret=await page.locator('code').filter({hasText:/^fjp_/}).innerText();expect(secret).toMatch(/^fjp_/);
   await page.getByRole('button',{name:'已保存，隱藏金鑰'}).click();await expect(page.getByText(secret,{exact:true})).toHaveCount(0);
   const p={...person,avatar:{...person.avatar,url:'/media/public/'+[...journalMedia][0],alt:'合成人物',width:null,height:null}};
@@ -93,7 +93,7 @@ for(const stage of ['state','key','detail'] as const){
    return route.fulfill({json:oldState});
   });
   await page.goto('/journal/manage');await expect(page.getByText('OLD-PRIVATE-KEY',{exact:false})).toBeVisible();
-  await page.getByRole('button',{name:stage==='detail'?'查看內容':'建立 30 天投稿金鑰',exact:true}).click();await waiting;
+  await page.getByRole('button',{name:stage==='detail'?'查看內容':'建立金鑰',exact:true}).click();await waiting;
   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
   denied=true;
   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
@@ -104,7 +104,7 @@ for(const stage of ['state','key','detail'] as const){
   await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
   await expect(page.getByText('OLD-PRIVATE-KEY',{exact:false})).toHaveCount(0);await expect(page.getByText('OLD-PRIVATE-DRAFT',{exact:false})).toHaveCount(0);
   await expect(page.getByText('fjp_LATE_PRIVATE_SECRET',{exact:false})).toHaveCount(0);await expect(page.getByRole('heading',{name:'LATE-PRIVATE-ARTICLE'})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'建立 30 天投稿金鑰',exact:true})).toHaveCount(0);await expect(page.getByRole('alert')).toContainText('SESSION-DENIED');
+  await expect(page.getByRole('button',{name:'建立金鑰',exact:true})).toHaveCount(0);await expect(page.getByRole('alert')).toContainText('SESSION-DENIED');
  });
 }
 
@@ -113,9 +113,9 @@ browserTest('private editor refuses an action result belonging to the previous a
  await page.route('**/api/v1/session',r=>r.fulfill({json:{user:{user_id:actor},csrf_token:actor+'-csrf'}}));
  await page.route('**/api/v1/me/community-journal',r=>r.fulfill({json:{aggregate_version:'1',published_submission_id:null,keys:[],submissions:[]}}));
  await page.route('**/api/v1/me/community-journal/keys',async r=>{actor='new-actor';await r.fulfill({json:{token:'fjp_PREVIOUS_ACTOR_SECRET'}});});
- await page.goto('/journal/manage');await page.getByRole('button',{name:'建立 30 天投稿金鑰',exact:true}).click();
+ await page.goto('/journal/manage');await page.getByRole('button',{name:'建立金鑰',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('登入狀態已變更');await expect(page.getByText('fjp_PREVIOUS_ACTOR_SECRET',{exact:false})).toHaveCount(0);
- await expect(page.getByRole('button',{name:'建立 30 天投稿金鑰',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'建立金鑰',exact:true})).toHaveCount(0);
 });
 
 test('activity clears stale counts while a different period loads and fails',async({page})=>{
@@ -169,7 +169,7 @@ test('editor reviews both same-date communities before publishing the full snaps
  const session=await login.json(),owner=(await e2eAuthPool.query('SELECT user_id,community_id FROM users WHERE user_id=$1',[session.user.user_id])).rows[0];
  await e2eAuthPool.query('DELETE FROM community_journal_publisher');await e2eAuthPool.query('INSERT INTO community_journal_publisher(community_id,owner_ref) VALUES($1,$2)',[owner.community_id,owner.user_id]);
  try{
-  await page.goto('/journal/manage');await page.getByRole('button',{name:'建立 30 天投稿金鑰'}).click();
+  await page.goto('/journal/manage');await page.getByRole('button',{name:'建立金鑰'}).click();
   const secret=await page.locator('code').filter({hasText:/^fjp_/}).innerText();await page.getByRole('button',{name:'已保存，隱藏金鑰'}).click();
   const people=streamSnapshot.data.people.map(p=>({...p,avatar:{...p.avatar,url:'/media/public/'+[...journalMedia][0],alt:'合成人物',width:null,height:null}}));
   const body={schema_version:1,source_revision:'c'.repeat(64),people,journals:streamSnapshot.data.journals.map(j=>({...j,people:people.filter(p=>p.community===j.community)}))};

@@ -42,7 +42,7 @@ export function HostedStoreGallery({client,userId,tenantId,instanceId,product,ga
    const ack=await sendGalleryPhoto(client,value);releasePhotoAttempt(client,userId,value);held.current=null;setAttempt(null);setPhase('idle');
    if(value.action==='upload'){setFile(null);if(picker.current)picker.current.value='';}
    if(value.action==='describe'&&value.photoKey)setAlts(old=>{const next={...old};delete next[value.photoKey!];return next;});
-   setMessage(ack.changed?'已儲存照片變更。重新發布後，公開頁才會更新。':'照片沒有變更。');await onSaved();
+   setMessage(ack.changed?'已儲存照片變更。':'照片沒有變更。');await onSaved();
   }catch(e){
    const unknown=!(e instanceof ApiError)||e.network||e.timedOut||e.accessExpired;
    const pending=retainedPhotoFailure(value,unknown||heldPhotoAttempt<GalleryPhotoAttempt>(client,userId,value)?.hadUnknown===true);
@@ -65,7 +65,7 @@ export function HostedStoreGallery({client,userId,tenantId,instanceId,product,ga
  function cancel(){serial.current++;setPreparing(false);setFile(null);setAttempt(null);held.current=null;setAlts({});setPhase('idle');if(picker.current)picker.current.value='';setMessage('已取消這次照片變更。');}
  return <section className="hosted-gallery stack" aria-label="商品照片">
   <div className="hosted-gallery-heading"><h5>商品照片</h5><span>{photos.length} / 8 張</span></div>
-  <p className="field-hint">第一張是主照片，用於商品卡片與分享連結。照片與說明需重新發布後，公開頁才會更新。</p>
+  <p className="field-hint">第一張是主照片，用於商品卡片與分享連結。</p>
   {!gallery?<p role="status">商品照片暫時無法讀取，請重新整理商店。</p>:unavailable?<p className="field-hint">商品照片目前無法讀取。</p>:rows.length===0?<p className="field-hint">尚未加入商品照片。</p>:<>
    {retained.length>0&&<p className="banner" role="status">主照片已移除，請先設為主照片或移除保留的照片。</p>}
    <ol className="hosted-gallery-list">{rows.map((photo,n)=><li key={photo.photo_key}>
@@ -82,7 +82,7 @@ export function HostedStoreGallery({client,userId,tenantId,instanceId,product,ga
     </div></li>)}</ol>
   </>}
   {writable&&gallery?.media_installed&&<>
-   {!retained.length&&gallery.uploads_enabled&&(photos.length<8?<><label htmlFor={id}>新增商品照片<input id={id} ref={picker} type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||altDirty} aria-describedby={id+'-hint'} onChange={event=>{const next=event.target.files?.[0];if(next)void choose(next);}}/></label><p id={id+'-hint'} className="field-hint">PNG、JPEG 或 WebP，原始照片最多 20 MB；大照片會在裝置上自動縮小。先看完整預覽，再儲存；公開頁需重新發布。</p></>:<p className="field-hint">已達 8 張照片上限，移除後才能新增。</p>)}
+   {!retained.length&&gallery.uploads_enabled&&(photos.length<8?<><label htmlFor={id}>新增商品照片<input id={id} ref={picker} type="file" accept="image/png,image/jpeg,image/webp" disabled={blocked||altDirty} aria-describedby={id+'-hint'} onChange={event=>{const next=event.target.files?.[0];if(next)void choose(next);}}/></label><p id={id+'-hint'} className="field-hint">PNG、JPEG 或 WebP，原始照片最多 20 MB；大照片會在裝置上自動縮小。先看完整預覽，再儲存。</p></>:<p className="field-hint">已達 8 張照片上限，移除後才能新增。</p>)}
    <p id={id+'-alt'} className="field-hint">照片說明為選填，最多 120 字。留空時使用商品名稱與照片次序。{altDirty?'請先儲存或取消照片說明，再調整順序。':''}</p>
    {!gallery.uploads_enabled&&!retained.length&&photos.length<8&&<p className="field-hint">商品照片上傳目前無法使用。</p>}
    {file&&<p className="field-hint">已選擇：{file.name}</p>}

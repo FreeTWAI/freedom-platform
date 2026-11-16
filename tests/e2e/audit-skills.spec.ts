@@ -99,7 +99,7 @@ for (const width of [1280, 390]) {
       await expect(notes.locator('.github-star-control')).toHaveCount(0);
       const collaboration = dialog.locator('.skill-intro-collaboration');
       await expect(collaboration.getByRole('link', { name: '查看原作 PR ↗', exact: true })).toHaveAttribute('href', `${upstream}/pulls`);
-      await expect(collaboration.getByRole('link', { name: '交給 Agent ↗', exact: true })).toHaveAttribute('href', '/development/skills/social-post/SKILL.md');
+      await expect(collaboration.getByRole('link', { name: 'Agent 說明 ↗', exact: true })).toHaveAttribute('href', '/development/skills/social-post/SKILL.md');
       await expect(dialog.getByText('參與開發', { exact: true })).toHaveCount(0);
       await expect(dialog.getByRole('link', { name: '查看來源專案 ↗', exact: true })).toHaveCount(0);
       await expect(dialog.getByRole('link', { name: '工坊協作版本 ↗', exact: true })).toHaveCount(0);

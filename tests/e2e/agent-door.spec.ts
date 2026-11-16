@@ -25,7 +25,7 @@ test('member creates one token in the portal; their agent registers and reads it
  const text=await block.inputValue(),match=/fw_agent_[A-Za-z0-9_-]{43}/.exec(text);
  expect(Boolean(match),'one-time block contains the newly issued credential').toBe(true);
  const token=match![0];
- await panel.getByRole('button',{name:'複製這段指令',exact:true}).click();await expect(block).toBeVisible();
+ await panel.getByRole('button',{name:'交給我的 Agent',exact:true}).click();await expect(block).toBeVisible();
  expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(text);
  await panel.getByRole('button',{name:'複製連線設定',exact:true}).click();await expect(block).toBeVisible();
  const firstSettings=JSON.parse(await page.evaluate(()=>navigator.clipboard.readText())).mcpServers['freedom-workshop'];

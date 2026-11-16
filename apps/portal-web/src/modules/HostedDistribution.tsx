@@ -163,5 +163,5 @@ export function distributionProposal(root:string,body:unknown,selection:Distribu
 }
 export function distributionWithdrawal(root:string,selection:Distribution):DistributionCommand {
   return {method:'post',path:root+`/distribution-selections/${selection.selection_id}/withdraw`,body:{},version:selection.version,schema:DistributionSchema,
-    notice:'已停止採用這項選品；重新發布後，展示頁才會更新。',success:()=>{},targetMissingIsStore:false};
+    notice:'已停止採用這項選品。',success:()=>{},targetMissingIsStore:false};
 }

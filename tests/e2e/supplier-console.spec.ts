@@ -258,11 +258,11 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
 
     await storeArea(b, '供貨合作');
     await b.getByRole('button', {name: '更新供貨狀態', exact: true}).click();
-    await storeArea(b, '店面與發布');
-    const publishButton = b.getByRole('button', {name: '發布展示頁', exact: true});
+    await storeArea(b, '店面');
+    const publishButton = b.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true});
     await expect(publishButton).toBeEnabled();
     await publishButton.click();
-    await expect(b.locator('.hosted-store > [role="status"]')).toContainText('已發布');
+    await expect(b.locator('.hosted-store > [role="status"]')).toContainText('公開頁已更新。');
 
     // Step 8: A opens Settings & Data and enables 30-minute reservations as owner.
     await nav.getByRole('link', {name: '設定與資料', exact: true}).click();

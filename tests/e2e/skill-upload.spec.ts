@@ -82,7 +82,7 @@ async function login(page: Page) {
 async function openAgentUpload(page: Page, repo = 'https://github.com/example/skill-demo') {
   await page.getByLabel('GitHub 專案網址', { exact: true }).fill(repo);
   await page.getByRole('button', { name: '下一步', exact: true }).click();
-  const trigger = page.getByRole('button', { name: '交給我的 agent', exact: true });
+  const trigger = page.getByRole('button', { name: '用我的 Agent 上傳', exact: true });
   await trigger.click();
   return trigger;
 }
@@ -102,7 +102,7 @@ test('skill shelf issues a private scoped Agent instruction only on request and 
   const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
   expect(requests.filter(request => request.method === 'POST')).toEqual([]);
   await expect(panel.locator('textarea[data-private]')).toHaveCount(0);
-  await expect(panel.getByRole('button', { name: '交給我的 agent', exact: true })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: '用我的 Agent 上傳', exact: true })).toHaveCount(0);
 
   await openAgentUpload(page);
   const instruction = panel.getByLabel('給 Agent 的私人上傳指令', { exact: true });
@@ -122,8 +122,8 @@ test('skill shelf issues a private scoped Agent instruction only on request and 
   expect(text).toContain('剛好 100 則彼此不同');
   expect(text).toContain('"share_introductions"');
   expect(text.split(GRANT)).toHaveLength(2);
-  await panel.getByRole('button', { name: '複製給 agent', exact: true }).click();
-  await expect(panel.getByText('已複製，只貼給你選擇的 Agent。', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: '交給我的 Agent', exact: true }).click();
+  await expect(panel.getByText('已複製，貼給你的 Agent。', { exact: true })).toBeVisible();
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
   expect(clipboard.replace(/\r\n/g, '\n')).toBe(text.replace(/\r\n/g, '\n'));
   for (const cookie of await context.cookies()) expect(clipboard).not.toContain(cookie.value);
@@ -147,7 +147,7 @@ test('leaving the agent step clears the secret DOM immediately and re-entering i
   await panel.getByRole('button', { name: '返回選擇方式', exact: true }).click();
   await expect(panel.locator('textarea[data-private]')).toHaveCount(0);
   expect(await page.content()).not.toContain(GRANT);
-  await panel.getByRole('button', { name: '交給我的 agent', exact: true }).click();
+  await panel.getByRole('button', { name: '用我的 Agent 上傳', exact: true }).click();
   await expect(panel.getByLabel('給 Agent 的私人上傳指令', { exact: true })).toHaveValue(new RegExp(GRANT));
 });
 
@@ -161,13 +161,13 @@ test('replayed, expired and off-origin grants never display a token and offer a 
   await login(page); await navigate(page, '開源投稿');
   const panel = page.getByRole('region', { name: '投稿開源工具', exact: true });
   await openAgentUpload(page);
-  await expect(panel.getByRole('alert')).toContainText('重新產生指令');
-  await panel.getByRole('button', { name: '重新產生指令', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('重新建立指令');
+  await panel.getByRole('button', { name: '重新建立指令', exact: true }).click();
   await expect(panel.getByRole('alert')).toContainText('已過期');
   const regrant = requests.find(request => request.path.endsWith('/grant'))!;
   expect(regrant.headers['if-match']).toMatch(/^"\d+"$/);
   expect(regrant.headers['x-csrf-token']).toBeTruthy();
-  await panel.getByRole('button', { name: '重新產生指令', exact: true }).click();
+  await panel.getByRole('button', { name: '重新建立指令', exact: true }).click();
   await expect(panel.getByRole('alert')).toContainText('不是本站位址');
   await expect(panel.locator('textarea[data-private]')).toHaveCount(0);
   expect(await page.content()).not.toContain(GRANT);
@@ -278,7 +278,7 @@ for (const mode of ['draft', 'key'] as const) {
       await panel.getByRole('button', { name: '建立金鑰', exact: true }).click();
       await expect.poll(() => pending).toBe(true);
       await panel.getByRole('button', { name: '返回選擇方式', exact: true }).click();
-      await panel.getByRole('button', { name: '交給我的 agent', exact: true }).click();
+      await panel.getByRole('button', { name: '用我的 Agent 上傳', exact: true }).click();
       const response = page.waitForResponse(value => value.url().endsWith(`/api/v1${endpoint}`) && value.request().method() === 'POST');
       release(); await response;
       await panel.locator('details.skill-upload-cli > summary').click();
@@ -289,7 +289,7 @@ for (const mode of ['draft', 'key'] as const) {
     } else {
       await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/example/skill-demo');
       await page.getByRole('button', { name: '下一步', exact: true }).click();
-      await page.getByRole('button', { name: '交給我的 agent', exact: true }).click();
+      await page.getByRole('button', { name: '用我的 Agent 上傳', exact: true }).click();
       await expect.poll(() => pending).toBe(true);
       await navigate(page, '技能書架');
       const response = page.waitForResponse(value => value.url().endsWith(`/api/v1${endpoint}`) && value.request().method() === 'POST');
@@ -314,7 +314,7 @@ test('open-source panel shows a simple form, folds advanced upload and fits a 32
   await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/example/skill-demo');
   await page.getByRole('button', { name: '下一步', exact: true }).click();
   await expect(page.getByRole('button', { name: '我自己填', exact: true })).toBeVisible();
-  const trigger = page.getByRole('button', { name: '交給我的 agent', exact: true });
+  const trigger = page.getByRole('button', { name: '用我的 Agent 上傳', exact: true });
   await expect(trigger).toHaveCount(1);
   await trigger.click();
   await expect(panel.getByLabel('給 Agent 的私人上傳指令', { exact: true })).toBeVisible();
@@ -354,7 +354,7 @@ for (const viewport of [
       agentCalls += 1;
       agentBodies.push(route.request().postDataJSON());
       if (agentCalls === 1) return route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ code: 'validation_failed', detail: 'title: 太短; share_introductions: 需要剛好 100 則' }) });
-      if (agentCalls === 2) return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'upload_grant_invalid', detail: '上傳授權已過期。請按「重新產生指令」重新產生授權。' }) });
+      if (agentCalls === 2) return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ code: 'upload_grant_invalid', detail: '上傳授權已過期。請按「重新建立指令」重新產生授權。' }) });
       uploaded = true;
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ submission_id: 'sub-waiting', status: 'ready_for_review' }) });
     });
@@ -372,7 +372,7 @@ for (const viewport of [
     await expect(panel.getByText('尚未上傳內容').first()).toBeVisible();
     await panel.locator('details.skill-upload-cli > summary').click();
     await expect(panel.getByLabel('公開儲存庫網址', { exact: true })).toHaveValue('https://github.com/example/skill-demo');
-    await panel.getByRole('button', { name: '複製給聊天 AI', exact: true }).click();
+    await panel.getByRole('button', { name: '交給聊天 AI', exact: true }).click();
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     expect(clip).toContain('https://github.com/example/skill-demo');
     expect(clip).toContain('README');
