@@ -346,7 +346,7 @@ test('I1: step 1 collects repository URL (required, max 300) then step 2 offers 
     assert.equal(repoInput.props.required, true);
     assert.equal(repoInput.props.maxLength, 300);
     assert.equal(host.text().includes('我自己填'), false);
-    assert.equal(host.text().includes('交給我的 agent'), false);
+    assert.equal(host.text().includes('用我的 Agent 上傳'), false);
     assert.equal(host.text().includes('作品名稱'), false);
 
     // Invalid/blank URL stays on step 1
@@ -361,12 +361,12 @@ test('I1: step 1 collects repository URL (required, max 300) then step 2 offers 
     submitUrlForm(host.nodes().find(n => n.type === 'form')!, true);
     host.render();
     assert.equal(host.text().includes('我自己填'), true);
-    assert.equal(host.text().includes('交給我的 agent'), true);
+    assert.equal(host.text().includes('用我的 Agent 上傳'), true);
     assert.equal(host.text().includes('作品名稱'), false);
 
-    // Clicking 交給我的 agent creates a draft inside SkillSubmission and shows agentInstruction + 複製給 agent
-    const agentBtn = host.nodes().find(n => n.type === 'button' && textOf(n).includes('交給我的 agent'));
-    assert.ok(agentBtn, 'renders 交給我的 agent button');
+    // Clicking 用我的 Agent 上傳 creates a draft inside SkillSubmission and shows agentInstruction + 交給我的 Agent
+    const agentBtn = host.nodes().find(n => n.type === 'button' && textOf(n).includes('用我的 Agent 上傳'));
+    assert.ok(agentBtn, 'renders 用我的 Agent 上傳 button');
     await agentBtn.props.onClick();
     await host.flush();
     host.render();
@@ -384,7 +384,7 @@ test('I1: step 1 collects repository URL (required, max 300) then step 2 offers 
     assert.equal(instr.includes('目標專案網址：https://github.com/example/skill\n'), true);
     const copyAgentBtns = host.nodes().filter(n => n.type === 'button' && String(n.props.className ?? '').includes('btn-primary'));
     assert.equal(copyAgentBtns.length, 1, 'has one primary button in agent step');
-    assert.equal(textOf(copyAgentBtns[0]).includes('複製給 agent'), true);
+    assert.equal(textOf(copyAgentBtns[0]).includes('交給我的 Agent'), true);
     await copyAgentBtns[0].props.onClick();
     await host.flush();
     assert.equal(host.copiedTexts[0], instr);
@@ -509,7 +509,7 @@ test('I3: upgrade and seeded draft continuation happen inline in SkillSubmission
     await host.flush();
     host.render();
     assert.equal(host.text().includes('正在補完：Seeded Tool'), true, 'opens inline agent chat target for seeded draft');
-    assert.equal(host.text().includes('複製給聊天 AI'), true);
+    assert.equal(host.text().includes('交給聊天 AI'), true);
 
     // Revoking waiting draft removes it from active draft list without SkillUpload dialog
     const revokeWaitingBtn = host.nodes().find(n => n.type === 'button' && textOf(n).includes('撤銷這份草稿'));
@@ -549,7 +549,7 @@ test('I3: resumeId on awaiting_upload opens inline agent view without POSTing a 
     assert.equal(host.postCalls.length, 0, 'does not POST on resumeId awaiting_upload load');
     assert.equal(host.text().includes('正在補完：Resumed Seeded Tool'), true);
     assert.equal(host.nodes().find(n => n.type === 'input' && n.props.placeholder === 'https://github.com/擁有者/儲存庫')?.props.value, 'https://github.com/example/awaiting-repo');
-    const issueBtn = host.nodes().find(n => n.type === 'button' && textOf(n).includes('產生私人上傳指令'))!;
+    const issueBtn = host.nodes().find(n => n.type === 'button' && textOf(n).includes('建立上傳指令'))!;
     await issueBtn.props.onClick();
     await host.flush();
     host.render();
@@ -768,7 +768,7 @@ test('I2 (p3-l3b): 更多 in the agent path is closed by default and provides du
     host.render();
     submitUrlForm(host.nodes().find(n => n.type === 'form')!, true);
     host.render();
-    await host.nodes().find(n => n.type === 'button' && textOf(n).includes('交給我的 agent'))!.props.onClick();
+    await host.nodes().find(n => n.type === 'button' && textOf(n).includes('用我的 Agent 上傳'))!.props.onClick();
     await host.flush();
     host.render();
 
@@ -819,7 +819,7 @@ test('I2 (p3-l3b): 更多 in the agent path is closed by default and provides du
     // Chat bot prompt + file load + upload to preview
     const chatPromptBox = host.nodes().find(n => n.type === 'textarea' && n.props.readOnly && String(n.props.value ?? '').includes('repository_url：https://github.com/example/chat-skill') && !String(n.props.value ?? '').includes('Bearer'));
     assert.ok(chatPromptBox, 'renders chatSkillInstruction prompt with repo URL and without credentials');
-    const copyChatBtn = host.nodes().find(n => n.type === 'button' && textOf(n).includes('複製給聊天 AI'))!;
+    const copyChatBtn = host.nodes().find(n => n.type === 'button' && textOf(n).includes('交給聊天 AI'))!;
     await copyChatBtn.props.onClick();
     await host.flush();
     assert.equal(host.copiedTexts.at(-1), chatPromptBox.props.value);

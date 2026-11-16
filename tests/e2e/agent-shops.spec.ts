@@ -24,7 +24,7 @@ test('AI-first shops download complete MD, preview/import files, select catalog 
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await login(page);await navigate(page,'AI 整理供貨商品');
  await expect(page.getByRole('heading',{name:'有商品，就能開始。',exact:true})).toBeVisible();
  await expect(page.getByLabel('商品名稱',{exact:true})).toHaveCount(0);
- const waiting=page.waitForEvent('download');await page.getByRole('button',{name:'下載內部商店 MD',exact:true}).click();const d=await waiting;
+ const waiting=page.waitForEvent('download');await page.getByRole('button',{name:'下載開店包',exact:true}).click();const d=await waiting;
  const md=await readFile((await d.path())!,'utf8');for(const marker of ['freedom-shop/v1','shop-api/v1','delivery_ref'])expect(md).toContain(marker);
  const internalInstructions=(await readFile(new URL('../../packages/shop-agent/internal.md',import.meta.url),'utf8')).trim();
  expect(internalInstructions).not.toBe('');expect(md).toContain(internalInstructions);
@@ -34,14 +34,14 @@ test('AI-first shops download complete MD, preview/import files, select catalog 
  await page.reload();await expect(privateShop).toBeVisible();
  const shops=await page.request.get('/api/v1/commerce/shops');const privateId=(await shops.json()).items.find((s:any)=>s.name===productManifest.name).shop_id;
  expect((await page.request.get(`/api/v1/public-shops/${privateId}`)).status()).toBe(404);
- await privateShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();await privateShop.getByRole('button',{name:'產生／重建連線金鑰'}).click();const privateToken=await privateShop.getByLabel('一次性顯示的連線金鑰').inputValue();await privateShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();
+ await privateShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();await privateShop.getByRole('button',{name:'建立／換新連線金鑰'}).click();const privateToken=await privateShop.getByLabel('一次性顯示的連線金鑰').inputValue();await privateShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();
  // The removed sweep ended at 320px; keep the remaining real business journey on phone.
  await page.setViewportSize({width:320,height:900});
  await signOut(page);await login(page,'client@local.test');await navigate(page,'AI 製作銷售網站');
- await expect(page.getByRole('button',{name:'下載公開商店 MD',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'下載開店包',exact:true})).toBeDisabled();
  await page.getByRole('region',{name:'挑選這次想賣的商品',exact:true}).getByLabel('搜尋商品',{exact:true}).fill('AI 茶葉目錄');
  await page.getByLabel('選入「AI 茶葉目錄」',{exact:true}).check();
- const publicDownload=page.waitForEvent('download');await page.getByRole('button',{name:'下載公開商店 MD',exact:true}).click();const pd=await publicDownload,publicMd=await readFile((await pd.path())!,'utf8');expect(publicMd).toContain('AI 茶葉目錄');expect(publicMd).not.toContain('https://private.example.com');
+ const publicDownload=page.waitForEvent('download');await page.getByRole('button',{name:'下載開店包',exact:true}).click();const pd=await publicDownload,publicMd=await readFile((await pd.path())!,'utf8');expect(publicMd).toContain('AI 茶葉目錄');expect(publicMd).not.toContain('https://private.example.com');
  const publicInstructions=(await readFile(new URL('../../packages/shop-agent/public.md',import.meta.url),'utf8')).trim();
  expect(publicInstructions).not.toBe('');expect(publicMd).toContain(publicInstructions);
  const catalog=await page.request.get('/api/v1/commerce/catalog'),item=(await catalog.json()).items.find((i:any)=>i.title==='AI 茶葉目錄');
@@ -49,7 +49,7 @@ test('AI-first shops download complete MD, preview/import files, select catalog 
  await upload(page,manifest);await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('heading',{name:'AI 公開選物店',exact:true})).toHaveCount(0);
  await upload(page,manifest);await page.getByRole('button',{name:'確認並歸檔',exact:true}).click();const publicShop=page.getByRole('region',{name:'我的公開商店',exact:true}).getByRole('article').filter({has:page.getByRole('heading',{name:manifest.name,exact:true})});await expect(publicShop).toBeVisible();await expect(publicShop.getByRole('link',{name:'開啟公開商店'})).toHaveAttribute('href',manifest.website_url);
  await publicShop.getByRole('button',{name:'查看訂單與付款'}).click();await expect(publicShop.getByText('目前沒有訂單。完成金流與商店連線後，交易會出現在這裡。',{exact:true})).toBeVisible();
- await publicShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();await publicShop.getByRole('button',{name:'產生／重建連線金鑰'}).click();await expect(publicShop.getByLabel('一次性顯示的連線金鑰')).toHaveValue(/^fw_shop_/);const publicToken=await publicShop.getByLabel('一次性顯示的連線金鑰').inputValue();
+ await publicShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();await publicShop.getByRole('button',{name:'建立／換新連線金鑰'}).click();await expect(publicShop.getByLabel('一次性顯示的連線金鑰')).toHaveValue(/^fw_shop_/);const publicToken=await publicShop.getByLabel('一次性顯示的連線金鑰').inputValue();
  await publicShop.getByText('連線設定（交給 AI 協助）',{exact:true}).click();await expect(publicShop.getByLabel('一次性顯示的連線金鑰')).toHaveCount(0);
  await signOut(page);await login(page);await navigate(page,'AI 整理供貨商品');
  const requests=page.getByRole('region',{name:'待接受的實際售價',exact:true});
@@ -237,10 +237,10 @@ test('a completed kit response cannot download after its page is replaced',async
  const path='**/api/v1/commerce/agent-kit';
  await page.route(path,async route=>{const response=await route.fetch();expect(response.ok()).toBe(true);entered();await held;await route.fulfill({response});});
  try{
-  await page.getByRole('button',{name:'下載內部商店 MD',exact:true}).click();await started;
+  await page.getByRole('button',{name:'下載開店包',exact:true}).click();await started;
   await navigate(page,'會員首頁');const completed=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/commerce/agent-kit');release();await completed;
   await page.evaluate(async()=>{await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));});
   expect(downloads).toEqual([]);await page.unroute(path);
-  await navigate(page,'AI 整理供貨商品');const current=page.waitForEvent('download');await page.getByRole('button',{name:'下載內部商店 MD',exact:true}).click();await current;expect(downloads).toHaveLength(1);
+  await navigate(page,'AI 整理供貨商品');const current=page.waitForEvent('download');await page.getByRole('button',{name:'下載開店包',exact:true}).click();await current;expect(downloads).toHaveLength(1);
  }finally{release();await page.unroute(path);}
 });

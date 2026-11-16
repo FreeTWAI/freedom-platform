@@ -19,8 +19,8 @@ test('member reads GitHub-backed co-creation tasks, copies a bounded brief, and 
   await expect(entry).toBeFocused();
   await entry.press('Enter');
   await expect(page.locator('.expedition-project')).toHaveCount(0);
-  await page.getByText('用 AI 協助開發（選用）',{exact:true}).click();
-  await page.getByRole('button',{name:'複製專案開發指令',exact:true}).click();
+  await page.getByText('用 Agent 協助開發（選用）',{exact:true}).click();
+  await page.getByRole('button',{name:'交給我的 Agent',exact:true}).click();
   const projectBrief=page.getByLabel('給 Agent 的專案開發指令',{exact:true});
   await expect(projectBrief).toHaveValue(/原作 Repo：https:\/\/github.com\/Hao0321\/video-autopilot-kit/);
   expect((await page.evaluate(()=>navigator.clipboard.readText())).replace(/\r\n/g,'\n')).toBe((await projectBrief.inputValue()).replace(/\r\n/g,'\n'));
@@ -62,12 +62,12 @@ test('guild discovery has recoverable empty states and project prompts survive a
   await navigate(page,'一起開發');
   await page.getByRole('combobox',{name:'公會分類',exact:true}).selectOption('guild_platform_engineering');
   await expect(page.getByRole('heading',{name:'這個公會還沒有共創邀請',exact:true})).toBeVisible();
-  await expect(page.getByRole('button',{name:'複製專案開發指令',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'交給我的 Agent',exact:true})).toHaveCount(0);
   await page.getByRole('combobox',{name:'公會分類',exact:true}).selectOption('guild_ai_vibe');
   await page.getByRole('button',{name:'查看任務：自動剪輯共創：一起把可用的底層疊起來',exact:true}).click();
   await expect(page.getByRole('button',{name:'重新載入任務',exact:true})).toBeVisible();
-  await page.getByText('用 AI 協助開發（選用）',{exact:true}).click();
-  await page.getByRole('button',{name:'複製專案開發指令',exact:true}).click();
+  await page.getByText('用 Agent 協助開發（選用）',{exact:true}).click();
+  await page.getByRole('button',{name:'交給我的 Agent',exact:true}).click();
   await expect(page.getByLabel('給 Agent 的專案開發指令',{exact:true})).toHaveValue(/最多三項/);
   await expect(page.getByText('指令已準備好。瀏覽器未允許複製，請從下方自行選取複製。',{exact:true})).toBeVisible();
   await expect(page.getByText('目前沒有開放中的任務。',{exact:true})).toHaveCount(0);

@@ -147,7 +147,7 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
   if(githubState!=='unavailable')cards.push({key:'github',required:true,title:'連結 GitHub',state:githubState,
     ...(githubState==='loading'?{body:<p>正在確認 GitHub 連結…</p>}
       :githubState==='error'?{body:null,error:github.error,retry:githubRetry}
-      :githubState==='todo'?{body:<p>站內提出問題回報需要先連結自己的 GitHub 帳號。按「連結 GitHub」後，在 github.com 親自確認授權，回來再發布想法。沒有帳號可先<a href="https://github.com/signup" target="_blank" rel="noopener noreferrer">申請 GitHub ↗</a>。</p>,action:primary=><><button className={`btn ${primary?'btn-primary':'btn-secondary'}`} type="button" disabled={busy||github.loading} onClick={()=>void connect()}>{busy?'前往 GitHub…':'連結 GitHub'}</button><button className="btn btn-ghost" type="button" onClick={()=>void copyGuide()}>{guideCopied?'已複製 AI 指引':'複製 AI 連結指引'}</button></>}
+      :githubState==='todo'?{body:<p>站內提出問題回報需要先連結自己的 GitHub 帳號。按「連結 GitHub」後，在 github.com 親自確認授權，回來再發布想法。沒有帳號可先<a href="https://github.com/signup" target="_blank" rel="noopener noreferrer">申請 GitHub ↗</a>。</p>,action:primary=><><button className={`btn ${primary?'btn-primary':'btn-secondary'}`} type="button" disabled={busy||github.loading} onClick={()=>void connect()}>{busy?'前往 GitHub…':'連結 GitHub'}</button><button className="btn btn-ghost" type="button" onClick={()=>void copyGuide()}>{guideCopied?'已複製':'交給聊天 AI'}</button></>}
       :{body:<p>已連結 <strong>@{github.value?.github_user?.login??'GitHub'}</strong>。</p>,action:go('account','到我的名片管理 GitHub 連結','ghost')})});
 
   cards.push({key:'avatar',required:false,title:'上傳頭像',
@@ -186,8 +186,8 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
             {retry&&<button className="btn btn-ghost" type="button" disabled={retry.busy} onClick={retry.run}>{retry.label}</button>}</div>}
           {card.key==='github'&&connectError&&<p role="alert">{connectError}</p>}
           {card.key==='github'&&card.state==='todo'&&guideCopyFailed&&<>
-            <p role="alert">無法自動複製，請選取下方 AI 連結指引手動複製。</p>
-            <label className="field">AI 連結指引<textarea readOnly rows={7} value={GITHUB_CONNECT_AGENT_INSTRUCTION} onFocus={event=>event.currentTarget.select()}/></label>
+            <p role="alert">無法自動複製，請選取下方文字。</p>
+            <label className="field">給聊天 AI 的連結指引<textarea readOnly rows={7} value={GITHUB_CONNECT_AGENT_INSTRUCTION} onFocus={event=>event.currentTarget.select()}/></label>
           </>}
         </article></li>;
       })}

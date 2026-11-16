@@ -52,7 +52,7 @@ for(const width of [1280,320])test(`one visible entry opens actual post, work, r
   await choose(page,'刊登商品');await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'上傳商品',exact:true}).click();
   await expect(page.getByLabel('上傳成果檔',{exact:true})).toBeFocused();
   await choose(page,'刊登商品');await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'準備商品',exact:true}).click();
-  await expect(page.getByRole('button',{name:'下載內部商店 MD',exact:true})).toBeFocused();
+  await expect(page.getByRole('button',{name:'下載開店包',exact:true})).toBeFocused();
   expect(writes).toEqual(['/api/v1/showcases']);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
@@ -138,7 +138,7 @@ test('launchpad off keeps only the two product-result options',async({page})=>{
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
   await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'更多',exact:true}).click();
   await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'準備商品',exact:true}).click();
-  await expect(page.getByRole('button',{name:'下載內部商店 MD',exact:true})).toBeFocused();
+  await expect(page.getByRole('button',{name:'下載開店包',exact:true})).toBeFocused();
 });
 
 test('a store detail load error still focuses the same-tab share list',async({page})=>{
