@@ -2,151 +2,137 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {storeNextSteps, type StoreNextStepsInput} from '../../apps/portal-web/src/modules/hosted-store-next-steps.js';
-import {HostedStoreNextSteps} from '../../apps/portal-web/src/modules/HostedStoreNextSteps.js';
+import {HostedStorePublishBar, type HostedStorePublishBarProps} from '../../apps/portal-web/src/modules/HostedStorePublishBar.js';
 
-type Expected = ReturnType<typeof storeNextSteps>;
+const projectionBase = {
+  slug: 'demo-shop',
+  name: '示範小店',
+  brand: null,
+  description: '',
+  currency: 'TWD' as const,
+  revision: '1',
+  published_at: '2026-01-01T00:00:00Z',
+  transaction_state: 'not_enabled' as const,
+};
 
-const cases: ReadonlyArray<{name: string; input: StoreNextStepsInput; expected: Expected}> = [
-  {
-    name: 'never_published with 0 products and publish permission',
-    input: {publicationState: 'never_published', productCount: 0, writable: true, canWrite: true, canPublish: true},
-    expected: {
-      steps: [
-        {key: 'store', done: true, text: '商店資料已建立'},
-        {key: 'products', done: false, text: '新增第一件商品'},
-        {key: 'publish', done: false, text: '在「店面與發布」預覽後發布'},
-      ],
-      current: 'products',
-      next: 'products',
-    },
-  },
-  {
-    name: 'never_published with 0 products and no publish permission',
-    input: {publicationState: 'never_published', productCount: 0, writable: true, canWrite: true, canPublish: false},
-    expected: {
-      steps: [
-        {key: 'store', done: true, text: '商店資料已建立'},
-        {key: 'products', done: false, text: '新增第一件商品'},
-        {key: 'publish', done: false, text: '請有發布權限的成員預覽後發布'},
-      ],
-      current: 'products',
-      next: 'products',
-    },
-  },
-  {
-    name: 'never_published with products and publish permission',
-    input: {publicationState: 'never_published', productCount: 3, writable: true, canWrite: true, canPublish: true},
-    expected: {
-      steps: [
-        {key: 'store', done: true, text: '商店資料已建立'},
-        {key: 'products', done: true, text: '已新增 3 件商品'},
-        {key: 'publish', done: false, text: '在「店面與發布」預覽後發布'},
-      ],
-      current: 'publish',
-      next: 'publish',
-    },
-  },
-  {
-    name: 'never_published with products and no publish permission',
-    input: {publicationState: 'never_published', productCount: 1, writable: true, canWrite: true, canPublish: false},
-    expected: {
-      steps: [
-        {key: 'store', done: true, text: '商店資料已建立'},
-        {key: 'products', done: true, text: '已新增 1 件商品'},
-        {key: 'publish', done: false, text: '請有發布權限的成員預覽後發布'},
-      ],
-      current: 'publish',
-      next: null,
-    },
-  },
-  {
-    name: 'published returns null',
-    input: {publicationState: 'published', productCount: 2, writable: true, canWrite: true, canPublish: true},
-    expected: null,
-  },
-  {
-    name: 'unpublished returns null',
-    input: {publicationState: 'unpublished', productCount: 2, writable: true, canWrite: true, canPublish: true},
-    expected: null,
-  },
-  {
-    name: 'not writable returns null',
-    input: {publicationState: 'never_published', productCount: 0, writable: false, canWrite: true, canPublish: true},
-    expected: null,
-  },
-  {
-    name: 'no store:write capability returns null',
-    input: {publicationState: 'never_published', productCount: 0, writable: true, canWrite: false, canPublish: true},
-    expected: null,
-  },
-];
+const product = {sku: 'P0001', title: '手工皂', description: '', price_minor: 15000};
 
-for (const entry of cases) {
-  test(`storeNextSteps: ${entry.name}`, () => {
-    assert.deepEqual(storeNextSteps(entry.input), entry.expected);
-  });
+function makeProps(overrides: Partial<HostedStorePublishBarProps> = {}): HostedStorePublishBarProps {
+  return {
+    publication: {state: 'never_published', current_revision: null, published_at: null, public_path: null},
+    preview: {projection: {...projectionBase, products: []}, dirty: false, current_revision: null},
+    productCount: 0,
+    canWrite: true,
+    canPublish: true,
+    onAddProduct: () => {},
+    publicationReview: null,
+    publishDisabled: false,
+    publishSaved: () => {},
+    hasDraft: false,
+    photoBlocking: false,
+    loading: false,
+    publicPath: null,
+    storeCopyUrl: null,
+    copyAction: {pending: null},
+    copyLink: async () => {},
+    copyFeedback: null,
+    manualUrl: null,
+    manualField: {current: null},
+    ...overrides,
+  };
 }
 
-test('HostedStoreNextSteps renders steps, hides button on current next tab, and shows button on another tab', () => {
-  const onProductsTab = renderToStaticMarkup(createElement(HostedStoreNextSteps, {
-    publicationState: 'never_published',
-    productCount: 0,
-    writable: true,
-    canWrite: true,
-    canPublish: true,
-    area: 'products',
-    onNext: () => {},
-  }));
-  assert.match(onProductsTab, /aria-label="開店步驟"/);
-  assert.match(onProductsTab, /data-done="true"[^>]*><span class="sr-only">已完成：<\/span>商店資料已建立/);
-  assert.match(onProductsTab, /data-done="false" aria-current="step">新增第一件商品/);
-  assert.doesNotMatch(onProductsTab, /前往下一步/);
+test('HostedStorePublishBar renders unpublished states and primary actions', () => {
+  const empty = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps()));
+  assert.match(empty, /aria-label="公開狀態"/);
+  assert.match(empty, /<p>還沒公開。下一步：新增第一件商品。<\/p>/);
+  assert.match(empty, />新增商品<\/button>/);
+  assert.doesNotMatch(empty, />發布</);
 
-  const withProducts = renderToStaticMarkup(createElement(HostedStoreNextSteps, {
-    publicationState: 'never_published',
-    productCount: 1,
-    writable: true,
-    canWrite: true,
-    canPublish: true,
-    area: 'products',
-    onNext: () => {},
-  }));
-  assert.match(withProducts, /<span class="sr-only">已完成：<\/span>已新增 1 件商品/);
-  assert.match(withProducts, /aria-current="step">在「店面與發布」預覽後發布/);
-  assert.match(withProducts, /<button[^>]*class="btn btn-primary btn-small"[^>]*>前往下一步<\/button>/);
+  const emptyReadOnly = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({canWrite: false})));
+  assert.match(emptyReadOnly, /還沒公開。下一步：新增第一件商品。/);
+  assert.doesNotMatch(emptyReadOnly, />新增商品</);
 
-  const onPublishTab = renderToStaticMarkup(createElement(HostedStoreNextSteps, {
-    publicationState: 'never_published',
+  const readyNeverPublished = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({
+    preview: {projection: {...projectionBase, products: [product]}, dirty: true, current_revision: null},
     productCount: 1,
-    writable: true,
-    canWrite: true,
-    canPublish: true,
-    area: 'publish',
-    onNext: () => {},
-  }));
-  assert.doesNotMatch(onPublishTab, /前往下一步/);
+  })));
+  assert.match(readyNeverPublished, /<p>還沒公開。下一步：發布商店。<\/p>/);
+  assert.match(readyNeverPublished, />發布<\/button>/);
+  assert.doesNotMatch(readyNeverPublished, />新增商品</);
 
-  const noPublish = renderToStaticMarkup(createElement(HostedStoreNextSteps, {
-    publicationState: 'never_published',
+  const stopped = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({
+    publication: {state: 'unpublished', current_revision: '1', published_at: '2026-01-01T00:00:00Z', public_path: null},
+    preview: {projection: {...projectionBase, products: [product]}, dirty: true, current_revision: '1'},
     productCount: 1,
-    writable: true,
-    canWrite: true,
+  })));
+  assert.match(stopped, /<p>已停止公開。下一步：發布商店。<\/p>/);
+  assert.match(stopped, />發布<\/button>/);
+
+  const noPublish = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({
+    preview: {projection: {...projectionBase, products: [product]}, dirty: true, current_revision: null},
+    productCount: 1,
     canPublish: false,
-    area: 'products',
-    onNext: () => {},
-  }));
-  assert.doesNotMatch(noPublish, /前往下一步/);
-  assert.match(noPublish, /請有發布權限的成員預覽後發布/);
+  })));
+  assert.match(noPublish, /<p>還沒公開。請有發布權限的成員發布。<\/p>/);
+  assert.doesNotMatch(noPublish, />發布</);
+});
 
-  const published = renderToStaticMarkup(createElement(HostedStoreNextSteps, {
-    publicationState: 'published',
+test('HostedStorePublishBar renders published clean, dirty, share actions, and disabled hints', () => {
+  const publishedClean = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({
+    publication: {state: 'published', current_revision: '2', published_at: '2026-01-01T00:00:00Z', public_path: '/shops/demo-shop'},
+    preview: {projection: {...projectionBase, products: [product]}, dirty: false, current_revision: '2'},
     productCount: 1,
-    writable: true,
-    canWrite: true,
-    canPublish: true,
-    area: 'products',
-    onNext: () => {},
-  }));
-  assert.equal(published, '');
+    publicPath: '/shops/demo-shop',
+    storeCopyUrl: 'https://example.test/shops/demo-shop',
+  })));
+  assert.match(publishedClean, /<p>已公開第 2 版。<\/p>/);
+  assert.doesNotMatch(publishedClean, />發布更新</);
+  assert.match(publishedClean, /href="\/shops\/demo-shop"[^>]*>查看公開頁<\/a>/);
+  assert.match(publishedClean, />複製連結<\/button>/);
+
+  const publishedDirty = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({
+    publication: {state: 'published', current_revision: '2', published_at: '2026-01-01T00:00:00Z', public_path: '/shops/demo-shop'},
+    preview: {projection: {...projectionBase, products: [product]}, dirty: true, current_revision: '2'},
+    productCount: 1,
+    publicPath: '/shops/demo-shop',
+    storeCopyUrl: 'https://example.test/shops/demo-shop',
+  })));
+  assert.match(publishedDirty, /<p>已公開第 2 版。有變更還沒公開。<\/p>/);
+  assert.match(publishedDirty, />發布更新<\/button>/);
+  assert.match(publishedDirty, />查看公開頁<\/a>/);
+
+  for (const [overrides, hint] of [
+    [{hasDraft: true, publishDisabled: true}, '先儲存或取消還沒儲存的修改。'],
+    [{photoBlocking: true, publishDisabled: true}, '照片還在儲存，完成後就能發布。'],
+    [{loading: true, publishDisabled: true}, '正在確認可上架內容…'],
+  ] as const) {
+    const blocked = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({
+      preview: {projection: {...projectionBase, products: [product]}, dirty: true, current_revision: null},
+      productCount: 1,
+      ...overrides,
+    })));
+    assert.match(blocked, new RegExp(`<p class="field-hint">${hint}</p>`));
+    assert.match(blocked, /disabled=""[^>]*>發布<\/button>/);
+  }
+
+  const copied = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({
+    publication: {state: 'published', current_revision: '1', published_at: '2026-01-01T00:00:00Z', public_path: '/shops/demo-shop'},
+    preview: {projection: {...projectionBase, products: [product]}, dirty: false, current_revision: '1'},
+    productCount: 1,
+    publicPath: '/shops/demo-shop',
+    storeCopyUrl: 'https://example.test/shops/demo-shop',
+    copyFeedback: {url: 'https://example.test/shops/demo-shop', message: '已複製連結'},
+  })));
+  assert.match(copied, /role="status">已複製連結<\/p>/);
+
+  const manual = renderToStaticMarkup(createElement(HostedStorePublishBar, makeProps({
+    publication: {state: 'published', current_revision: '1', published_at: '2026-01-01T00:00:00Z', public_path: '/shops/demo-shop'},
+    preview: {projection: {...projectionBase, products: [product]}, dirty: false, current_revision: '1'},
+    productCount: 1,
+    publicPath: '/shops/demo-shop',
+    storeCopyUrl: 'https://example.test/shops/demo-shop',
+    manualUrl: 'https://example.test/shops/demo-shop',
+  })));
+  assert.match(manual, /手動複製連結/);
 });

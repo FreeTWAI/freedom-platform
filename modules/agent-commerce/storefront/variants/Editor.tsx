@@ -47,17 +47,17 @@ export function VariantsEditor({client,userId,root,writable,locked,refresh,onSta
  const g=page?.items.find(g=>g.group_key===selected),blocked=locked||busy||!!attempt;
  return <section className="store-variants-editor stack" aria-labelledby="store-variants-heading"><h3 id="store-variants-heading">規格</h3>
   <p className="field-hint">最多 2 個選項，每個選項最多 20 個值。每個規格都有自己的售價與庫存；每個規格各占一項商品名額。</p>
-  {page&&<p className="field-hint">目前 {page.items.reduce((n,g)=>n+g.members.length,0)} / 200 項商品；儲存後可預覽，再發布到商店。</p>}
+  {page&&<p className="field-hint">目前 {page.items.reduce((n,g)=>n+g.members.length,0)} / 200 項商品。</p>}
   {!page&&!error&&<p role="status">正在讀取規格…</p>}{error&&<p role="alert">{error} <button type="button" className="btn btn-ghost" disabled={blocked} onClick={()=>void load()}>重試</button></p>}
   {message&&<p ref={messageRef} tabIndex={-1} role={messageError?'alert':'status'} aria-live={messageError?'assertive':'polite'}>{message}</p>}
   {attempt&&!busy&&<button type="button" className="btn btn-ghost" disabled={locked||!writable} onClick={()=>void send(attempt)}>重試原操作</button>}
   {page&&page.items.length>0&&<label>規格商品<select aria-label="規格商品" value={selected} disabled={blocked||dirty} onChange={e=>setSelected(e.target.value)}>{page.items.map(g=><option key={g.group_key} value={g.group_key}>{g.title} · {g.members.map(m=>m.product.sku).join('／')}</option>)}</select></label>}
   {g&&(!writable||!g.editable)&&<div className="stack"><h4>{g.title}</h4><p>{g.description}</p>{g.members.map(m=><p key={m.selection_id}>{m.buyer_label} · {m.product.sku} · {formatMinor(m.product.price_minor,m.product.currency)}</p>)}{!g.editable&&<p>供貨選品目前各自顯示，不可加入商品組。</p>}</div>}
   {g&&writable&&g.editable&&<GroupEditor key={g.group_key+'/'+g.version} group={g} page={page!} writable={writable&&g.editable} locked={blocked} onDirty={setDirty}
-   onSave={body=>fresh('put',root+'/product-groups/'+g.group_key,body,g.version,'已儲存規格，尚未發布。')}
-   onSplit={()=>fresh('post',root+'/product-groups/'+g.group_key+'/split',{},g.version,'已拆分商品，尚未發布。')}
-   onCreate={body=>fresh('post',root+'/product-groups/'+g.group_key+'/products',body,g.version,'已新增規格商品，尚未發布。')}
-   onProduct={(id,version,body)=>fresh('patch',root+'/products/'+id,body,version,'已儲存商品，尚未發布。','product')}
+   onSave={body=>fresh('put',root+'/product-groups/'+g.group_key,body,g.version,'已儲存規格。')}
+   onSplit={()=>fresh('post',root+'/product-groups/'+g.group_key+'/split',{},g.version,'已拆分商品。')}
+   onCreate={body=>fresh('post',root+'/product-groups/'+g.group_key+'/products',body,g.version,'已新增規格商品。')}
+   onProduct={(id,version,body)=>fresh('patch',root+'/products/'+id,body,version,'已儲存商品。','product')}
    onReload={()=>{if(!dirty||window.confirm('要捨棄未儲存的變更嗎？')){setDirty(false);setPage(null);void load();}}}/>}
   {categoriesEnabled&&g&&writable&&g.editable&&<p className="field-hint">合併或拆分後，請在商品分類確認各商品的分類。</p>}
   {!writable&&<p>你目前只有檢視權限。</p>}
@@ -118,7 +118,7 @@ function GroupEditor({group:g,page,writable,locked,onDirty,onSave,onSplit,onCrea
    <div className="actions"><button type="button" className="btn btn-ghost" disabled={!attach} onClick={()=>{const row=member(attach);update({members:[...draft.members,{product_id:attach,product_version:row.product.version,value_keys:draft.axes.map(a=>a.values[0]?.key??'')}]});setAttach('');}}>加入商品組</button>
     <button type="button" className="btn btn-ghost" disabled={metadataDirty||otherDirty||!g.axes.length} onClick={()=>{setNewOpen(true);setNewValues(g.axes.map(a=>a.values[0].key));}}>新增規格商品</button></div>
    {newOpen&&<div className="store-variant-new stack"><label>商品名稱<input {...field('new.title')} value={newProduct.title} onChange={e=>setNewProduct({...newProduct,title:e.target.value})}/></label><label>商品介紹<textarea {...field('new.description')} aria-label="商品介紹" value={newProduct.description} onChange={e=>setNewProduct({...newProduct,description:e.target.value})}/></label><label>售價<input {...field('new.price_minor')} inputMode="numeric" value={newProduct.price_minor} onChange={e=>setNewProduct({...newProduct,price_minor:e.target.value})}/></label><label>庫存<input {...field('new.stock')} inputMode="numeric" value={newProduct.stock} onChange={e=>setNewProduct({...newProduct,stock:e.target.value})}/></label>{g.axes.map((a,n)=><label key={a.key}>{a.name}<select value={newValues[n]} onChange={e=>setNewValues(old=>old.map((v,k)=>k===n?e.target.value:v))}>{a.values.map(v=><option key={v.key} value={v.key}>{v.name}</option>)}</select></label>)}<div className="actions"><button type="button" className="btn btn-primary" onClick={create}>加入商品組</button><button type="button" className="btn btn-ghost" onClick={()=>setNewOpen(false)}>取消變更</button></div></div>}
-   <div className="actions"><button type="button" className="btn btn-primary" disabled={!metadataDirty||otherDirty||newOpen} onClick={save}>儲存規格</button><button type="button" className="btn btn-ghost" disabled={!dirty} onClick={()=>{setDraft(fromGroup(g));setNewOpen(false);setProductDirty({});setReset(n=>n+1);}}>取消變更</button>{g.group_id&&<button type="button" className="btn btn-ghost" disabled={dirty} onClick={()=>{if(window.confirm('要拆成各別商品嗎？各商品會恢復原有名稱、介紹與照片；發布後才會更新公開頁。'))onSplit();}}>拆成各別商品</button>}</div>
+   <div className="actions"><button type="button" className="btn btn-primary" disabled={!metadataDirty||otherDirty||newOpen} onClick={save}>儲存規格</button><button type="button" className="btn btn-ghost" disabled={!dirty} onClick={()=>{setDraft(fromGroup(g));setNewOpen(false);setProductDirty({});setReset(n=>n+1);}}>取消變更</button>{g.group_id&&<button type="button" className="btn btn-ghost" disabled={dirty} onClick={()=>{if(window.confirm('要拆成各別商品嗎？各商品會恢復原有名稱、介紹與照片。'))onSplit();}}>拆成各別商品</button>}</div>
    {metadataDirty&&<p className="field-hint">請先儲存規格，再新增規格商品或調整售價與庫存。</p>}
   </fieldset>
   <button type="button" className="btn btn-ghost" disabled={locked} onClick={onReload}>重新讀取</button>

@@ -70,8 +70,8 @@ export function HostedStoreAppearance({client,userId,tenantId,instanceId,draft,w
       if(original.kind==='settings')setValue(fields(ack.current));
       else setFiles(old=>({...old,[original.kind]:null}));
       await onSaved();if(!current())return;setPhase('idle');
-      setMessage(original.kind==='settings'?'已儲存店面外觀。重新發布後，公開頁才會更新。'
-        :ack.changed?`已儲存${names[original.kind]}變更。重新發布後，公開頁才會更新。`:`已經沒有草稿${names[original.kind]}。`);
+      setMessage(original.kind==='settings'?'已儲存店面外觀。'
+        :ack.changed?`已儲存${names[original.kind]}變更。`:`已經沒有草稿${names[original.kind]}。`);
     }catch(error){
       const unknown=!(error instanceof ApiError)||error.network||error.timedOut||error.accessExpired;
       const retained=retainedAppearanceFailure(original,unknown||heldAppearanceAttempt(client,userId,original)?.hadUnknown===true);
@@ -114,7 +114,6 @@ export function HostedStoreAppearance({client,userId,tenantId,instanceId,draft,w
   </div>:null;
   return <section className="hosted-store-appearance stack" aria-labelledby={id+'-title'}>
     <h4 id={id+'-title'}>店面外觀</h4>
-    <p className="field-hint">先儲存草稿，再預覽與發布。公開頁會保留目前發布的版本。</p>
     {!writable&&<p>你目前只有檢視權限，無法修改店面外觀。</p>}
     {writable?<fieldset className="hosted-appearance-fields stack" disabled={frozen}>
       <legend>版型與品牌</legend>
@@ -170,12 +169,12 @@ export function HostedStoreAppearance({client,userId,tenantId,instanceId,draft,w
           {role==='cover'?<p className="field-hint">建議使用橫式圖片，例如 16:9 或 3:2。</p>:<p className="field-hint">請使用正方形圖片；圖片會完整顯示。</p>}
           {writable&&<>
             {draft.uploads_enabled&&<><label className="field">{names[role]}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={frozen} onChange={event=>{const chosen=event.target.files?.[0];event.target.value='';if(chosen)void choose(role,chosen);}}/></label>
-              <p className="field-hint">PNG、JPEG 或 WebP，原始圖片最多 20 MB；圖片會在裝置上自動縮小。先看完整預覽，再儲存；公開頁需重新發布。</p></>}
+              <p className="field-hint">PNG、JPEG 或 WebP，原始圖片最多 20 MB；圖片會在裝置上自動縮小。先看完整預覽，再儲存。</p></>}
             {file&&<p className="field-hint">已選擇：{file.name}</p>}
             {file&&previews[role]&&<figure className="hosted-photo-draft"><img src={previews[role]} alt={'待儲存的完整'+names[role]}/><figcaption>裝置上的預覽・{(file.size/1024/1024).toFixed(2)} MB・{phase==='unknown'?'儲存結果尚未確認':'尚未儲存'}</figcaption></figure>}
             <div className="actions">
               {file&&draft.uploads_enabled&&<button type="button" className="btn btn-ghost btn-sm" disabled={frozen||metadataDirty} onClick={()=>freshImage(role,'upload')}>{image?'儲存替換'+names[role]:'儲存'+names[role]}</button>}
-              {image&&<button type="button" className="btn btn-ghost btn-sm" disabled={frozen||metadataDirty} onClick={()=>{if(window.confirm(`移除草稿${names[role]}？公開頁會保留到重新發布。`))freshImage(role,'remove');}}>移除{names[role]}</button>}
+              {image&&<button type="button" className="btn btn-ghost btn-sm" disabled={frozen||metadataDirty} onClick={()=>{if(window.confirm(`移除草稿${names[role]}？`))freshImage(role,'remove');}}>移除{names[role]}</button>}
               {(file||attempt?.kind===role)&&phase!=='review'&&<button type="button" className="btn btn-ghost btn-sm" disabled={frozen} onClick={()=>{setFiles(old=>({...old,[role]:null}));if(attempt?.kind===role){held.current=null;setAttempt(null);setPhase('idle');}setMessage(`已取消這次${names[role]}變更。`);}}>取消{names[role]}變更</button>}
             </div>
             {metadataDirty&&(file||image)&&<p className="field-hint">請先儲存店面外觀，再儲存圖片變更。</p>}

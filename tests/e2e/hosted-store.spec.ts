@@ -30,17 +30,17 @@ test('a merchant publishes service information that buyers can read on mobile wi
   await setup.getByLabel('商店名稱', {exact: true}).fill('合成服務說明商店');
   await setup.getByLabel('商店網址', {exact: true}).fill(slug);
   await setup.getByRole('textbox', {name: '商店介紹', exact: true}).fill(description);
-  await expect(setup.getByRole('textbox', {name: '商店介紹', exact: true})).toHaveAccessibleDescription(/客服方式.*儲存後可先預覽/);
+  await expect(setup.getByRole('textbox', {name: '商店介紹', exact: true})).toHaveAccessibleDescription(/客服方式.*會顯示在店首頁/);
   await setup.getByRole('button', {name: '建立商店', exact: true}).click();
   await addProduct(page, '合成展示商品', '120', '3');
-  await storeArea(page, '店面與發布');
+  await storeArea(page, '店面');
   const popup = page.waitForEvent('popup');
   await page.getByRole('link', {name: '預覽已儲存的展示頁', exact: true}).click();
   const preview = await popup;
   await expect(preview.getByRole('region', {name: '商店說明與聯絡', exact: true})).toHaveText('商店說明與聯絡' + description);
   await expect(preview.getByRole('navigation', {name: '商店導覽'})).toHaveCount(0);
   await preview.close();
-  await page.getByRole('button', {name: '發布展示頁', exact: true}).click();
+  await page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true}).click();
   await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
   const anonymous = await browser.newContext({baseURL, javaScriptEnabled: false, viewport: {width: 390, height: 844}});
   try {
@@ -63,18 +63,20 @@ test('a merchant publishes service information that buyers can read on mobile wi
     const form = page.getByRole('form', {name: '商店資料', exact: true});
     await form.getByRole('textbox', {name: '商店介紹', exact: true}).fill(updated);
     await form.getByRole('button', {name: '儲存商店資料', exact: true}).click();
-    await expect(storePage(page).getByRole('status')).toContainText('重新發布後，公開頁才會更新。');
+    await expect(storePage(page).getByRole('status')).toContainText('已儲存。');
+    await expect(page.getByRole('region', {name: '公開狀態'})).toContainText('有變更還沒公開。');
     await buyer.goto(`/shops/${slug}/order-access`);
     await expect(buyer.getByRole('region', {name: '商店說明與聯絡', exact: true})).toContainText('shop@example.test');
     await expect(buyer.locator('body')).not.toContainText('updated@example.test');
-    await storeArea(page, '店面與發布');
-    await page.getByRole('button', {name: '發布更新', exact: true}).click();
+    await storeArea(page, '店面');
+    await page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布更新', exact: true}).click();
     await expect(storePage(page).getByRole('status')).toContainText('已發布・第 2 版');
     await buyer.reload();
     await expect(buyer.getByRole('region', {name: '商店說明與聯絡', exact: true})).toContainText('updated@example.test');
     await buyer.setViewportSize({width: 1280, height: 900});
     await buyer.goto(`/shops/${slug}/products/P0001`);
     await buyer.screenshot({path: testInfo.outputPath('merchant-info-product-1280.png'), fullPage: true});
+    await storeArea(page, '商店資料');
     page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button', {name: '停止公開', exact: true}).click();
     await expect(storePage(page).getByRole('status')).toContainText('已停止公開');
@@ -151,15 +153,16 @@ test('a commerce member opens, stocks, publishes and re-enters their own store',
   await expect(list).toContainText('手工茶杯'); await expect(list).toContainText('亞麻杯墊');
   for (const price of prices) await expect(list).toContainText(price);
   const previewOpened = page.waitForEvent('popup');
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await page.getByRole('link', {name: '預覽已儲存的展示頁', exact: true}).click();
   const preview = await previewOpened;
   await expect(preview.getByRole('heading', {name: '手工茶杯', exact: true})).toBeVisible();
   await expect(preview.getByRole('heading', {name: '亞麻杯墊', exact: true})).toBeVisible();
   await preview.close();
-  await storePage(page).getByRole('button', {name: '發布展示頁', exact: true}).click();
+  const publishBar = page.getByRole('region', {name: '公開狀態'});
+  await publishBar.getByRole('button', {name: '發布', exact: true}).click();
   await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
-  await expect(storePage(page).getByRole('link', {name: `查看公開頁：/shops/${slug.toLowerCase()}`, exact: true})).toBeVisible();
+  await expect(publishBar.getByRole('link', {name: '查看公開頁', exact: true})).toHaveAttribute('href', `/shops/${slug.toLowerCase()}`);
   const anonymous = await browser.newContext({baseURL});
   try {
     const pub = await anonymous.newPage(); await pub.goto(`/shops/${slug.toLowerCase()}`);
@@ -243,9 +246,9 @@ test('store pages stay readable in every theme and width', async ({page, browser
   for (const mode of ['light', 'dark']) {await theme(page, mode); for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({width, height: 900});
     await open(page, ready.hash); await expect(storePage(page)).toContainText('已發布・第 1 版'); await expect(storePage(page).locator('.hosted-store-product')).toHaveCount(2);
-    await expect(page.getByRole('navigation', {name:'商店工作區'}).getByRole('button')).toHaveText(['商品','店面與發布','商店資料','供貨合作']);
+    await expect(page.getByRole('navigation', {name:'商店工作區'}).getByRole('button')).toHaveText(['商品','店面','商店資料','供貨合作']);
     await expect(page.getByRole('region', {name:'預留設定',exact:true})).toBeHidden();
-    for (const [index, area] of (['商品', '供貨合作', '店面與發布', '商店資料'] as const).entries()) {
+    for (const [index, area] of (['商品', '供貨合作', '店面', '商店資料'] as const).entries()) {
       await storeArea(page, area);
       if(area==='商店資料') await expect(page.getByRole('region',{name:'預留設定',exact:true})).toBeVisible();
       else await expect(page.getByRole('region',{name:'預留設定',exact:true})).toBeHidden();
@@ -324,12 +327,11 @@ test('unsaved store settings survive publication controls until saved', async ({
   await settings.getByRole('textbox', {name: '商店介紹', exact: true}).fill('尚未儲存的新介紹');
   await storeArea(page,'商店資料');
   await settings.getByLabel('商店網址', {exact: true}).fill(nextSlug);
-  await storeArea(page,'店面與發布');
-  const publish = storePage(page).getByRole('button', {name: '發布展示頁', exact: true});
+  await storeArea(page,'店面');
+  const publication = page.getByRole('region', {name: '公開狀態', exact: true});
+  const publish = publication.getByRole('button', {name: '發布', exact: true});
   await expect(publish).toBeDisabled();
-  await storeArea(page,'店面與發布');
-  const publication = page.getByRole('region', {name: '預覽與發布', exact: true});
-  await expect(publication).toContainText('還有尚未儲存的內容。');
+  await expect(publication).toContainText('先儲存或取消還沒儲存的修改。');
   for (const mode of ['light', 'dark']) {await theme(page, mode); for (const width of [360, 1280]) {
     await page.setViewportSize({width, height: 900});
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -341,9 +343,9 @@ test('unsaved store settings survive publication controls until saved', async ({
   await expect(settings.getByLabel('商店網址', {exact: true})).toHaveValue(nextSlug);
   await storeArea(page,'商店資料');
   await settings.getByRole('button', {name: '儲存商店資料', exact: true}).click();
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await expect(publish).toBeEnabled();
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await publish.click();
   await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
   const publicPage = await page.request.get(`/shops/${nextSlug}`);
@@ -354,17 +356,14 @@ test('unsaved store settings survive publication controls until saved', async ({
   expect((await page.request.get(`/shops/${originalSlug}`)).status()).toBe(404);
   await storeArea(page,'商店資料');
   await settings.getByLabel('商店名稱', {exact: true}).fill('停止公開前的草稿');
-  await storeArea(page,'店面與發布');
   const unpublish = storePage(page).getByRole('button', {name: '停止公開', exact: true});
   await expect(unpublish).toBeDisabled();
   await storeArea(page,'商店資料');
   await expect(settings.getByLabel('商店名稱', {exact: true})).toHaveValue('停止公開前的草稿');
   await storeArea(page,'商店資料');
   await settings.getByRole('button', {name: '儲存商店資料', exact: true}).click();
-  await storeArea(page,'店面與發布');
   await expect(unpublish).toBeEnabled();
   page.once('dialog', dialog => dialog.accept());
-  await storeArea(page,'店面與發布');
   await unpublish.click();
   await expect(storePage(page).getByRole('status')).toContainText('已停止公開');
   await storeArea(page,'商店資料');
@@ -509,15 +508,16 @@ test('saved store template survives login and matches private preview and the pu
   const original = StoreViewSchema.parse(await (await page.request.get('/api/v1' + ready.root)).json());
   await post(page, ready.root + '/publish', {}, 200, original.version!);
   await open(page, ready.hash);
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   const choice = page.getByRole('radio', {name: /^直列目錄/});
   await choice.focus(); await choice.press('Space'); await expect(choice).toBeChecked();
-  await expect(page.getByRole('button', {name: '發布更新', exact: true})).toHaveCount(0);
-  await storeArea(page,'店面與發布');
+  const publishBar = page.getByRole('region', {name: '公開狀態'});
+  await expect(publishBar.getByRole('button', {name: '發布更新', exact: true})).toHaveCount(0);
+  await storeArea(page,'店面');
   await page.getByRole('button', {name: '儲存版型', exact: true}).click();
   await expect(storePage(page).getByRole('status')).toContainText('已儲存版型');
-  await expect(page.getByRole('button', {name: '發布更新', exact: true})).toBeEnabled();
-  await storeArea(page,'店面與發布');
+  await expect(publishBar.getByRole('button', {name: '發布更新', exact: true})).toBeEnabled();
+  await storeArea(page,'店面');
   const popup = page.waitForEvent('popup'); await page.getByRole('link', {name: '預覽已儲存的展示頁', exact: true}).click();
   const preview = await popup;
   const anonymous = await browser.newContext({baseURL});
@@ -526,8 +526,8 @@ test('saved store template survives login and matches private preview and the pu
     await expect(pub.locator('.shop-products-list')).toHaveCount(0);
     await expect(preview.locator('.shop-products-list article')).toHaveCount(2);
     expect((await anonymous.request.get('/api/v1' + ready.root + '/preview-page')).status()).not.toBe(200);
-    await storeArea(page,'店面與發布');
-    await page.getByRole('button', {name: '發布更新', exact: true}).click();
+    await storeArea(page,'店面');
+    await publishBar.getByRole('button', {name: '發布更新', exact: true}).click();
     await expect(storePage(page).getByRole('status')).toContainText('已發布・第 2 版'); await pub.reload();
     await expect(pub.locator('.shop-products-list article')).toHaveCount(2);
     expect(await pub.locator('.shop-brand-header').innerHTML()).toBe(await preview.locator('.shop-brand-header').innerHTML());
@@ -542,7 +542,7 @@ test('saved store template survives login and matches private preview and the pu
       expect(await choice.locator('..').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       await pub.screenshot({path: testInfo.outputPath(`presentation-public-${width}.png`), fullPage: true});
     }
-    await signOut(page); await login(page, member.email); await open(page, ready.hash); await storeArea(page,'店面與發布'); await expect(choice).toBeChecked();
+    await signOut(page); await login(page, member.email); await open(page, ready.hash); await storeArea(page,'店面'); await expect(choice).toBeChecked();
     const other = await person(e2eAuthPool), otherContext = await browser.newContext({baseURL});
     try {const stranger = await otherContext.newPage(); await login(stranger, other.email); await open(stranger, ready.hash); await expect(storePage(stranger)).toContainText('找不到這間商店。');}
     finally {await otherContext.close();}
@@ -562,9 +562,9 @@ test('unknown appearance response retains the original key and selection until c
     const response = await route.fetch(); expect(response.status()).toBe(200);
     if (requests.length === 1) await route.fulfill({response, json: {}}); else await route.fulfill({response});
   });
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   const list = page.getByRole('radio', {name: /^直列目錄/}); await list.check();
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await page.getByRole('button', {name: '儲存版型', exact: true}).click();
   const retry = page.getByRole('button', {name: '重試', exact: true}); await expect(retry).toBeEnabled();
   await expect(list).toBeChecked(); await expect(list).toBeDisabled();
@@ -581,16 +581,16 @@ test('unknown appearance response retains the original key and selection until c
   const session = await (await page.request.get('/api/v1/session')).json();
   const changed = await page.request.patch('/api/v1' + ready.root, {data: {name: '另一視窗更新'}, headers: {Origin: new URL(page.url()).origin, 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID(), 'If-Match': '"2"'}});
   expect(changed.status()).toBe(200);
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   const grid = page.getByRole('radio', {name: /^格狀目錄/}); await grid.check();
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await page.getByRole('button', {name: '儲存版型', exact: true}).click();
   await expect(storePage(page).getByRole('status')).toContainText('你的版型選擇仍保留');
   await expect(grid).toBeChecked(); await expect(grid).toBeEnabled();
   expect(casAttempts).toHaveLength(1); expect(casAttempts[0].version).toBe('"2"');
   expect((await e2eAuthPool.query('SELECT version::text,template_id FROM commerce_storefront_profiles WHERE instance_id=$1', [ready.hash.split('/')[2]])).rows).toEqual([{version: '3', template_id: 'catalog-list-v1'}]);
   // Only this explicit second click adopts the refreshed version, never an automatic retry.
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await page.getByRole('button', {name: '儲存版型', exact: true}).click();
   await expect(storePage(page).getByRole('status')).toContainText('已儲存版型');
   expect((await e2eAuthPool.query('SELECT version::text,template_id FROM commerce_storefront_profiles WHERE instance_id=$1', [ready.hash.split('/')[2]])).rows).toEqual([{version: '4', template_id: 'catalog-grid-v1'}]);
@@ -608,22 +608,22 @@ test('published store and product links can be copied from the editor', async ({
     await post(page, ready.root + '/products', product, 201);
   }
   await open(page, ready.hash);
-  await storeArea(page,'店面與發布');
-  const storeLink = storePage(page).getByRole('button', {name: '複製商店連結', exact: true});
+  await storeArea(page,'店面');
+  const publication = page.getByRole('region', {name: '公開狀態', exact: true});
+  const storeLink = publication.getByRole('button', {name: '複製連結', exact: true});
   const productLinks = storePage(page).getByRole('button', {name: '複製商品連結', exact: true});
-  await storeArea(page,'店面與發布');
-  const publication = page.getByRole('region', {name: '預覽與發布', exact: true});
-  const heldLine = '有尚未發布的變更；發布更新後才能複製商品連結。';
+  await storeArea(page,'店面');
+  const heldLine = '發布更新後才能複製商品連結。';
   await expect(storeLink).toHaveCount(0);
   await expect(productLinks).toHaveCount(0);
   await expect(page.getByText(heldLine, {exact: true})).toHaveCount(0);
-  await storePage(page).getByRole('button', {name: '發布展示頁', exact: true}).click();
+  await publication.getByRole('button', {name: '發布', exact: true}).click();
   await expect(storePage(page).getByRole('status')).toContainText('已發布・第 1 版');
-  await expect(storePage(page).getByRole('link', {name: `查看公開頁：/shops/${slug}`, exact: true})).toBeVisible();
+  await expect(publication.getByRole('link', {name: '查看公開頁', exact: true})).toHaveAttribute('href', `/shops/${slug}`);
   await storeArea(page,'商品');
   await expect(productLinks).toHaveCount(2);
   await expect(page.getByText(heldLine, {exact: true})).toHaveCount(0);
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await storeLink.click();
   await expect(publication.getByRole('status')).toHaveText('已複製連結');
   await expect(storeLink).toBeFocused();
@@ -657,9 +657,9 @@ test('published store and product links can be copied from the editor', async ({
     await theme(page, mode);
     for (const width of [390, 1440]) {
       await page.setViewportSize({width, height: width === 390 ? 844 : 900});
-      await storeArea(page,'店面與發布');
+      await storeArea(page,'店面');
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      const box = await publication.getByRole('button', {name: '複製商店連結', exact: true}).boundingBox();
+      const box = await publication.getByRole('button', {name: '複製連結', exact: true}).boundingBox();
       expect(box!.height).toBeGreaterThanOrEqual(44);
       await publication.screenshot({path: testInfo.outputPath(`publish-copy-${mode}-${width}.png`)});
       if (mode === 'light' && width === 390) {
@@ -679,7 +679,7 @@ test('published store and product links can be copied from the editor', async ({
   await expect(storePage(page).getByRole('status')).toContainText('已儲存。');
   await expect(productLinks).toHaveCount(0);
   await expect(page.getByText(heldLine, {exact: true})).toBeVisible();
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await expect(storeLink).toBeVisible();
   await storeLink.click();
   await expect(publication.getByRole('status')).toHaveText('已複製連結');
@@ -692,7 +692,7 @@ test('published store and product links can be copied from the editor', async ({
   await open(page, ready.hash);
   await storeArea(page,'商品');
   await expect(productLinks).toHaveCount(0);
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await expect(storeLink).toBeVisible();
   await storeLink.click();
   const manual = publication.getByLabel('手動複製連結', {exact: true});
@@ -703,7 +703,7 @@ test('published store and product links can be copied from the editor', async ({
   expect(await manual.evaluate(element => {const field = element as HTMLInputElement; return field.selectionStart === 0 && field.selectionEnd === field.value.length;})).toBe(true);
   await expect(publication.getByRole('status')).toHaveText('無法自動複製，請選取並複製下方內容');
   await expect(storePage(page).getByText('無法自動複製，請選取並複製下方內容', {exact: true})).toHaveCount(1);
-  await storePage(page).getByRole('button', {name: '發布更新', exact: true}).click();
+  await publication.getByRole('button', {name: '發布更新', exact: true}).click();
   await expect(storePage(page).locator('p[role="status"][tabindex="-1"]')).toContainText('已發布・第 2 版');
   await storeArea(page,'商品');
   await expect(productLinks).toHaveCount(2);
@@ -727,7 +727,7 @@ test('published store and product links can be copied from the editor', async ({
   await expect(editCup).toBeEnabled();
   await editCup.click();
   await expect(page.getByRole('form', {name: '編輯手工茶杯改款', exact: true})).toBeVisible();
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await expect(storeLink).toHaveAttribute('aria-busy', 'true');
   await page.evaluate(() => {
     const settle = (window as Window & {settleStoreCopy?: (ok: boolean) => void}).settleStoreCopy;
@@ -746,14 +746,13 @@ test('published store and product links can be copied from the editor', async ({
   await expect(storePage(page).getByText('已複製連結', {exact: true})).toHaveCount(0);
   await expect(storePage(page).getByText('無法自動複製，請選取並複製下方內容', {exact: true})).toHaveCount(0);
   await expect(page.getByLabel('手動複製連結', {exact: true})).toHaveCount(0);
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'店面');
   await storeLink.click();
   await expect(storeLink).toHaveAttribute('aria-busy', 'true');
-  await storeArea(page,'店面與發布');
+  await storeArea(page,'商店資料');
   const unpublish = storePage(page).getByRole('button', {name: '停止公開', exact: true});
   await expect(unpublish).toBeEnabled();
   page.once('dialog', dialog => dialog.accept());
-  await storeArea(page,'店面與發布');
   await unpublish.click();
   const completion = storePage(page).locator('p[role="status"][tabindex="-1"]');
   await expect(completion).toContainText('已停止公開');
@@ -765,9 +764,50 @@ test('published store and product links can be copied from the editor', async ({
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))));
   await expect(storePage(page).getByText('已複製連結', {exact: true})).toHaveCount(0);
   await expect(completion).toContainText('已停止公開');
-  await expect(storePage(page).getByRole('button', {name: '複製商店連結', exact: true})).toHaveCount(0);
+  await expect(publication.getByRole('button', {name: '複製連結', exact: true})).toHaveCount(0);
   await expect(storePage(page).getByRole('button', {name: '複製商品連結', exact: true})).toHaveCount(0);
   await expect(page.getByLabel('手動複製連結', {exact: true})).toHaveCount(0);
+});
+
+test('publish bar guides a new store from first product to publication and dirty republish', async ({page, e2eAuthPool}) => {
+  const member = await person(e2eAuthPool), slug = slugFor().toLowerCase();
+  await login(page, member.email);
+  const ready = await launchStore(page, '發布狀態列工作室');
+  await post(page, ready.root + '/setup', {name: '狀態列測試店', slug, currency: 'TWD'}, 201);
+  await open(page, ready.hash);
+
+  const bar = page.getByRole('region', {name: '公開狀態', exact: true});
+  await expect(bar).toContainText('還沒公開。下一步：新增第一件商品。');
+  await expect(bar.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
+
+  await storeArea(page, '店面');
+  await bar.getByRole('button', {name: '新增商品', exact: true}).click();
+  await expect(page.getByRole('form', {name: '新增商品', exact: true})).toBeFocused();
+
+  await addProduct(page, '手工陶杯', '420', '3');
+  await expect(bar).toContainText('還沒公開。下一步：發布商店。');
+  const publish = bar.getByRole('button', {name: '發布', exact: true});
+  await expect(publish).toBeEnabled();
+  await publish.click();
+
+  await expect(bar).toContainText('已公開第 1 版。');
+  await expect(bar.getByRole('link', {name: '查看公開頁', exact: true})).toHaveAttribute('href', `/shops/${slug}`);
+  await expect(bar.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
+  await expect(bar.getByRole('button', {name: '發布更新', exact: true})).toHaveCount(0);
+
+  const row = storePage(page).locator('.hosted-store-product').filter({has: page.getByRole('heading', {name: '手工陶杯', exact: true})});
+  await row.getByRole('button', {name: '編輯', exact: true}).click();
+  const edit = page.getByRole('form', {name: '編輯手工陶杯', exact: true});
+  await edit.getByLabel('商品名稱', {exact: true}).fill('手工陶杯改款');
+  await edit.getByRole('button', {name: '儲存', exact: true}).click();
+  await expect(storePage(page).getByRole('status')).toContainText('已儲存。');
+
+  await expect(bar).toContainText('有變更還沒公開。');
+  const republish = bar.getByRole('button', {name: '發布更新', exact: true});
+  await expect(republish).toBeEnabled();
+  await republish.click();
+  await expect(bar).toContainText('已公開第 2 版。');
+  await expect(bar.getByRole('button', {name: '發布更新', exact: true})).toHaveCount(0);
 });
 
 test('merchant order status follows readiness, isolates failures and preserves unsaved product drafts',async({browser,e2eAuthPool},info)=>{
@@ -780,7 +820,8 @@ test('merchant order status follows readiness, isolates failures and preserves u
   expect(saved.status()).toBe(200);await store.sellerPost(store.root+'/publish',{},200,(await saved.json()).version);
   await page.goto('/'+hash);const banner=page.getByRole('region',{name:'接單狀態',exact:true});
   await expect(banner).toContainText('待完成：付款方式、交付方式');
-  await banner.getByRole('link',{name:'檢查開店準備',exact:true}).click();await expect(page.locator('.commerce-readiness')).toBeVisible();
+  await expect(banner.getByRole('link',{name:'檢查開店準備',exact:true})).toHaveCount(0);
+  await page.locator('.hosted-seller-order-links').getByRole('link',{name:'開店準備',exact:true}).click();await expect(page.locator('.commerce-readiness')).toBeVisible();
   await page.goto('/'+hash);await store.saveOfflineFixture();
   const refresh=()=>banner.getByRole('button',{name:'更新接單狀態',exact:true}).click();
   await refresh();await expect(banner).toContainText('開店設定已備妥，等待平台確認後才能接受結帳訂單。');

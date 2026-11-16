@@ -4,21 +4,21 @@ import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import ts from '@typescript/typescript6';
 
-// Extraction snapshots started at 51dfe03c1. PR #1219 intentionally updates
-// Products copy, Publish copy/read lock, and Settings read lock; all other
-// panels and forms retain their original fingerprint. Complete JSX includes
-// every branch, attribute, text node and callback, even when hidden.
-// store-products-panel and store-publish-panel take tabIndex={-1}, so the
-// 開店步驟 button 「前往下一步」 can move focus to the panel it opens.
+// Extraction snapshots started at 51dfe03c1; PR #1219 updated copy/read locks,
+// and pass 8 (publish bar) intentionally updated Products, Publish, Settings,
+// SettingsForm, and ProductForm (moving publish/next-step/copy out to
+// HostedStorePublishBar, moving 停止公開 / 網址已固定。 to Settings, and
+// removing republish clauses). Complete JSX includes every branch, attribute,
+// text node and callback, even when hidden.
 const baseline: Readonly<Record<string, string>> = {
-  "store-products-panel": "2c5f3048ab5fe900fab6cb0298b254f9e7d807c877da6231f86bd043da6b06d5",
+  "store-products-panel": "9833d43d7fd8973cc32128c06dbe81f03696f8cc6471692be5224df212698a99",
   "store-cooperation-panel": "5b33264a138207bbe8f732d2c710798ca1bcb922881f01e2d2a1c685e86cf3a9",
-  "store-publish-panel": "44224d70be2bfeaad3a9d8ac913402255cfc7984d28afee97ac2a95729af54e1",
-  "store-settings-panel": "5d76fbdf114c3fc69c1ce66fdfa3c1d91d2d58b4d4a970aa6baace0a89ad4978",
+  "store-publish-panel": "05c48eb9a85f8302025ae9010265686186ffbe50b09d6229eb281a2bbfd4edf5",
+  "store-settings-panel": "790e3d31d5feee404258bd332fa5cba9b9ad4df50a69964ee1bb326e522c4d8a",
   "PublicationReview": "a8dcbae6aeed7bc722a2a25a5d841c24a7d4389d158a674085c83aa75d31b988",
   "ManualCopy": "76cdc0866f74582d365de26024391e0d4a6738328c1b85237c8cc8eb1453888a",
-  "SettingsForm": "c5f3aa3014667d6fbdec7a1871a9d615c9b3fe99317b98123fba1ff4954c5b1f",
-  "ProductForm": "0ca3c42deeeddd87050250764979bb25cb3e13481e05fd363ea5e8d9fbdf425e"
+  "SettingsForm": "02c06f054ab66862d405c8ee2e98369ae1926bae1ad407a602194b57c55491d0",
+  "ProductForm": "946c0db61aaed016b42ee23b738eb9a8c2621540a4bd9e54eacba93b89f0a1c0"
 };
 const directory = new URL('../../apps/portal-web/src/modules/', import.meta.url);
 const printer = ts.createPrinter();

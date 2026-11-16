@@ -173,7 +173,7 @@ test('reviewed one-click publication keeps variants and categories, blocks edito
     await apiLogin(owner,store.origin,store.seller.email);
     const page = await owner.newPage();
     await page.goto('/#stores/'+store.tenant+'/'+store.instance);
-    const listing = page.locator('.hosted-store-publication'), publish = listing.getByRole('button',{name:'一鍵上架商品',exact:true});
+    const listing = page.getByRole('region',{name:'公開狀態'}), publish = listing.getByRole('button',{name:'發布更新',exact:true});
     const variants = page.locator('.store-variants-editor'), categories = page.locator('.store-categories-editor');
     await expect(publish).toBeEnabled();
     await expect(variants.getByLabel('商品組名稱',{exact:true})).toHaveValue('共用規格商品');
@@ -212,7 +212,8 @@ test('reviewed one-click publication keeps variants and categories, blocks edito
     const published = await publication;
     expect(published.status()).toBe(200);
     expect(published.request().postDataJSON()).toEqual({review_digest:afterCategory.review_digest});
-    await expect(listing.getByRole('button',{name:'商品已全部上架',exact:true})).toBeDisabled();
+    await expect(listing).toContainText('已公開第 2 版。');
+    await expect(publish).toHaveCount(0);
     const publicPage = await buyer.newPage();
     await publicPage.goto('/shops/'+store.slug);
     const nav = publicPage.getByRole('navigation',{name:'商品分類',exact:true});

@@ -129,7 +129,7 @@ test('ordinary A/B/C members open stores, agree supply, opt in, race shared stoc
       await row.getByRole('button',{name:'同意這一版',exact:true}).click();await expect(row).toContainText('已同意');
     }
     for(const store of [b,c]) {
-      await store.page.getByRole('button',{name:'更新供貨狀態',exact:true}).click();await storeArea(store.page,'店面與發布');await store.page.getByRole('button',{name:'發布展示頁',exact:true}).click();
+      await store.page.getByRole('button',{name:'更新供貨狀態',exact:true}).click();await storeArea(store.page,'店面');await store.page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布',exact:true}).click();
       await expect(store.page.locator('.hosted-store > [role="status"]')).toContainText('已發布');
     }
     const buyerB=await contexts[4].newPage(),buyerC=await contexts[5].newPage();
@@ -188,7 +188,8 @@ test('supplier-only A accepts B, explicitly opens reservations, reads only its o
     await a.getByRole('navigation', {name: '供貨工作區'}).getByRole('button', {name: '預留與訂單', exact: true}).click();
     await expect(a.getByRole('button', {name: '開放 30 分鐘預留', exact: true})).toBeEnabled();
     await expect(a.getByLabel('商店網址', {exact: true})).toHaveCount(0);
-    await expect(a.getByRole('button', {name: '發布展示頁', exact: true})).toHaveCount(0);
+    await expect(a.getByRole('region', {name: '公開狀態', exact: true})).toHaveCount(0);
+    await expect(a.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
     await post(b, sellerStore.root + '/setup', {name: '零售 B', slug, currency: 'TWD'}, 201);
     await post(b, sellerStore.root + '/products', {title: otherTitle, price_minor: 900, stock: 5}, 201);
     await open(b, sellerStore.hash);
@@ -228,8 +229,8 @@ test('supplier-only A accepts B, explicitly opens reservations, reads only its o
     await request.getByRole('button', {name: '同意這一版', exact: true}).click();
     await expect(request).toContainText('已同意');
     await b.getByRole('button', {name: '更新供貨狀態', exact: true}).click();
-    await storeArea(b,'店面與發布');
-    await b.getByRole('button', {name: '發布展示頁', exact: true}).click();
+    await storeArea(b,'店面');
+    await b.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true}).click();
     await expect(b.locator('.hosted-store > [role="status"]')).toContainText('已發布');
     // Exact-version supply consent alone must not opt A into reservations.
     await customer.goto('/#reservations/' + slug);

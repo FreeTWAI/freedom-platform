@@ -241,8 +241,8 @@ test('SC-E2E-10 same-name shops stay separate; accept one, decline the other wit
 
     // 9. B is sellable (B's store can publish); C is not
     await pageB.goto(`/#stores/${storeB.tenantId}/${storeB.instanceId}`);
-    await storeArea(pageB, '店面與發布');
-    const publishBtnB = pageB.getByRole('button', {name: '發布展示頁', exact: true});
+    await storeArea(pageB, '店面');
+    const publishBtnB = pageB.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true});
     await expect(publishBtnB).toBeEnabled();
     await publishBtnB.click();
     await expect(pageB.locator('.hosted-store > [role="status"]')).toContainText('已上架 1 件商品，公開頁已更新。');
@@ -253,9 +253,10 @@ test('SC-E2E-10 same-name shops stay separate; accept one, decline the other wit
     expect(pubDataB.products[0].price_minor).toBe(1100);
 
     await pageC.goto(`/#stores/${storeC.tenantId}/${storeC.instanceId}`);
-    await storeArea(pageC, '店面與發布');
-    const publishBtnC = pageC.getByRole('button', {name: '發布展示頁', exact: true});
-    await expect(publishBtnC).toBeDisabled();
+    await storeArea(pageC, '店面');
+    const barC = pageC.getByRole('region', {name: '公開狀態'});
+    await expect(barC).toContainText('還沒公開。下一步：新增第一件商品。');
+    await expect(barC.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
   } finally {
     await Promise.allSettled(contexts.map(ctx => ctx.close()));
     await withdrawSupplierOffers(e2eAuthPool, supplierIds);
@@ -380,9 +381,10 @@ test('SC-E2E-11 a reprice needs new consent; withdrawing consent keeps history (
     const mySelections = await expand(pageB, '我的選品');
     await expect(mySelections).toContainText('已撤回供貨');
 
-    await storeArea(pageB, '店面與發布');
-    const publishBtn = pageB.getByRole('button', {name: '發布展示頁', exact: true});
-    await expect(publishBtn).toBeDisabled();
+    await storeArea(pageB, '店面');
+    const barB = pageB.getByRole('region', {name: '公開狀態'});
+    await expect(barB).toContainText('還沒公開。下一步：新增第一件商品。');
+    await expect(barB.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
   } finally {
     await Promise.allSettled(contexts.map(ctx => ctx.close()));
     await withdrawSupplierOffers(e2eAuthPool, supplierIds);

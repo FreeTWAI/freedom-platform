@@ -78,7 +78,8 @@ for (const action of ['setup', 'create', 'edit'] as const) {
     await expect(page.locator('.hosted-supply-catalog')).toBeVisible();
     await expect(page.getByRole('heading', {level: 1, name: '供貨商品庫', exact: true})).toBeVisible();
     await expect(page.getByLabel('商店網址', {exact: true})).toHaveCount(0);
-    await expect(page.getByRole('heading', {name: '預覽與發布', exact: true})).toHaveCount(0);
+    await expect(page.getByRole('region', {name: '公開狀態', exact: true})).toHaveCount(0);
+    await expect(page.getByRole('heading', {name: '店面', exact: true})).toHaveCount(0);
     if (action === 'create') await page.getByRole('button', {name: '新增供貨商品', exact: true}).click();
     if (action === 'edit') {
       const card = page.getByRole('article').filter({has: page.getByRole('heading', {level: 4, name: '供貨茶杯', exact: true})});
