@@ -1,5 +1,15 @@
 # 參與這個專案
 
+## 五步開始
+
+1. Fork 後 clone 你的 fork。
+2. `git switch -c <你的分支>`。
+3. 只修改一個功能模組，並把測試放在旁邊（runtime 測試放 `tests/runtime/`、瀏覽器規格放 `tests/e2e/`，兩者都列在該模組 `freedom.module.json` 的 `owned_paths`）。
+4. 執行 `npm run check:pr`。
+5. 送出 PR，並將 `check:pr` 最後五行的摘要貼進 PR 說明。
+
+只要修改維持在單一模組與其測試內，PR 會走模組快速通道（CI 約快一倍）；合併到 `main` 後仍會跑完整測試。
+
 要在自己的 Repo 做公會工具、遊戲或串接 Agent，先看[在自己的 Repo 基於自由工坊開發](docs/development/build-on-freedom.md)。
 
 <!-- freedom-repository-guide:start -->

@@ -45,3 +45,12 @@ test('215 creates agent_change_pings extending the 214 ledger without authority 
  assert.match(pingsSql,/last_error text CHECK\(last_error IN \('timeout','network','redirect','http_status','rejected_url'\)\)/);
  assert.doesNotMatch(pingsSql,/\bGRANT\b|SECURITY DEFINER|CREATE ROLE|\b(?:INSERT INTO|UPDATE|ALTER TABLE)\s+(?:shares|payments|member_client_connections|agent_connections|platform_admins)/i);
 });
+test('216 drops NOT NULL on community_journal_submissions.key_id extending the 215 ledger',()=>{
+ const journalSql=readFileSync(new URL('../../../migrations/216_community_journal_member_submissions.sql',import.meta.url),'utf8');
+ const sources=readMigrationSources(fileURLToPath(new URL('../../../migrations',import.meta.url)));
+ const prior=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=215),legacyMigrationProfile({first:1,last:215,known_gaps:[22]}));
+ const next=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=216),legacyMigrationProfile({first:1,last:216,known_gaps:[22]}),prior.ledger);
+ assert.deepEqual(next.pending,['216_community_journal_member_submissions.sql']);
+ assert.match(journalSql,/ALTER TABLE community_journal_submissions ALTER COLUMN key_id DROP NOT NULL/);
+ assert.doesNotMatch(journalSql,/\bGRANT\b|SECURITY DEFINER|CREATE ROLE/i);
+});

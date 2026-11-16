@@ -94,3 +94,82 @@ test('F2 draft schemas reuse service validators and max manual draft fits 32 KiB
  const bytes=Buffer.byteLength(JSON.stringify(maxManual),'utf8');
  assert.ok(bytes<32768,`maxManual ${bytes} bytes exceeds 32768`);
 });
+
+test('F2 upload schemas reuse skillSubmissionPayload, allowlist skills.upload/skills.fill with valid PNG example, and keep skills.illustration binary-blocked',async()=>{
+ const {skillSubmissionPayload,normalizeSubmission}=await import('../../modules/skill-submissions/payload.js');
+ const {agentResponseSchemas}=await import('../../apps/platform-api/src/agent-schemas.js');
+ const illustration=agentOperations.find(entry=>entry.id==='skills.illustration');
+ assert.equal(illustration?.granted,false);
+ for(const id of ['skills.upload','skills.fill']){
+  const op=agentOperations.find(entry=>entry.id===id&&entry.granted!==false);
+  assert.ok(op,`missing granted op ${id}`);
+  assert.equal(op.scope,'share');
+  assert.equal(op.screen,'works');
+  assert.equal(agentBodySchemas[id],skillSubmissionPayload);
+  assert.ok(agentResponseSchemas[id],`missing response schema ${id}`);
+  assert.ok(op.example?.cover_image,'expected PNG cover_image in example');
+  assert.ok(z.fromJSONSchema(agentJsonSchema(agentBodySchemas[id])).safeParse(op.example).success,`${id} JSON schema failed`);
+  await normalizeSubmission(op.example);
+ }
+});
+
+test('F2 journal allowlist reuses snapshotSchema, keeps key/publish actions person-only, and omits key secrets',async()=>{
+ const {snapshotSchema}=await import('../../modules/community-journal/payload.js');
+ const {agentResponseSchemas}=await import('../../apps/platform-api/src/agent-schemas.js');
+ for(const id of ['journal.publish','journal.discard','journal.withdraw','journal.key_create','journal.key_revoke']){
+  const denied=agentOperations.find(entry=>entry.id===id);
+  assert.ok(denied,`missing denied op ${id}`);
+  assert.equal(denied.granted,false,`${id} must remain granted:false`);
+ }
+ const submit=agentOperations.find(entry=>entry.id==='journal.submit'&&entry.granted!==false);
+ assert.ok(submit,'missing granted journal.submit');
+ assert.equal(submit.method,'POST');
+ assert.equal(submit.route,'/api/v1/me/community-journal/submissions');
+ assert.equal(submit.scope,'share');
+ assert.equal(submit.screen,'posts');
+ assert.equal(agentBodySchemas['journal.submit'],snapshotSchema);
+ assert.ok(agentResponseSchemas['journal.submit']);
+ assert.ok(snapshotSchema.safeParse(submit.example).success,'journal.submit example failed snapshotSchema');
+ assert.ok(z.fromJSONSchema(agentJsonSchema(snapshotSchema)).safeParse(submit.example).success,'journal.submit JSON schema failed');
+ for(const [id,route] of [['journal.status','/api/v1/me/community-journal'],['journal.read','/api/v1/me/community-journal/submissions/:id']] as const){
+  const op=agentOperations.find(entry=>entry.id===id&&entry.granted!==false);
+  assert.ok(op,`missing granted ${id}`);
+  assert.equal(op.method,'GET');
+  assert.equal(op.route,route);
+  assert.equal(op.scope,'read');
+  assert.equal(op.screen,'posts');
+  assert.ok(agentBodySchemas[id]);
+  assert.ok(agentResponseSchemas[id]);
+ }
+ const statusSchema=agentResponseSchemas['journal.status'];
+ assert.equal(statusSchema.safeParse({aggregate_version:1,published_submission_id:null,keys:[{key_id:'k',label:'x',expires_at:'2099-01-01T00:00:00Z',revoked_at:null,created_at:'2026-01-01T00:00:00Z'}],submissions:[]}).success,true);
+ assert.equal(statusSchema.safeParse({aggregate_version:1,published_submission_id:null,keys:[{key_id:'k',label:'x',expires_at:'2099-01-01T00:00:00Z',revoked_at:null,created_at:'2026-01-01T00:00:00Z',token_hash:'secret'}],submissions:[]}).success,false);
+ assert.equal(statusSchema.safeParse({aggregate_version:1,published_submission_id:null,keys:[{key_id:'k',label:'x',expires_at:'2099-01-01T00:00:00Z',revoked_at:null,created_at:'2026-01-01T00:00:00Z',token:'fjp_secret'}],submissions:[]}).success,false);
+});
+
+test('F3 paired-device read equivalents allowlist retail.* and supplier.* as read-only without writes or connection',async()=>{
+ const {agentQuerySchemas,agentResponseSchemas}=await import('../../apps/platform-api/src/agent-schemas.js');
+ const expected:[string,string][]=[
+  ['retail.catalog','/api/v1/retail/catalog'],
+  ['retail.stores','/api/v1/retail/stores'],
+  ['retail.listings','/api/v1/retail/listings'],
+  ['supplier.products','/api/v1/supplier/products'],
+  ['supplier.requests','/api/v1/supplier/requests'],
+ ];
+ for(const [id,route] of expected){
+  const op=agentOperations.find(entry=>entry.id===id&&entry.granted!==false);
+  assert.ok(op,`missing granted ${id}`);
+  assert.equal(op.method,'GET');
+  assert.equal(op.route,route);
+  assert.equal(op.scope,'read');
+  assert.equal(op.screen,'services');
+  assert.ok(agentBodySchemas[id],`missing body schema ${id}`);
+  assert.ok(agentResponseSchemas[id],`missing response schema ${id}`);
+ }
+ const catalogQuery=agentQuerySchemas['retail.catalog'];
+ assert.ok(catalogQuery,'missing retail.catalog query schema');
+ assert.equal(catalogQuery.safeParse({limit:20,offset:0}).success,true);
+ assert.equal(catalogQuery.safeParse({limit:51}).success,false);
+ assert.equal(agentOperations.some(op=>op.granted!==false&&op.method!=='GET'&&(op.route.startsWith('/api/v1/retail/')||op.route.startsWith('/api/v1/supplier/'))),false);
+ assert.equal(agentOperations.some(op=>op.granted!==false&&op.route.includes('client-connections')),false);
+});

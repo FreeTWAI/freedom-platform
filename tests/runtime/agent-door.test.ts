@@ -1,5 +1,6 @@
 import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
+import sharp from 'sharp';
 import {agentOperations} from '../../apps/platform-api/src/agent-allowlist.js';
 import {agentBodySchemas,agentJsonSchema} from '../../apps/platform-api/src/agent-schemas.js';
 import {z} from 'zod';
@@ -1087,6 +1088,116 @@ test('agent key creates, reads, lists, revises, and replays private skill drafts
  assert.equal((await req(`/api/v1/me/skill-submissions/${created.data.submission_id}/manual`,{token:shareOnly.access_token,body:draftBody,headers:{'If-Match':'"2"'}})).status,401);
 });
 
+test('F5 agent key uploads full skill book with cover image and introductions, matches fpg_ storage, and enforces scope, ownership, oversize, publish and revocation boundaries',async()=>{
+ const owner=await ready(0),other=await ready(1);
+ const readOnly=await issue(owner,['read']),shareOnly=await issue(owner,['share']),allScopes=await issue(owner,['read','share','rsvp','react']);
+ const raster=await sharp({create:{width:240,height:180,channels:3,background:{r:30,g:140,b:210}}}).png({compressionLevel:0}).toBuffer();
+ assert.ok(raster.byteLength>35*1024,'cover image ensures JSON exceeds 32 KiB default limit');
+ const fullPayload={
+  repository_url:'https://github.com/example/skill-full-upload',
+  title:'完整技能書代理上傳測試',
+  description:'這份完整技能書包含封面圖與一百則分享介紹，用來驗證單一 Agent 金鑰與舊版授權的一致性。',
+  use_notes:'請先閱讀 README 與 LICENSE，依照安裝指令完成本機測試。',
+  demo_url:'https://example.com/demo',
+  relationship:'curator',
+  share_introductions:Array.from({length:100},(_,i)=>`第 ${i+1} 則分享介紹：這個工具協助開發者快速驗證技能書自動化工作流程。`),
+  cover_image:{mime_type:'image/png',data_base64:raster.toString('base64')},
+ };
+ const postFpg=async(submissionId:string,grantToken:string,body:unknown)=>{
+  const res=await app.request(`${origin}/agent-api/v1/skill-submissions/${submissionId}`,{method:'POST',headers:{Authorization:`Bearer ${grantToken}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return {status:res.status,data:await res.json() as any};
+ };
+
+ assert.equal((await req('/api/v1/me/skill-submissions/upload',{token:readOnly.access_token,body:fullPayload})).data.code,'scope_required');
+ const fpgDraft=await req('/api/v1/me/skill-submissions',{session:owner,body:{}});
+ assert.equal(fpgDraft.status,201);
+ assert.equal((await req(`/api/v1/me/skill-submissions/${fpgDraft.data.submission.submission_id}/upload`,{token:readOnly.access_token,body:fullPayload})).data.code,'scope_required');
+
+ const fpgId=fpgDraft.data.submission.submission_id as string,fpgToken=fpgDraft.data.upload_grant.token as string;
+ const fpgFilled=await postFpg(fpgId,fpgToken,fullPayload);
+ assert.equal(fpgFilled.status,200,JSON.stringify(fpgFilled.data));
+
+ const agentDraft=await req('/api/v1/me/skill-submissions',{session:owner,body:{}});
+ assert.equal(agentDraft.status,201);
+ const fillId=agentDraft.data.submission.submission_id as string;
+ const fillKey=randomUUID();
+ const agentFilled=await req(`/api/v1/me/skill-submissions/${fillId}/upload`,{token:shareOnly.access_token,body:fullPayload,key:fillKey});
+ assert.equal(agentFilled.status,200,JSON.stringify(agentFilled.data));
+ assert.equal(agentFilled.data.status,'ready_for_review');
+ assert.equal(agentFilled.data.public_path,null);
+
+ const normalizeRow=(row:Record<string,unknown>)=>{
+  const {submission_id:_s,grant_hash:_gh,grant_expires_at:_ge,grant_consumed_at:_gc,grant_revoked_at:_gr,created_at:_ca,updated_at:_ua,grant_key_id:_gk,...rest}=row;
+  return rest;
+ };
+ const fpgRow=(await pool.query('SELECT * FROM skill_submissions WHERE submission_id=$1',[fpgId])).rows[0];
+ const agentRow=(await pool.query('SELECT * FROM skill_submissions WHERE submission_id=$1',[fillId])).rows[0];
+ assert.deepEqual(normalizeRow(agentRow),normalizeRow(fpgRow));
+ assert.ok(Buffer.isBuffer(agentRow.image_bytes)&&agentRow.image_bytes.byteLength>0);
+ const fillJournal=(await pool.query("SELECT command,data FROM transition_journal WHERE aggregate_type='skill_submission' AND aggregate_id=$1 AND aggregate_version=$2",[fillId,agentFilled.data.aggregate_version])).rows[0];
+ assert.equal(fillJournal?.command,'upload_private_draft');
+ assert.equal(fillJournal?.data?.source,'agent');
+ assert.equal(fillJournal?.data?.connection_id,shareOnly.connection_id);
+
+ const uploadKey=randomUUID();
+ const uploaded=await req('/api/v1/me/skill-submissions/upload',{token:shareOnly.access_token,body:fullPayload,key:uploadKey});
+ assert.equal(uploaded.status,201,JSON.stringify(uploaded.data));
+ assert.equal(uploaded.data.status,'ready_for_review');
+ assert.equal(uploaded.data.public_path,null);
+ assert.equal(uploaded.data.payload.share_introductions.length,100);
+ assert.equal(uploaded.data.illustration_url,`/api/v1/me/skill-submissions/${uploaded.data.submission_id}/illustration`);
+ assert.equal((await pool.query('SELECT count(*) FROM agent_publications WHERE connection_id=$1',[shareOnly.connection_id])).rows[0].count,'0');
+ const uploadJournal=(await pool.query("SELECT command,data FROM transition_journal WHERE aggregate_type='skill_submission' AND aggregate_id=$1 AND aggregate_version=1",[uploaded.data.submission_id])).rows[0];
+ assert.equal(uploadJournal?.command,'upload_private_draft');
+ assert.equal(uploadJournal?.data?.source,'agent');
+ assert.equal(uploadJournal?.data?.connection_id,shareOnly.connection_id);
+ assert.equal((await req('/api/v1/me/skill-submissions/upload',{token:shareOnly.access_token,body:fullPayload,key:uploadKey})).data.submission_id,uploaded.data.submission_id);
+ assert.equal((await req('/api/v1/me/skill-submissions/upload',{token:shareOnly.access_token,body:{...fullPayload,title:'衝突標題'},key:uploadKey})).status,409);
+
+ const otherDraft=await req('/api/v1/me/skill-submissions',{session:other,body:{}});
+ assert.equal(otherDraft.status,201);
+ const otherId=otherDraft.data.submission.submission_id as string;
+ const fpgForeign=await postFpg(otherId,fpgToken,fullPayload);
+ assert.equal(fpgForeign.status,401);
+ assert.equal(fpgForeign.data.code,'upload_grant_invalid');
+ const agentForeign=await req(`/api/v1/me/skill-submissions/${otherId}/upload`,{token:shareOnly.access_token,body:fullPayload});
+ assert.equal(agentForeign.status,404);
+ assert.equal(agentForeign.data.code,'not_found');
+
+ const nonAwaiting=await req(`/api/v1/me/skill-submissions/${uploaded.data.submission_id}/upload`,{token:shareOnly.access_token,body:fullPayload});
+ assert.equal(nonAwaiting.status,409);
+ assert.equal(nonAwaiting.data.code,'submission_not_awaiting_upload');
+
+ const oversizeDraftFpg=await req('/api/v1/me/skill-submissions',{session:owner,body:{}});
+ const oversizeDraftAgent=await req('/api/v1/me/skill-submissions',{session:owner,body:{}});
+ const oversizePayload={...fullPayload,cover_image:{mime_type:'image/png',data_base64:'A'.repeat(700_000)}};
+ const fpgOversize=await postFpg(oversizeDraftFpg.data.submission.submission_id,oversizeDraftFpg.data.upload_grant.token,oversizePayload);
+ const agentOversizeUpload=await req('/api/v1/me/skill-submissions/upload',{token:shareOnly.access_token,body:oversizePayload});
+ const agentOversizeFill=await req(`/api/v1/me/skill-submissions/${oversizeDraftAgent.data.submission.submission_id}/upload`,{token:shareOnly.access_token,body:oversizePayload});
+ assert.equal(agentOversizeUpload.status,fpgOversize.status);
+ assert.equal(agentOversizeUpload.data.code,fpgOversize.data.code);
+ assert.equal(agentOversizeFill.status,fpgOversize.status);
+ assert.equal(agentOversizeFill.data.code,fpgOversize.data.code);
+
+ const tooLargeBody={...fullPayload,description:'x'.repeat(850*1024)};
+ const fpgTooLarge=await postFpg(oversizeDraftFpg.data.submission.submission_id,oversizeDraftFpg.data.upload_grant.token,tooLargeBody);
+ const agentTooLarge=await req('/api/v1/me/skill-submissions/upload',{token:shareOnly.access_token,body:tooLargeBody});
+ assert.equal(fpgTooLarge.status,413);
+ assert.equal(agentTooLarge.status,413);
+ assert.equal(agentTooLarge.data.code,fpgTooLarge.data.code);
+
+ const illustrationRefused=await req(`/api/v1/me/skill-submissions/${uploaded.data.submission_id}/illustration`,{token:allScopes.access_token});
+ assert.equal(illustrationRefused.status,403);
+ assert.equal(illustrationRefused.data.code,'scope_required');
+ const publishRefused=await req(`/api/v1/me/skill-submissions/${uploaded.data.submission_id}/publish`,{token:allScopes.access_token,body:{consent_to_share:true}});
+ assert.equal(publishRefused.status,403);
+ assert.equal(publishRefused.data.code,'scope_required');
+
+ await req(`/api/v1/me/agent-tokens/${shareOnly.connection_id}/revoke`,{session:owner,body:{}});
+ assert.equal((await req('/api/v1/me/skill-submissions/upload',{token:shareOnly.access_token,body:fullPayload})).status,401);
+ assert.equal((await req(`/api/v1/me/skill-submissions/${oversizeDraftAgent.data.submission.submission_id}/upload`,{token:shareOnly.access_token,body:fullPayload})).status,401);
+});
+
 test('agent key reads development status and saves proposals with an active grant while matching browser grant refusals and blocking person-only development routes',async()=>{
  const owner=await ready(0),readOnly=await issue(owner,['read']),shareOnly=await issue(owner,['share']),allScopes=await issue(owner,['read','share','rsvp','react']);
  const devGithubFetch:typeof fetch=async input=>{
@@ -1167,4 +1278,131 @@ test('agent key reads development status and saves proposals with an active gran
   assert.equal(refused.status,403,action);
   assert.equal(refused.data.code,'scope_required',action);
  }
+});
+
+test('F5 journal publisher agent key submits private drafts, reads status/draft without key secrets, replays idempotently, and leaves publish/keys person-only',async()=>{
+ const owner=await ready(0),other=await ready(1);
+ const ownerCommunity=(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[owner.user.user_id])).rows[0].community_id;
+ await pool.query('INSERT INTO community_journal_publisher(community_id,owner_ref) VALUES($1,$2)',[ownerCommunity,owner.user.user_id]);
+ const issuedKey=await req('/api/v1/me/community-journal/keys',{session:owner,body:{label:'legacy-fjp'}});
+ assert.equal(issuedKey.status,201,JSON.stringify(issuedKey.data));
+ assert.match(issuedKey.data.token,/^fjp_/);
+
+ const readOnly=await issue(owner,['read']);
+ const shareOnly=await issue(owner,['share']);
+ const allScopes=await issue(owner,['read','share','rsvp']);
+ const otherAgent=await issue(other,['read','share']);
+ const example=agentOperations.find(op=>op.id==='journal.submit')!.example! as Record<string,unknown>;
+
+ assert.equal((await req('/api/v1/me/community-journal/submissions',{token:readOnly.access_token,body:example})).data.code,'scope_required');
+ const nonPublisher=await req('/api/v1/me/community-journal/submissions',{token:otherAgent.access_token,body:example});
+ assert.equal(nonPublisher.status,403);
+ assert.equal(nonPublisher.data.code,'journal_editor_required');
+ assert.equal((await req('/api/v1/me/community-journal',{token:otherAgent.access_token})).data.code,'journal_editor_required');
+
+ const idem=randomUUID();
+ const created=await req('/api/v1/me/community-journal/submissions',{token:shareOnly.access_token,body:example,key:idem});
+ assert.equal(created.status,201,JSON.stringify(created.data));
+ assert.equal(created.data.status,'ready_for_review');
+ const publicBefore=await req('/api/v1/public/journal');
+ assert.deepEqual(publicBefore.data.data,{people:[],journals:[]});
+
+ const replay=await req('/api/v1/me/community-journal/submissions',{token:shareOnly.access_token,body:example,key:idem});
+ assert.equal(replay.status,201);
+ assert.equal(replay.data.submission_id,created.data.submission_id);
+ assert.equal(replay.data.payload_sha256,created.data.payload_sha256);
+
+ const changed={...example,source_revision:'b'.repeat(64)};
+ const conflict=await req('/api/v1/me/community-journal/submissions',{token:shareOnly.access_token,body:changed,key:idem});
+ assert.equal(conflict.status,409);
+ assert.equal(conflict.data.code,'idempotency_conflict');
+
+ const statusRes=await req('/api/v1/me/community-journal',{token:readOnly.access_token});
+ assert.equal(statusRes.status,200,JSON.stringify(statusRes.data));
+ assert.equal(statusRes.data.published_submission_id,null);
+ assert.equal(statusRes.data.submissions.some((s:any)=>s.submission_id===created.data.submission_id),true);
+ assert.equal(statusRes.data.keys.length,1);
+ assert.deepEqual(Object.keys(statusRes.data.keys[0]).sort(),['created_at','expires_at','key_id','label','revoked_at']);
+ assert.equal(JSON.stringify(statusRes.data).includes(issuedKey.data.token),false);
+
+ const readRes=await req(`/api/v1/me/community-journal/submissions/${created.data.submission_id}`,{token:readOnly.access_token});
+ assert.equal(readRes.status,200,JSON.stringify(readRes.data));
+ assert.equal(readRes.data.submission_id,created.data.submission_id);
+ assert.equal(readRes.data.payload.source_revision,example.source_revision);
+
+ for(const [path,body] of [
+  [`/api/v1/me/community-journal/submissions/${created.data.submission_id}/publish`,{consent_to_publish:true,payload_sha256:created.data.payload_sha256}],
+  [`/api/v1/me/community-journal/submissions/${created.data.submission_id}/discard`,{}],
+  ['/api/v1/me/community-journal/withdraw',{}],
+  ['/api/v1/me/community-journal/keys',{label:'blocked'}],
+  [`/api/v1/me/community-journal/keys/${issuedKey.data.key.key_id}/revoke`,{}],
+ ] as const){
+  const refused=await req(path,{token:allScopes.access_token,body,headers:{'If-Match':`"${statusRes.data.aggregate_version}"`}});
+  assert.equal(refused.status,403,path);
+  assert.equal(refused.data.code,'scope_required',path);
+ }
+ const legacyDenied=await req('/agent-api/v1/journal-submissions',{token:allScopes.access_token,body:example});
+ assert.equal(legacyDenied.status,403);
+ assert.equal(legacyDenied.data.code,'scope_required');
+ const legacyOk=await req('/agent-api/v1/journal-submissions',{token:issuedKey.data.token,body:example});
+ assert.equal(legacyOk.status,201,JSON.stringify(legacyOk.data));
+ assert.equal((await req('/api/v1/me/community-journal',{token:issuedKey.data.token})).status,401);
+});
+
+test('F5 agent read key accesses retail/supplier read routes with cross-member isolation while keeping writes and /me/client-connections blocked',async()=>{
+ const owner=await ready(0),other=await ready(1);
+ const pA=await req('/api/v1/supplier/products',{session:owner,body:{title:'A 供貨商品',photo_url:null,specifications:'規格 A',net_price_minor:100,currency:'TWD',availability:'finite',stock:5,shipping_terms:'宅配',return_terms:'七天'}});
+ assert.equal(pA.status,201,JSON.stringify(pA.data));
+ const pB=await req('/api/v1/supplier/products',{session:other,body:{title:'B 供貨商品',photo_url:null,specifications:'規格 B',net_price_minor:200,currency:'TWD',availability:'finite',stock:3,shipping_terms:'宅配',return_terms:'七天'}});
+ assert.equal(pB.status,201,JSON.stringify(pB.data));
+
+ const sA=await req('/api/v1/retail/stores',{session:owner,body:{name:'A 商店',description:'A 介紹',support_contact:'a@example.com'}});
+ assert.equal(sA.status,201);
+ const sB=await req('/api/v1/retail/stores',{session:other,body:{name:'B 商店',description:'B 介紹',support_contact:'b@example.com'}});
+ assert.equal(sB.status,201);
+
+ const lA=await req('/api/v1/retail/listings',{session:owner,body:{store_id:sA.data.store_id,offer_version_id:pB.data.current_offer.offer_version_id,retail_price_minor:260,sale_terms:'A 條款'}});
+ assert.equal(lA.status,201);
+ const lB=await req('/api/v1/retail/listings',{session:other,body:{store_id:sB.data.store_id,offer_version_id:pA.data.current_offer.offer_version_id,retail_price_minor:160,sale_terms:'B 條款'}});
+ assert.equal(lB.status,201);
+
+ const rBtoA=await req(`/api/v1/retail/listings/${lB.data.listing_id}:request-supply`,{session:other,body:{snapshot_sha256:lB.data.snapshot_sha256},headers:{'If-Match':`"${lB.data.aggregate_version}"`}});
+ assert.equal(rBtoA.status,200);
+ const rAtoB=await req(`/api/v1/retail/listings/${lA.data.listing_id}:request-supply`,{session:owner,body:{snapshot_sha256:lA.data.snapshot_sha256},headers:{'If-Match':`"${lA.data.aggregate_version}"`}});
+ assert.equal(rAtoB.status,200);
+
+ const readOnly=await issue(owner,['read']);
+ const shareOnly=await issue(owner,['share']);
+
+ const catalog=await req('/api/v1/retail/catalog?limit=10&offset=0',{token:readOnly.access_token});
+ assert.equal(catalog.status,200,JSON.stringify(catalog.data));
+ assert.equal(catalog.data.items.some((i:any)=>i.product_id===pA.data.product_id),true);
+ assert.equal(catalog.data.items.some((i:any)=>i.product_id===pB.data.product_id),true);
+
+ const stores=await req('/api/v1/retail/stores',{token:readOnly.access_token});
+ assert.equal(stores.status,200);
+ assert.deepEqual(stores.data.items.map((i:any)=>i.store_id),[sA.data.store_id]);
+
+ const listings=await req('/api/v1/retail/listings',{token:readOnly.access_token});
+ assert.equal(listings.status,200);
+ assert.deepEqual(listings.data.items.map((i:any)=>i.listing_id),[lA.data.listing_id]);
+
+ const products=await req('/api/v1/supplier/products',{token:readOnly.access_token});
+ assert.equal(products.status,200);
+ assert.deepEqual(products.data.items.map((i:any)=>i.product_id),[pA.data.product_id]);
+
+ const requests=await req('/api/v1/supplier/requests',{token:readOnly.access_token});
+ assert.equal(requests.status,200);
+ assert.deepEqual(requests.data.items.map((i:any)=>i.acceptance_id),[rBtoA.data.acceptance_id]);
+
+ for(const path of ['/api/v1/retail/catalog','/api/v1/retail/stores','/api/v1/retail/listings','/api/v1/supplier/products','/api/v1/supplier/requests']){
+  const denied=await req(path,{token:shareOnly.access_token});
+  assert.equal(denied.status,403,path);
+  assert.equal(denied.data.code,'scope_required',path);
+ }
+ assert.equal((await req('/api/v1/me/client-connections',{token:readOnly.access_token})).data.code,'scope_required');
+ assert.equal((await req('/api/v1/retail/stores',{token:shareOnly.access_token,body:{name:'blocked',description:'x',support_contact:'y'}})).data.code,'scope_required');
+ const clientLaneDenied=await req('/client-api/v1/retail/catalog',{token:readOnly.access_token});
+ assert.equal(clientLaneDenied.status,403);
+ assert.equal(clientLaneDenied.data.code,'scope_required');
 });

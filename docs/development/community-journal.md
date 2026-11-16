@@ -20,6 +20,8 @@ The assigned member signs in normally and opens `/journal/manage`. They can mint
 
 ## Agent contract v1
 
+The assigned publisher can submit drafts with a single `fw_agent_` key (`share` scope) via `POST /api/v1/me/community-journal/submissions` (`journal.submit`, plus `read` scope for `journal.status` and `journal.read`), while a dedicated `fjp_` journal key on `POST /agent-api/v1/journal-submissions` still works.
+
 `POST /agent-api/v1/journal-submissions`
 
 Headers: `Content-Type: application/json`, `Authorization: Bearer fjp_…`, `Idempotency-Key: <8–128 ASCII letters/digits/_/->`.

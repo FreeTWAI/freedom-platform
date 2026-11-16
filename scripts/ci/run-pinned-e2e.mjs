@@ -147,17 +147,23 @@ export async function cleanupE2ePass(temp, output, passId, failed) {
 // SIGINT enters Playwright's test-runner teardown, which sends the configured
 // SIGTERM to its separate webServer group and drops the private schema.
 // Escalation is bounded independently of the host-owned whole-pass budget.
-function execute(root, cli, pass, env, signal, configFile, { listing = false, shard, timeoutMs, nativeComplete } = {}) {
+function execute(root, cli, pass, env, signal, configFile, { listing = false, shard, filePartitioned = false, timeoutMs, nativeComplete } = {}) {
   if (signal.aborted) return Promise.resolve({ exit_code: null, reason: 'test_cancelled' });
   const maximum = listing ? 60_000 : E2E_PASS_TIMEOUT_MS[pass.id];
   const budget = timeoutMs === undefined ? maximum : Math.min(maximum, timeoutMs);
   if (budget <= 0) return Promise.resolve({ exit_code: null, reason: 'test_timeout' });
+  const selectedPassFiles = shard && filePartitioned
+    ? pass.files.filter((_, index) => index % shard.total === shard.current - 1)
+    : pass.files;
+  if (shard && filePartitioned && !selectedPassFiles.length) {
+    return Promise.resolve({ exit_code: 1, reason: 'missing_or_empty_file' });
+  }
   return new Promise(done => {
     const group = process.platform !== 'win32';
-    const files = pass.files.map(file => '(?:^|/)' + file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$');
+    const files = selectedPassFiles.map(file => '(?:^|/)' + file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$');
     // Print each failure before a whole-pass timeout can prevent the final summary.
     const reporters = listing ? 'json' : `line,json${nativeComplete ? ',' + progressReporter : ''}`;
-    const child = spawn(process.execPath, [cli, 'test', '--config', configFile, '--forbid-only', '--reporter=' + reporters, ...(listing ? ['--list'] : []), ...(shard ? ['--shard', `${shard.current}/${shard.total}`] : []), '--output', join(dirname(env.PLAYWRIGHT_JSON_OUTPUT_FILE), 'artifacts'), ...files],
+    const child = spawn(process.execPath, [cli, 'test', '--config', configFile, '--forbid-only', '--reporter=' + reporters, ...(listing ? ['--list'] : []), ...(shard && !filePartitioned ? ['--shard', `${shard.current}/${shard.total}`] : []), '--output', join(dirname(env.PLAYWRIGHT_JSON_OUTPUT_FILE), 'artifacts'), ...files],
       { cwd: root, env, stdio: nativeComplete ? ['inherit', 'inherit', 'inherit', 'ipc'] : 'inherit', detached: group });
     if (nativeComplete) child.on('message', message => {
       if (message?.type === 'freedom.e2e.native-complete') nativeComplete();
@@ -259,7 +265,7 @@ async function main() {
     // The reviewed spec-only profile also uses this fixed plan registry. It
     // keeps the full catalog integrity check above and the independent listing
     // and complete-plan evaluator below; no candidate file/grep flag is added.
-    const selected = planE2eSelection(selection.profile, expectedFiles);
+    const selected = planE2eSelection(selection.profile, expectedFiles, selection.files);
     expectedFiles = selected.expectedFiles; plan = selected.plan; profile = selected.profile;
     }
   } catch {
@@ -296,8 +302,9 @@ async function main() {
   let progress;
   try {
     let fragmentBinding;
+    const shardedProfile = ['full', 'module-affected', 'specs-affected'].includes(profile);
     if (input.defaultShard !== undefined || input.defaultReports !== undefined) {
-      if (profile !== 'full') throw Error('invalid_default_fragment_profile');
+      if (!shardedProfile) throw Error('invalid_default_fragment_profile');
       fragmentBinding = defaultFragmentBinding(input);
     }
     if (input.defaultReports !== undefined) {
@@ -315,10 +322,10 @@ async function main() {
         const reportPath = join(temp, 'report.json');
         const env = { ...baseEnv, ...pass.env, FREEDOM_PINNED_E2E_ROOT: root,
           PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath, PLAYWRIGHT_LAST_RUN_OUTPUT_FILE: join(temp, 'last-run.json') };
-        const partitioned = profile === 'full' && pass.id === 'default';
+        const partitioned = shardedProfile && pass.id === 'default';
         const deadline = partitioned ? Date.now() + E2E_PASS_TIMEOUT_MS.default : undefined;
         let listing, listing_exit_code, listing_evidence_sha256;
-        if (profile !== 'full' || (partitioned && (input.defaultShard === undefined || input.defaultShard === '1'))) {
+        if (!shardedProfile || (partitioned && (input.defaultShard === undefined || input.defaultShard === '1'))) {
           const listed = await execute(root, cli, pass, env, controller.signal, configFile,
             { listing: true, timeoutMs: partitioned ? deadline - Date.now() : undefined });
           listing_exit_code = listed.exit_code;
@@ -336,7 +343,7 @@ async function main() {
           const shardEnv = { ...env, FREEDOM_E2E_PORT: String(shard.port),
             FREEDOM_E2E_SCHEMA: `fp_e2e_${randomUUID().replaceAll('-', '')}` };
           const ran = await execute(root, cli, pass, shardEnv, controller.signal, configFile,
-            { shard, timeoutMs: deadline - Date.now() });
+            { shard, filePartitioned: profile !== 'full', timeoutMs: deadline - Date.now() });
           const data = await readPassReport(reportPath);
           executionReason = ran.reason ?? (ran.exit_code !== 0 ? 'test_process_failed' : !data.report ? 'invalid_test_results' : undefined);
           if (executionReason || controller.signal.aborted) break;
@@ -360,7 +367,7 @@ async function main() {
                 PLAYWRIGHT_JSON_OUTPUT_FILE: join(directory, 'report.json'),
                 PLAYWRIGHT_LAST_RUN_OUTPUT_FILE: join(directory, 'last-run.json') };
               const ran = await execute(root, cli, pass, shardEnv, signal, configFile,
-                { shard, timeoutMs: deadline - Date.now(),
+                { shard, filePartitioned: profile !== 'full', timeoutMs: deadline - Date.now(),
                   ...(shard.current === 1 ? { nativeComplete: releasePeers } : {}) });
               const data = await readPassReport(shardEnv.PLAYWRIGHT_JSON_OUTPUT_FILE);
               const reason = ran.reason ?? (ran.exit_code !== 0 ? 'test_process_failed' : !data.report ? 'invalid_test_results' : undefined);
@@ -386,7 +393,7 @@ async function main() {
           const ran = await execute(root, cli, pass, env, controller.signal, configFile);
           const data = await readPassReport(reportPath);
           passReports.push({ id: pass.id, exit_code: ran.exit_code, ...data,
-            ...(profile !== 'full' ? { listing, listing_exit_code, listing_evidence_sha256 } : {}) });
+            ...(!shardedProfile ? { listing, listing_exit_code, listing_evidence_sha256 } : {}) });
           executionReason = ran.reason ?? (ran.exit_code !== 0 ? 'test_process_failed' : !data.report ? 'invalid_test_results' : undefined);
         }
         // An early stop leaves fewer passes; report its cause rather than invalid_pass_plan.

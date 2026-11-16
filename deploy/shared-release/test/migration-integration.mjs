@@ -30,7 +30,7 @@ export async function verifyMigration({ root, openCluster }) {
   const last = Math.max(...sources.map(item => Number(item.name.slice(0, 3))));
   const installedProfile = { format: LEGACY_MIGRATIONS, first: 1, last: 189, known_gaps: [22] };
   const profile = sourceMigrationProfile(source, installedProfile);
-  assert.equal(last, 215);
+  assert.equal(last, 216);
   assert.equal(profile.last, last);
   assert.deepEqual(profile.known_gaps, [22]);
   const pending = `${String(last + 1).padStart(3, '0')}_shared_release_fixture.sql`;

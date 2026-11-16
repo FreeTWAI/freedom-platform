@@ -2,7 +2,7 @@
 
 會員可以讓自己的 AI agent 把一個公開 GitHub 技能 repo 整理成 **私人草稿** 並上傳。agent 只能建立和上傳草稿。查看、撤回、公開以及金鑰管理，都只能由會員本人用瀏覽器操作。公開時平台才讀取 GitHub，固定 commit 與授權，關係標示為「自述」，`official=false`。
 
-想只用一把 Agent 金鑰時，會員可到「自動化 → 我的 Agent」建立勾選 `share` 範圍的 `fw_agent_` 金鑰，透過 `/api/v1` 代理端點（`skills.draft`、`skills.revise`，搭配 `read` 範圍的 `skills.drafts`、`skills.draft_read`）建立、讀取與修改私人草稿；草稿不需首次公開確認也不佔每日公開額度，公開發布仍需本人於瀏覽器操作。下方的長期上傳金鑰（`fpk_`）、一次性授權（`fpg_`）與 `/agent-api/v1` 上傳流程仍維持可用。
+想只用一把 Agent 金鑰時，會員可到「自動化 → 我的 Agent」建立勾選 `share` 範圍的 `fw_agent_` 金鑰，透過 `/api/v1` 代理端點（`skills.upload`、`skills.fill` 可附封面圖與 100 則分享介紹，亦可搭配 `skills.draft`、`skills.revise` 及 `read` 範圍的 `skills.drafts`、`skills.draft_read`）建立、補齊、讀取與修改私人草稿；草稿不需首次公開確認也不佔每日公開額度，公開發布仍需本人於瀏覽器操作，原有的長期上傳金鑰（`fpk_`）、一次性授權（`fpg_`）與 `/agent-api/v1` 上傳流程仍維持可用。
 
 程式位置：
 

@@ -711,3 +711,92 @@ test('incomplete manual page is owner-only, retains every field and cannot publi
  const complete=await api(`/me/skill-submissions/${id}/manual`,owner,{...rest,use_notes:'開啟範例並輸入筆記後執行整理。',page_content:page},saved.data.aggregate_version);assert.equal(complete.status,200,JSON.stringify(complete.data));assert.equal(complete.data.payload.page_content_draft,undefined);
  const published=await api(`/me/skill-submissions/${id}/publish`,owner,{consent_to_share:true},complete.data.aggregate_version);assert.equal(published.status,200,JSON.stringify(published.data));assert.deepEqual((await readPublishedSkillSubmission(pool,id))?.page_content,page);
 });
+
+test('member upload routes accept 800 KiB cover+intros payloads, fill awaiting/upgrade drafts identically to fpg_, and refuse foreign/non-awaiting drafts',async t=>{
+ const owner=await login(),other=await login(DEMO_USERS[1].email);
+ const raster=await sharp({create:{width:240,height:180,channels:3,background:{r:20,g:130,b:220}}}).png({compressionLevel:0}).toBuffer();
+ assert.ok(raster.byteLength>35*1024,'cover image ensures JSON exceeds default 32 KiB body limit');
+ const full=payload({cover_image:{mime_type:'image/png',data_base64:raster.toString('base64')}});
+ const uploadKey=randomUUID();
+ const created=await api('/me/skill-submissions/upload',owner,full,undefined,uploadKey);
+ assert.equal(created.status,201,JSON.stringify(created.data));
+ assert.equal(created.data.status,'ready_for_review');
+ assert.equal(created.data.payload.share_introductions.length,100);
+ assert.equal(created.data.illustration_url,`/api/v1/me/skill-submissions/${created.data.submission_id}/illustration`);
+ assert.equal((await api('/me/skill-submissions/upload',owner,full,undefined,uploadKey)).data.submission_id,created.data.submission_id);
+ assert.equal((await api('/me/skill-submissions/upload',owner,{...full,title:'衝突標題'},undefined,uploadKey)).status,409);
+
+ const fpgDraft=await api('/me/skill-submissions',owner,{});assert.equal(fpgDraft.status,201);
+ const fpgDone=await agent(`/skill-submissions/${fpgDraft.data.submission.submission_id}`,fpgDraft.data.upload_grant.token,full);
+ assert.equal(fpgDone.status,200,JSON.stringify(fpgDone.data));
+
+ const memberDraft=await api('/me/skill-submissions',owner,{});assert.equal(memberDraft.status,201);
+ const fillId=memberDraft.data.submission.submission_id;
+ const filled=await api(`/me/skill-submissions/${fillId}/upload`,owner,full);
+ assert.equal(filled.status,200,JSON.stringify(filled.data));
+ assert.equal(filled.data.status,'ready_for_review');
+
+ const cols='status,payload,payload_sha256,image_bytes,storage_source,consent_to_share,upgrades_submission_id,seed';
+ const rowFpg=(await pool.query(`SELECT ${cols} FROM skill_submissions WHERE submission_id=$1`,[fpgDraft.data.submission.submission_id])).rows[0];
+ const rowMember=(await pool.query(`SELECT ${cols} FROM skill_submissions WHERE submission_id=$1`,[fillId])).rows[0];
+ assert.deepEqual(rowMember,rowFpg);
+
+ assert.equal((await api(`/me/skill-submissions/${fillId}/upload`,owner,full)).data.code,'submission_not_awaiting_upload');
+ const foreignDraft=await api('/me/skill-submissions',other,{});assert.equal(foreignDraft.status,201);
+ assert.equal((await api(`/me/skill-submissions/${foreignDraft.data.submission.submission_id}/upload`,owner,full)).status,404);
+ assert.equal((await api('/me/skill-submissions/upload',owner,full,undefined,'bad')).status,400);
+ assert.equal((await api('/me/skill-submissions/upload',owner,full,undefined,randomUUID())).status,201);
+ assert.equal((await api('/me/skill-submissions/upload',owner,{...full,description:'x'.repeat(850*1024)})).status,413);
+
+ const {seen}=mockGitHub(t);
+ const simple=await api('/me/skill-submissions/manual',owner,{repository_url:'https://github.com/example/project',title:'舊版簡易投稿',description:'先以簡易表單公開這個專案。',relationship:'author'});
+ assert.equal(simple.status,201);
+ const pub=await api(`/me/skill-submissions/${simple.data.submission_id}/publish`,owner,{consent_to_share:true},simple.data.aggregate_version);
+ assert.equal(pub.status,200,JSON.stringify(pub.data));assert.equal(seen.length,3);
+ const up=await api(`/me/skill-submissions/${simple.data.submission_id}/upgrade`,owner,{});assert.equal(up.status,201);
+ const upFill=await api(`/me/skill-submissions/${up.data.submission_id}/upload`,owner,full);
+ assert.equal(upFill.status,200,JSON.stringify(upFill.data));
+ assert.equal(upFill.data.upgrades_submission_id,simple.data.submission_id);
+ assert.equal(upFill.data.status,'ready_for_review');
+});
+
+test('F3 uploadSkillSubmission records agent provenance and enforces idempotency replay/conflict for both upload and fill',async()=>{
+ const owner=await login();
+ const issued=await api('/me/agent-tokens',owner,{name:'F3 Agent',scopes:['share']});
+ assert.equal(issued.status,201,JSON.stringify(issued.data));
+ const token=issued.data.access_token as string,connectionId=issued.data.connection_id as string;
+ const agentPost=async(path:string,body:unknown,key:string)=>{
+  const res=await app.request(origin+'/api/v1'+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Idempotency-Key':key},body:JSON.stringify(body)});
+  return {status:res.status,data:await res.json() as any};
+ };
+ const full=payload();
+ const insertKey=randomUUID();
+ const created=await agentPost('/me/skill-submissions/upload',full,insertKey);
+ assert.equal(created.status,201,JSON.stringify(created.data));
+ const insertJournal=(await pool.query("SELECT command,data FROM transition_journal WHERE aggregate_type='skill_submission' AND aggregate_id=$1 AND aggregate_version=1",[created.data.submission_id])).rows[0];
+ assert.equal(insertJournal?.command,'upload_private_draft');
+ assert.equal(insertJournal?.data?.source,'agent');
+ assert.equal(insertJournal?.data?.connection_id,connectionId);
+ const insertReplay=await agentPost('/me/skill-submissions/upload',full,insertKey);
+ assert.equal(insertReplay.status,201);
+ assert.equal(insertReplay.data.submission_id,created.data.submission_id);
+ const insertConflict=await agentPost('/me/skill-submissions/upload',{...full,title:'衝突標題'},insertKey);
+ assert.equal(insertConflict.status,409);
+ assert.equal(insertConflict.data.code,'idempotency_conflict');
+
+ const awaiting=await api('/me/skill-submissions',owner,{});assert.equal(awaiting.status,201);
+ const fillId=awaiting.data.submission.submission_id as string,fillKey=randomUUID();
+ const filled=await agentPost(`/me/skill-submissions/${fillId}/upload`,full,fillKey);
+ assert.equal(filled.status,200,JSON.stringify(filled.data));
+ const fillJournal=(await pool.query("SELECT command,data FROM transition_journal WHERE aggregate_type='skill_submission' AND aggregate_id=$1 AND aggregate_version=$2",[fillId,filled.data.aggregate_version])).rows[0];
+ assert.equal(fillJournal?.command,'upload_private_draft');
+ assert.equal(fillJournal?.data?.source,'agent');
+ assert.equal(fillJournal?.data?.connection_id,connectionId);
+ const fillReplay=await agentPost(`/me/skill-submissions/${fillId}/upload`,full,fillKey);
+ assert.equal(fillReplay.status,200);
+ assert.equal(fillReplay.data.submission_id,fillId);
+ assert.equal(fillReplay.data.aggregate_version,filled.data.aggregate_version);
+ const fillConflict=await agentPost(`/me/skill-submissions/${fillId}/upload`,{...full,title:'衝突填寫'},fillKey);
+ assert.equal(fillConflict.status,409);
+ assert.equal(fillConflict.data.code,'idempotency_conflict');
+});

@@ -169,7 +169,8 @@ may accompany a leaf; they cannot introduce another module obligation.
 | `affected`: plan_receipt_docs / module_app_markdown | 無 heavy jobs |
 | `affected`: plan_document_inputs | Governance consumers |
 | `affected`: delivery tooling | Deploy preflight (PR and direct main successor) |
-| `affected`: browser_specs_only | Complete browser plan, TypeScript and six existing consumer test files in ui-e2e (PR and direct main successor) |
+| `affected`: browser_specs_only | Complete browser plan on main push, narrowed `specs-affected` plan (`MODULE_LANE_SMOKE_FILES` + changed specs + fixture specs; except single-file `store-setup-entry`) on `pull_request`, plus TypeScript and six existing consumer test files in ui-e2e (PR and direct main successor) |
+| `affected`: `module_affected` | `runtime-full`, `runtime-aggregate`, `ui-e2e` (narrowed `module-affected` plan), `static-worker` (`pull_request` only; skips `governance-consumers`, `deploy-preflight`, `guild-presentation`) |
 
 The frontend profile omits `governance-consumers`, `deploy-preflight` and the
 separate guild-presentation job. It does
@@ -368,3 +369,45 @@ complete group history for that check. Do not require the PR-specific two-parent
 shape for a queue candidate. Existing immutable-migration and exact-byte checks
 still apply. Group evidence is pre-merge evidence; it cannot replace successful
 Verify and CodeQL push runs on the resulting main SHA for release admission.
+
+## 模組快速通道（module lane）
+
+針對只修改單一或少數低相依功能模組的 PR，selector 提供 `module_affected` 快速通道（實作於 `packages/contribution-tools/module-lane.mjs` 與 `scripts/ci/select-affected-jobs.mjs`），在不放寬 `main` 驗證的前提下，略過不可能受影響的工作並窄化瀏覽器測試清單。
+
+### 誰可以進入（admission）
+
+僅限 `pull_request` 事件，且須先通過乾淨整合樹與 ordered-parent 驗證（`parents[0] === base`、`parents[1] === head`、`HEAD === candidate`，`regularNonExecutableChanges` 為真），同時既有 `decideAffectedJobs` 必須回傳 `mode: 'full'` 且 `reason` 屬於 `MODULE_LANE_OVERRIDABLE_REASONS`（`not_docs_allowlist`、`baseline_candidate_union`、`leaf_profile_unproven`、`governance_security_or_shared_runtime`、`excluded_test_spec_or_config`）。所有其餘 full reason（例如 `diff_unproven`、`descriptors_changed`、`root_instruction_modified`、`ci_tools_sources_unproven`、`guild_*` 等）以及 `push`、`merge_group` 均不會被覆寫。
+
+所有變更還須同時符合以下條件（否則維持原決策）：
+
+- 變更路徑數為 `1..200`（`MODULE_LANE_MAX_PATHS = 200`），且每個路徑皆為 `A` 或 `M`、mode `100644`、無 `previousPath`、通過 `safeRepoPath` 與無隱藏路徑段檢查。
+- `base` 與 `candidate` 的完整 `freedom.module.json` descriptor graph 完全相同（不得新增、刪除或修改 descriptor）。
+- 每個變更路徑僅能屬於下列四類之一：
+  1. `runtime-test`：`^tests/runtime/[a-z0-9][a-z0-9_-]*\.test\.ts$`（且不在 `RUNTIME_TEXT`）。
+  2. `spec`：`^tests/e2e/[a-z0-9]+(?:-[a-z0-9]+)*\.spec\.ts$`（且不在 `RUNTIME_TEXT`）。
+  3. `docs`：`isDocsAllowlisted(path)` 允許的文件。
+  4. `module`：位於 `apps/` 或 `modules/` 之下、在 baseline 至少被一個 descriptor 的 `owned_paths` 擁有、不屬於 `FULL_SCOPE`／`RUNTIME_TEXT`／`ROOT_INSTRUCTIONS`／descriptor、非模組設定檔（`package.json`、`package-lock.json`、`.npmrc`、`tsconfig*.json`、`*.config.*`），且副檔名為 `.ts`、`.tsx`、`.css`、`.md`、`.svg`、`.png`、`.webp`、`.jpg`、`.jpeg`、`.gif`、`.glb`、`.wasm`、`.mp3`、`.ogg`、`.woff2` 之一。
+- 每個擁有異動模組檔案的 descriptor 都必須通過 `laneEligible`：不在 `MODULE_LANE_CORE`（host／核心／公會基礎模組清單）中，且在 baseline descriptors 中的直接相依者（dependents）不超過 `MODULE_LANE_MAX_DEPENDENTS = 9`。
+- 若變更包含任一 `runtime-test` 路徑，selector 會使用 TypeScript pre-processor 從 candidate 中所有 `tests/e2e/**/*.ts` 沿 `tests/e2e/` 與 `tests/runtime/` 靜態匯入（`import … from`、`export … from`、`import('literal')`、`require('literal')`，最多讀取 3000 個檔案）計算可達到的 `tests/runtime/` 集合：若圖譜未證明或達上限則退回 `e2e_import_graph_unproven`，若任一變更的 `runtime-test` 落在該集合內則退回 `e2e_imports_changed_runtime`。非字面值的動態 `import(`／`require(` 不再退回完整執行，因這類呼叫屬瀏覽器端或 fixture 接線邏輯，且合併後 `main` 仍會執行全部瀏覽器測試。
+- 窄化後的 Playwright spec 清單不超過 `MODULE_LANE_MAX_FILES = 80` 個檔案，且所有 `MODULE_LANE_SMOKE_FILES` 與 `E2E_PLAN.slice(1)` fixture specs 皆存在於 candidate catalog。
+
+### 執行內容與略過項目
+
+- **Reason 與 jobs**：`mode` 為 `'affected'`、`reason` 為 `'module_affected'`。只執行 `FRONTEND_LEAF_JOBS` 的四個 selectable jobs：`runtime-full`（完整 runtime 測試套件）、`runtime-aggregate`、`ui-e2e`、`static-worker`；always-on 的 `source-integrity` 等檢查維持不變。
+- **不執行的 jobs**：略過 `governance-consumers`、`deploy-preflight` 與 `guild-presentation`。`evaluateVerifyAggregate` 僅接受上述四個 jobs 的精確集合，且其餘三個必須 cleanly skipped，任何多選、漏選或未預期的 e2e 清單都會失敗。
+- **窄化瀏覽器清單（`profile: 'module-affected'`）**：`ui_default_shards` 維持 `'true'`，4 個 default shards 以檔案 `index % 4` 分割 `narrowedSpecFiles` 的結果，而非跑完整瀏覽器目錄。清單固定包含：
+  - 已變更的 specs；
+  - 受影響模組及其直接與遞移相依模組在 `owned_paths` 中擁有的全部 catalog specs；
+  - 6 個 shell／session smoke specs（`MODULE_LANE_SMOKE_FILES`：`calm-experience.spec.ts`、`member-navigation-hierarchy.spec.ts`、`member-session-lifecycle.spec.ts`、`mobile-install.spec.ts`、`page-tools.spec.ts`、`session-recovery.spec.ts`）；
+  - 5 個 `E2E_PLAN.slice(1)` fixture specs（`private-work-ai.spec.ts`、`member-avatar-asset.spec.ts`、`message-images.spec.ts`、`hosted-store-photo.spec.ts`、`notification-preferences.spec.ts`，及各自獨立環境變數的 fixture pass）。
+- **僅修改 E2E specs 的 PR（`browser_specs_only`）**：在 `pull_request`（排除單檔 `tests/e2e/store-setup-entry.spec.ts` 的 `store-setup-entry` pilot）時，改用 `profile: 'specs-affected'`，以相同 `narrowedSpecFiles`（已變更 specs + `MODULE_LANE_SMOKE_FILES` + fixture specs）與檔案分割方式執行；`push` 時仍維持完整目錄。
+
+### `main` 仍執行完整驗證
+
+`push`（包含合併至 `main` 後的 Verify）與 `merge_group` 一律不會進入 `module_affected`，因此 `main` 仍會執行全部 7 個可選 jobs 與完整瀏覽器目錄，release 門檻維持不變。Selector 與 `run-pinned-e2e.mjs` 皆由受信任的 `job.workflow_sha` 執行並共用同一組純函式清單計算，PR 無法自行擴大或偽造窄化範圍。
+
+### 貢獻者如何取得快速通道
+
+1. 讓一個 PR 專注於單一功能模組（避開 `MODULE_LANE_CORE`、超過 9 個直接相依者的核心模組、`packages/`、全域設定或修改 `freedom.module.json`）。
+2. 將該模組對應的單元／整合測試放在 `tests/runtime/<name>.test.ts`（並避免在 `tests/e2e/**` 中靜態匯入該測試檔）。
+3. 將該模組專屬的 Playwright specs（`tests/e2e/<kebab-case>.spec.ts`）明確登記在該模組 `freedom.module.json` 的 `owned_paths` 中，lane 才會自動納入這些專屬瀏覽器測試。

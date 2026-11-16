@@ -16,7 +16,7 @@ before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool
 after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
 beforeEach(async()=>{await pool.query('TRUNCATE communities,login_attempts,auth_rate_limits CASCADE');await seedLocal(pool);});
 type Session={cookie:string;csrf:string;user:{user_id:string;community_id:string}};
-async function api(path:string,session?:Session,body?:unknown,version?:string,key=randomUUID()){
+async function api(path:string,session?:Session,body?:unknown,version?:string,key:string=randomUUID()){
  const response=await app.request(origin+'/api/v1'+path,{method:body===undefined?'GET':'POST',headers:{Origin:origin,...(session?{Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{}),...(body===undefined?{}:{'Content-Type':'application/json','Idempotency-Key':key,...(version?{'If-Match':`"${version}"`}:{})})},body:body===undefined?undefined:JSON.stringify(body)});return {status:response.status,data:await response.json() as any,response};
 }
 async function login(index=0):Promise<Session>{const r=await api('/auth/login',undefined,{email:DEMO_USERS[index].email,password:DEMO_PASSWORD});assert.equal(r.status,200);return {cookie:r.response.headers.get('set-cookie')!.split(';')[0],csrf:r.data.csrf_token,user:{...r.data.user,community_id:(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[r.data.user.user_id])).rows[0].community_id}};}
@@ -191,4 +191,82 @@ test('multi-community immutable snapshot submits, reviews and publishes atomical
  const receiptRead=await receipt(k.token,idem);assert.equal(receiptRead.data.status,'published');
  await api('/me/community-journal/withdraw',s,{},publish.data.aggregate_version);
  for(const community of ['claude','codex'])assert.equal((await api('/public/journal?community='+community)).data.data.journals.length,0);
+});
+
+test('member door journal submission enforces publisher, CSRF, 2 MiB limit, idempotency and 10 pending drafts',async()=>{
+ const nonEditor=await login(1);
+ const denied=await api('/me/community-journal/submissions',nonEditor,payload());
+ assert.equal(denied.status,403);
+ assert.equal(denied.data.code,'journal_editor_required');
+ const s=await editor();
+ assert.equal((await api('/me/community-journal/submissions',undefined,payload())).status,401);
+ assert.equal((await api('/me/community-journal/submissions',{...s,csrf:'wrong'},payload())).status,403);
+ assert.equal((await api('/me/community-journal/submissions',s,payload(),undefined,'bad')).status,400);
+
+ // Larger than 32 KiB default JSON limit (40+ KiB) still succeeds within 2 MiB.
+ const big=payload() as any;
+ big.journals[0].blocks=[
+  {type:'paragraph',text:'大'.repeat(15000)},
+  {type:'paragraph',text:'字'.repeat(15000)},
+ ];
+ const bigRaw=JSON.stringify(big);
+ assert.ok(Buffer.byteLength(bigRaw,'utf8')>32768);
+ const idem=randomUUID();
+ const created=await api('/me/community-journal/submissions',s,big,undefined,idem);
+ assert.equal(created.status,201,JSON.stringify(created.data));
+ assert.equal(created.data.status,'ready_for_review');
+ assert.equal(created.data.payload_sha256,createHash('sha256').update(bigRaw).digest('hex'));
+ assert.deepEqual((await api('/public/journal')).data.data,{people:[],journals:[]});
+
+ // Idempotent replay returns same receipt; different body returns 409.
+ const replay=await api('/me/community-journal/submissions',s,big,undefined,idem);
+ assert.equal(replay.status,201);
+ assert.equal(replay.data.submission_id,created.data.submission_id);
+ assert.equal((await api('/me/community-journal/submissions',s,payload(),undefined,idem)).status,409);
+
+ // Readable and publishable through member editor routes.
+ assert.deepEqual((await api('/me/community-journal/submissions/'+created.data.submission_id,s)).data.payload,big);
+ const bad=payload() as any;bad.people[0].avatar.url='/media/private/'+'a'.repeat(64)+'.png';
+ assert.equal((await api('/me/community-journal/submissions',s,bad)).status,422);
+
+ // Exceeding 2 MiB fails with 413 body_too_large.
+ const over2MiB=await app.request(origin+'/api/v1/me/community-journal/submissions',{
+  method:'POST',
+  headers:{Origin:origin,Cookie:s.cookie,'X-CSRF-Token':s.csrf,'Content-Type':'application/json','Idempotency-Key':randomUUID()},
+  body:' '.repeat(2*1024*1024+1),
+ });
+ assert.equal(over2MiB.status,413);
+
+ // At most 10 pending drafts (one already created above -> 9 more succeed, 10th extra fails 409 journal_draft_limit).
+ for(let i=0;i<9;i++)assert.equal((await api('/me/community-journal/submissions',s,payload())).status,201);
+ const eleventh=await api('/me/community-journal/submissions',s,payload());
+ assert.equal(eleventh.status,409);
+ assert.equal(eleventh.data.code,'journal_draft_limit');
+});
+
+test('member-door NULL key_id drafts appear in GET /me/community-journal, share the 10-draft cap with fjp_ keys, and publish/discard cleanly',async()=>{
+ const s=await editor(),k=await key(s);
+ const draft=await api('/me/community-journal/submissions',s,payload());
+ assert.equal(draft.status,201,JSON.stringify(draft.data));
+ assert.equal((await pool.query('SELECT key_id FROM community_journal_submissions WHERE submission_id=$1',[draft.data.submission_id])).rows[0].key_id,null);
+
+ const state=await api('/me/community-journal',s);
+ assert.equal(state.status,200,JSON.stringify(state.data));
+ assert.equal(state.data.submissions.some((row:any)=>row.submission_id===draft.data.submission_id&&row.status==='ready_for_review'),true);
+
+ // Mixed 10-pending limit: 1 member-door draft + 9 fjp_ drafts succeed; 11th via either door fails 409 journal_draft_limit.
+ for(let i=0;i<9;i++)assert.equal((await agent(k.token)).status,201);
+ assert.equal((await api('/me/community-journal/submissions',s,payload())).data.code,'journal_draft_limit');
+ assert.equal((await agent(k.token)).data.code,'journal_draft_limit');
+
+ // Publisher can publish the member-door NULL-key_id draft through the person-only route and withdraw it.
+ const pub=await api(`/me/community-journal/submissions/${draft.data.submission_id}/publish`,s,{consent_to_publish:true,payload_sha256:draft.data.payload_sha256},state.data.aggregate_version);
+ assert.equal(pub.status,200,JSON.stringify(pub.data));
+ assert.equal((await api('/public/journal')).data.data.journals[0].title,payload().journals[0].title);
+ const afterPub=await api('/me/community-journal',s);
+ assert.equal(afterPub.data.published_submission_id,draft.data.submission_id);
+
+ const withdrawn=await api('/me/community-journal/withdraw',s,{},pub.data.aggregate_version);
+ assert.equal(withdrawn.status,200);
+ assert.equal((await api('/public/journal')).data.data.journals.length,0);
 });

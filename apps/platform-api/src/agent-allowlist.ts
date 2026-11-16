@@ -7,6 +7,56 @@ export interface AgentOperation {
   screen: 'events' | 'credit' | 'shares' | 'notifications' | 'guilds' | 'posts' | 'services' | 'works' | 'profile';
   example?: Record<string, unknown>; publicItem?: boolean; granted?: false; ifMatch?: boolean; featureFlag?: string;
 }
+const skillUploadExample: Record<string, unknown> = {
+  repository_url: 'https://github.com/example/project',
+  title: '技能書名稱',
+  description: '技能書簡介與實測說明',
+  use_notes: '先閱讀 README 再開始使用',
+  demo_url: null,
+  relationship: 'curator',
+  share_introductions: Array.from({ length: 100 }, (_, i) => `分享介紹第 ${i + 1} 則：這個開源工具協助開發者快速完成實作驗證。`),
+  cover_image: {
+    mime_type: 'image/png',
+    data_base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWMwTpsJAAICATMDms/iAAAAAElFTkSuQmCC',
+  },
+};
+const journalPersonExample: Record<string, unknown> = {
+  slug: 'demo',
+  display_name: '合成測試人物',
+  intro: '合成資料',
+  kind: 'person',
+  color: '#abcdef',
+  avatar: {
+    url: '/media/public/b446b751d00d0a62b786c9cbdb8a41c7040778713a607cc7e4f2e2a31d1adfe4.png',
+    alt: '合成資料',
+    width: null,
+    height: null,
+    display_fit: 'contain',
+    object_position: '50% 50%',
+  },
+  role: '測試',
+  category: '測試',
+  tags: [],
+};
+const journalSubmitExample: Record<string, unknown> = {
+  schema_version: 1,
+  source_revision: 'a'.repeat(64),
+  people: [journalPersonExample],
+  journals: [
+    {
+      date: '2026-10-22',
+      title: '合成測試日誌',
+      excerpt: '合成內容，不是真實群組記錄',
+      version: 1,
+      coverage: { is_partial: true },
+      blocks: [{ type: 'paragraph', text: '合成測試段落' }],
+      development_items: [],
+      decisions: [],
+      people: [journalPersonExample],
+      hero: null,
+    },
+  ],
+};
 export const agentOperations: readonly AgentOperation[] = [
   {id:'tools.identity',method:'POST',route:'/api/v1/guilds/:guild/tools/:tool/token',scope:'read',title:'取得工具專屬身分',screen:'notifications',example:{}},
   {id:'guilds.list',method:'GET',route:'/api/v1/guilds',scope:'read',title:'查看公會',screen:'guilds'},
@@ -70,7 +120,10 @@ export const agentOperations: readonly AgentOperation[] = [
   {id:'skills.draft_read',method:'GET',route:'/api/v1/me/skill-submissions/:id',scope:'read',title:'查看一份技能書草稿',screen:'works'},
   {id:'skills.draft',method:'POST',route:'/api/v1/me/skill-submissions/manual',scope:'share',title:'交技能書私人草稿',screen:'works',example:{repository_url:'https://github.com/example/project',title:'技能書名稱',description:'技能書簡介',use_notes:'先閱讀 README 再開始使用',relationship:'curator'}},
   {id:'skills.revise',method:'POST',route:'/api/v1/me/skill-submissions/:id/manual',scope:'share',title:'修改自己的技能書草稿',screen:'works',ifMatch:true,example:{repository_url:'https://github.com/example/project',title:'更新後技能書',description:'更新後簡介',use_notes:'更新後使用方式',relationship:'curator'}},
+  {id:'skills.upload',method:'POST',route:'/api/v1/me/skill-submissions/upload',scope:'share',title:'上傳完整技能書草稿',screen:'works',example:skillUploadExample},
+  {id:'skills.fill',method:'POST',route:'/api/v1/me/skill-submissions/:id/upload',scope:'share',title:'補上等待上傳的技能書',screen:'works',example:skillUploadExample},
   {id:'skills.issue',method:'POST',route:'/api/v1/me/skill-submissions',scope:'share',title:'建立上傳授權草稿（限本人）',screen:'works',granted:false},
+  // Returns raw binary image/webp; the agent contract, SDK, and MCP only support application/json.
   {id:'skills.illustration',method:'GET',route:'/api/v1/me/skill-submissions/:id/illustration',scope:'read',title:'查看草稿示意圖（限本人）',screen:'works',granted:false},
   {id:'skills.grant',method:'POST',route:'/api/v1/me/skill-submissions/:id/grant',scope:'share',title:'重發上傳授權（限本人）',screen:'works',granted:false},
   {id:'skills.revoke',method:'POST',route:'/api/v1/me/skill-submissions/:id/revoke',scope:'share',title:'撤回技能書草稿（限本人）',screen:'works',granted:false},
@@ -85,9 +138,23 @@ export const agentOperations: readonly AgentOperation[] = [
   {id:'development.activate',method:'POST',route:'/api/v1/me/development/:kind/:target/activate',scope:'share',title:'啟用開發權限（限本人）',screen:'guilds',granted:false},
   {id:'development.keys',method:'POST',route:'/api/v1/me/development/:kind/:target/keys',scope:'share',title:'核發開發金鑰（限本人）',screen:'guilds',granted:false},
   {id:'development.revoke',method:'POST',route:'/api/v1/me/development/:kind/:target/revoke',scope:'share',title:'撤銷開發權限（限本人）',screen:'guilds',granted:false},
+  {id:'journal.status',method:'GET',route:'/api/v1/me/community-journal',scope:'read',title:'查看共創誌草稿與狀態',screen:'posts'},
+  {id:'journal.read',method:'GET',route:'/api/v1/me/community-journal/submissions/:id',scope:'read',title:'查看一份共創誌草稿',screen:'posts'},
+  {id:'journal.submit',method:'POST',route:'/api/v1/me/community-journal/submissions',scope:'share',title:'交共創誌草稿',screen:'posts',example:journalSubmitExample},
+  // Journal publish, discard, withdraw, and fjp_ key issuance/revocation stay person-only to preserve human sign-off and credential isolation.
+  {id:'journal.key_create',method:'POST',route:'/api/v1/me/community-journal/keys',scope:'share',title:'建立共創誌投稿金鑰（限本人）',screen:'posts',granted:false},
+  {id:'journal.key_revoke',method:'POST',route:'/api/v1/me/community-journal/keys/:id/revoke',scope:'share',title:'撤銷共創誌投稿金鑰（限本人）',screen:'posts',granted:false},
+  {id:'journal.publish',method:'POST',route:'/api/v1/me/community-journal/submissions/:id/publish',scope:'share',title:'公開發布共創誌（限本人）',screen:'posts',granted:false},
+  {id:'journal.discard',method:'POST',route:'/api/v1/me/community-journal/submissions/:id/discard',scope:'share',title:'捨棄共創誌草稿（限本人）',screen:'posts',granted:false},
+  {id:'journal.withdraw',method:'POST',route:'/api/v1/me/community-journal/withdraw',scope:'share',title:'下架已發布共創誌（限本人）',screen:'posts',granted:false},
+  {id:'retail.catalog',method:'GET',route:'/api/v1/retail/catalog',scope:'read',title:'查看供貨目錄',screen:'services'},
+  {id:'retail.stores',method:'GET',route:'/api/v1/retail/stores',scope:'read',title:'查看我的商店',screen:'services'},
+  {id:'retail.listings',method:'GET',route:'/api/v1/retail/listings',scope:'read',title:'查看我的商店選品',screen:'services'},
+  {id:'supplier.products',method:'GET',route:'/api/v1/supplier/products',scope:'read',title:'查看我的供貨商品',screen:'services'},
+  {id:'supplier.requests',method:'GET',route:'/api/v1/supplier/requests',scope:'read',title:'查看供貨請求',screen:'services'},
   {id:'profile.read',method:'GET',route:'/api/v1/me/positioning',scope:'read',title:'查看我的定位卡',screen:'profile'},
 ];
-// Report, claim, star, skill-submission publish/grant/revoke/upgrade/illustration/keys, and development consent/activate/keys/revoke are person-only; react covers likes and comments.
+// Report, claim, star, skill-submission publish/grant/revoke/upgrade/illustration/keys, development consent/activate/keys/revoke, and journal publish/discard/withdraw/keys are person-only; react covers likes and comments.
 export function agentOperation(method:string,registeredPattern:string,operations:readonly AgentOperation[]=agentOperations) {
   return operations.find(op=>op.granted!==false&&op.method===method&&op.route===registeredPattern);
 }

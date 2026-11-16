@@ -11,7 +11,10 @@ import {snapshotSchema} from '../../../../modules/community-journal/payload.js';
 import {communitySnapshot,journalCommunities,type JournalCommunity} from '../../../../modules/community-journal/community.js';
 import * as journal from '../../../../modules/community-journal/service.js';
 const base='/agent-api/v1/journal-submissions';
+const memberSubmitPath='/api/v1/me/community-journal/submissions';
+export const JOURNAL_MAX_BYTES=journal.MAX_BYTES;
 export const isAgentJournalPath=(method:string,path:string)=>method==='POST'&&path===base;
+export const isMemberJournalSubmitPath=(method:string,path:string)=>method==='POST'&&path===memberSubmitPath;
 async function body(request:Request){
  requireCondition(request.headers.get('content-type')?.split(';')[0].trim().toLowerCase()==='application/json',415,'json_required','請傳送 JSON。');
  const length=request.headers.get('content-length');requireCondition(length===null||(/^\d+$/.test(length)&&Number(length)<=journal.MAX_BYTES),413,'body_too_large','日誌快照最多 2 MiB。');
@@ -23,7 +26,7 @@ async function body(request:Request){
 export function createJournalAgentRoutes(pool:Pool,network:(c:Context)=>string){
  const app=new Hono();
  app.use('/journal-submissions*',async(c,next)=>{c.header('Cache-Control','no-store');requireCondition(!new URL(c.req.url).search,422,'query_unsupported','投稿端點不接受查詢參數。');await authRateLimit(pool,'journal-agent-network',network(c),120,3600);await next();});
- app.post('/journal-submissions',async c=>{const hash=journal.credentialHash(c.req.header('Authorization'));const key=await journal.findKey(pool,hash);await authRateLimit(pool,'journal-agent-owner',key.user_id,60,3600);const idem=journal.idempotency(c.req.header('Idempotency-Key'));const data=await body(c.req.raw);return c.json(await journal.submit(pool,hash,idem,data.payload,data.sha256),201);});
+ app.post('/journal-submissions',async c=>{const hash=journal.credentialHash(c.req.header('Authorization'));const key=await journal.findKey(pool,hash);await authRateLimit(pool,'journal-agent-owner',key.user_id,60,3600);const idem=journal.idempotency(c.req.header('Idempotency-Key'));const data=await body(c.req.raw);return c.json(await journal.submitDraft(pool,{kind:'key',hash,idem,payload:data.payload,sha256:data.sha256}),201);});
  app.get('/journal-submissions/receipts/:key',async c=>c.json(await journal.receipt(pool,journal.credentialHash(c.req.header('Authorization')),journal.idempotency(c.req.param('key')))));
  return app;
 }
@@ -33,6 +36,11 @@ export function createJournalMemberRoutes(pool:Pool){
  app.get(path,async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>journal.editorState(q,c.get('actor')))));
  app.post(path+'/keys',async c=>{await authRateLimit(pool,'journal-key-issue',c.get('actor').user_id,20,3600);return c.json(await journal.createKey(pool,await moduleCommand(c)),201);});
  app.post(path+'/keys/:id/revoke',async c=>c.json(await journal.revokeKey(pool,await moduleCommand(c),c.req.param('id')!)));
+ app.post(path+'/submissions',async c=>{
+  await authRateLimit(pool,'journal-agent-owner',c.get('actor').user_id,60,3600);
+  const sha256=createHash('sha256').update(await c.req.text(),'utf8').digest('hex');
+  return c.json(await journal.submitDraft(pool,{kind:'member',input:await moduleCommand(c),sha256}),201);
+ });
  app.get(path+'/submissions/:id',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>journal.readSubmission(q,c.get('actor'),c.req.param('id')!))));
  app.post(path+'/submissions/:id/publish',async c=>c.json(await journal.publish(pool,await moduleCommand(c),c.req.param('id')!)));
  app.post(path+'/submissions/:id/discard',async c=>c.json(await journal.discard(pool,await moduleCommand(c),c.req.param('id')!)));

@@ -6,6 +6,8 @@ import {projectInput} from '../../../modules/opensource-marketing/service.js';
 import {showcaseInput} from '../../../modules/opportunity-project-work/business.js';
 import {shareInput} from '../../../modules/shares/service.js';
 import {manualInput} from '../../../modules/skill-submissions/service.js';
+import {skillSubmissionPayload} from '../../../modules/skill-submissions/payload.js';
+import {snapshotSchema as journalSnapshotSchema} from '../../../modules/community-journal/payload.js';
 import {kind as developmentKind,proposalInput} from '../../../modules/development-access/service.js';
 import {SOCIAL_PLATFORMS} from '../../../packages/shared/share-url.js';
 import {SERVICE_CATEGORIES,SERVICE_MODES} from '../../../packages/shared/member-service.js';
@@ -64,8 +66,18 @@ export const agentBodySchemas:Record<string,z.ZodType>={
  'skills.draft_read':empty,
  'skills.draft':manualInput,
  'skills.revise':manualInput,
+ 'skills.upload':skillSubmissionPayload,
+ 'skills.fill':skillSubmissionPayload,
  'development.status':empty,
  'development.propose':proposalInput,
+ 'journal.status':empty,
+ 'journal.read':empty,
+ 'journal.submit':journalSnapshotSchema,
+ 'retail.catalog':empty,
+ 'retail.stores':empty,
+ 'retail.listings':empty,
+ 'supplier.products':empty,
+ 'supplier.requests':empty,
  'profile.read':empty,
 };
 export const agentPathSchemas:Record<string,z.ZodType>={
@@ -87,6 +99,7 @@ export const agentQuerySchemas:Record<string,z.ZodObject>={
   post_id:z.uuid().optional(),
  }).strict(),
  'posts.comments':z.object({cursor:z.string().max(256).optional()}).strict(),
+ 'retail.catalog':z.object({limit:z.number().int().min(1).max(50).optional(),offset}).strict(),
 };
 export function agentInputSchema(op:AgentOperation){
  const shape:Record<string,z.ZodType>={};
@@ -261,6 +274,89 @@ const developmentProposalView=z.looseObject({
  summary:z.string(),
  pr_url:z.string().nullable(),
  created_at:z.string(),
+});
+const journalReceiptView=z.looseObject({
+ submission_id:z.string(),
+ source_revision:z.string(),
+ payload_sha256:z.string(),
+ status:z.string(),
+ created_at:z.string(),
+});
+const journalKeySummaryView=z.object({
+ key_id:z.string(),
+ label:z.string(),
+ expires_at:z.string(),
+ revoked_at:z.string().nullable(),
+ created_at:z.string(),
+}).strict();
+const commercePreviewFields={
+ checkout_enabled:z.boolean(),
+ money_movement_enabled:z.boolean(),
+ official:z.boolean(),
+ confirmation_kind:z.string(),
+};
+const commerceProductView=z.looseObject({
+ product_id:z.string(),
+ community_id:z.string(),
+ supplier_ref:z.string(),
+ supplier_name:z.string(),
+ title:z.string(),
+ photo_url:z.string().nullable(),
+ specifications:z.string(),
+ product_type:z.string(),
+ qc_status:z.string(),
+ aggregate_version:z.number().int(),
+ created_at:z.string(),
+ current_offer:z.record(z.string(),z.unknown()),
+ ...commercePreviewFields,
+});
+const retailStoreView=z.looseObject({
+ store_id:z.string(),
+ community_id:z.string(),
+ seller_ref:z.string(),
+ name:z.string(),
+ description:z.string(),
+ support_contact:z.string(),
+ aggregate_version:z.number().int(),
+ store_mode:z.string(),
+ created_at:z.string(),
+ ...commercePreviewFields,
+});
+const retailListingView=z.looseObject({
+ listing_id:z.string(),
+ community_id:z.string(),
+ store_id:z.string(),
+ offer_version_id:z.string(),
+ seller_ref:z.string(),
+ supplier_ref:z.string(),
+ retail_price_minor:z.string(),
+ currency:z.string(),
+ sale_terms:z.string(),
+ snapshot:z.record(z.string(),z.unknown()),
+ snapshot_sha256:z.string(),
+ state:z.string(),
+ aggregate_version:z.number().int(),
+ acceptance_id:z.string().nullable(),
+ acceptance_state:z.string().nullable(),
+ decision_note:z.string().nullable(),
+ created_at:z.string(),
+ ...commercePreviewFields,
+});
+const supplierRequestView=z.looseObject({
+ acceptance_id:z.string(),
+ listing_id:z.string(),
+ community_id:z.string(),
+ supplier_ref:z.string(),
+ seller_ref:z.string(),
+ seller_name:z.string(),
+ snapshot:z.record(z.string(),z.unknown()),
+ snapshot_sha256:z.string(),
+ state:z.string(),
+ aggregate_version:z.number().int(),
+ decision_note:z.string().nullable(),
+ decided_at:z.string().nullable(),
+ created_at:z.string(),
+ ...commercePreviewFields,
 });
 export const agentResponseSchemas:Record<string,z.ZodType>={
  'guilds.list':z.looseObject({
@@ -559,6 +655,8 @@ export const agentResponseSchemas:Record<string,z.ZodType>={
  'skills.draft_read':skillSubmissionView,
  'skills.draft':skillSubmissionView,
  'skills.revise':skillSubmissionView,
+ 'skills.upload':skillSubmissionView,
+ 'skills.fill':skillSubmissionView,
  'development.status':z.looseObject({
   capability:developmentKind,
   target:z.looseObject({key:z.string(),title:z.string(),repository:z.string(),guide_url:z.string()}),
@@ -579,6 +677,26 @@ export const agentResponseSchemas:Record<string,z.ZodType>={
   proposals:z.array(developmentProposalView),
  }),
  'development.propose':developmentProposalView,
+ 'journal.status':z.looseObject({
+  aggregate_version:z.number().int(),
+  published_submission_id:z.string().nullable(),
+  keys:z.array(journalKeySummaryView),
+  submissions:z.array(journalReceiptView),
+ }),
+ 'journal.read':journalReceiptView.extend({
+  payload:z.looseObject({
+   schema_version:z.number().int(),
+   source_revision:z.string(),
+   people:z.array(z.record(z.string(),z.unknown())),
+   journals:z.array(z.record(z.string(),z.unknown())),
+  }),
+ }),
+ 'journal.submit':journalReceiptView,
+ 'retail.catalog':z.looseObject({items:z.array(commerceProductView),next_offset:z.number().int().nullable()}),
+ 'retail.stores':z.looseObject({items:z.array(retailStoreView)}),
+ 'retail.listings':z.looseObject({items:z.array(retailListingView)}),
+ 'supplier.products':z.looseObject({items:z.array(commerceProductView)}),
+ 'supplier.requests':z.looseObject({items:z.array(supplierRequestView)}),
  'profile.read':z.looseObject({
   profile:z.looseObject({
    profile_id:z.string(),

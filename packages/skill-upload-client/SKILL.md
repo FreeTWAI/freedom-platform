@@ -5,6 +5,8 @@ description: 把一個真實的公開 GitHub 技能 repo 整理成自由工坊�
 
 # 上傳技能草稿到自由工坊
 
+若 Agent 已持有會員的自由工坊 Agent 金鑰（`fw_agent_`，具備「分享」`share` 權限），可直接以同一份 JSON 呼叫 `POST /api/v1/me/skill-submissions/upload`（或補齊等待上傳的草稿時呼叫 `POST /api/v1/me/skill-submissions/:id/upload`，附 `Idempotency-Key`），不必另外申請上傳金鑰；原有的長期上傳金鑰（`fpk_`）與一次性上傳授權（`fpg_`）端點仍維持可用。
+
 你的權限只有一件事：替會員建立並上傳一份 **私人技能草稿**。你不能公開草稿、不能讀取其他草稿、不能管理金鑰，也不能代表會員同意分享、修改 GitHub、讀取私人儲存庫、變更會員資料或處理交易。
 
 ## 開始前

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFile, mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { chmod, copyFile, mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,8 @@ import {
   decideBrowserSpecProfile, ciToolsBrowserRegistryProven, storeSpecDependenciesProven,
 } from './select-affected-jobs.mjs';
 
-import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
+import { E2E_PLAN, GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
+import { MODULE_LANE_SMOKE_FILES, narrowedSpecFiles } from '../../packages/contribution-tools/module-lane.mjs';
 import { PINNED_SUITES } from '../../packages/contribution-tools/pinned-suites.mjs';
 import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
 
@@ -1971,4 +1972,222 @@ test('browser collector requires successful independent jobs and attempt-bound c
   assert.match(collector, /pattern: browser-default-\$\{\{ github.run_attempt \}\}-\*/);
   assert.match(collector, /--default-reports .freedom\/reports\/default-fragments/);
   assert.doesNotMatch(shards + collector, /continue-on-error|--retries|--grep|--workers/);
+});
+
+test('module lane admits eligible module and spec PRs while failing closed on core, popular, shared, runtime-imported or non-PR diffs', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'fp-module-lane-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const env = {
+    ...verificationEnvironment(),
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_AUTHOR_NAME: 'Module Lane Test',
+    GIT_AUTHOR_EMAIL: 'module-lane@example.invalid',
+    GIT_COMMITTER_NAME: 'Module Lane Test',
+    GIT_COMMITTER_EMAIL: 'module-lane@example.invalid',
+  };
+  const git = (args, input) => execFileSync(
+    'git',
+    ['-C', directory, '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args],
+    { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], env },
+  ).trim();
+  const put = async (path, body) => {
+    await mkdir(dirname(join(directory, path)), { recursive: true });
+    await writeFile(join(directory, path), body);
+  };
+  const commit = msg => {
+    git(['add', '.']);
+    git(['commit', '-qm', msg]);
+    return git(['rev-parse', 'HEAD']);
+  };
+  const fixtureFiles = E2E_PLAN.slice(1).flatMap(pass => pass.files);
+  const descriptors = [
+    moduleDescriptor('community-journal', ['modules/community-journal/**', 'tests/e2e/community-journal.spec.ts']),
+    moduleDescriptor('other-feature', ['modules/other-feature/**', 'tests/e2e/other-feature.spec.ts']),
+    moduleDescriptor('journal-base', ['modules/journal-base/**', 'tests/e2e/journal-base.spec.ts']),
+    moduleDescriptor('journal-consumer', ['modules/journal-consumer/**', 'tests/e2e/journal-consumer.spec.ts'], { dependencies: ['journal-base'] }),
+    moduleDescriptor('portal-shell', ['modules/portal-shell/**']),
+    moduleDescriptor('popular-leaf', ['modules/popular-leaf/**']),
+    ...Array.from({ length: 10 }, (_, i) => moduleDescriptor(`dep-${i}`, [`modules/dep-${i}/**`], { dependencies: ['popular-leaf'] })),
+  ];
+  git(['init', '-q', '-b', 'main']);
+  for (const descriptor of descriptors) await put(`modules/${descriptor.module_id}/freedom.module.json`, JSON.stringify(descriptor));
+  for (const specFile of [
+    ...MODULE_LANE_SMOKE_FILES,
+    ...fixtureFiles,
+    'tests/e2e/community-journal.spec.ts',
+    'tests/e2e/other-feature.spec.ts',
+    'tests/e2e/journal-base.spec.ts',
+    'tests/e2e/journal-consumer.spec.ts',
+  ]) {
+    await put(specFile, '// spec\n');
+  }
+  await put('tests/e2e/other-feature.spec.ts', "import '../runtime/shared-fixture.js';\n");
+  await put('tests/e2e/calm-experience.spec.ts', 'export async function load(x: string) { return import(x); }\n');
+  await put('tests/e2e/fixtures.ts', '// fixtures\n');
+  await put('modules/community-journal/service.ts', 'export const v = 1;\n');
+  await put('modules/journal-base/service.ts', 'export const jb = 1;\n');
+  await put('modules/portal-shell/shell.ts', 'export const s = 1;\n');
+  await put('modules/popular-leaf/service.ts', 'export const p = 1;\n');
+  await put('packages/other/helper.ts', 'export const h = 1;\n');
+  await put('tests/runtime/shared-fixture.ts', 'export const sharedFixture = 1;\n');
+  await put('tests/runtime/community-journal.test.ts', '// runtime test\n');
+  await put('docs/development/community-journal.md', '# Guide\n');
+  const base = commit('base');
+
+  const propose = async (mutate, msg = 'change') => {
+    git(['checkout', '-q', base]);
+    await mutate();
+    const head = commit(msg);
+    const candidate = git(['commit-tree', git(['rev-parse', `${head}^{tree}`]), '-p', base, '-p', head], 'integration\n');
+    git(['checkout', '-q', candidate]);
+    return { repository: directory, event: 'pull_request', base, head, candidate };
+  };
+
+  // Positive 1: module + runtime test + spec (+ docs)
+  const modInput = await propose(async () => {
+    await put('modules/community-journal/service.ts', 'export const v = 2;\n');
+    await put('tests/runtime/community-journal.test.ts', '// runtime test updated\n');
+    await put('tests/e2e/community-journal.spec.ts', '// spec updated\n');
+    await put('docs/development/community-journal.md', '# Guide updated\n');
+  }, 'module+runtime+spec');
+  const modSelection = collectRepositoryDecision(modInput);
+  assert.equal(modSelection.mode, 'affected');
+  assert.equal(modSelection.reason, 'module_affected');
+  assert.deepEqual(
+    SELECTABLE_JOBS.filter(id => modSelection.jobs[id]),
+    ['runtime-full', 'runtime-aggregate', 'ui-e2e', 'static-worker'],
+  );
+  const modE2e = collectRepositoryE2eDecision(modInput);
+  assert.equal(modE2e.profile, 'module-affected');
+  assert.equal(modE2e.reason, 'module_affected');
+  assert.deepEqual(modE2e.files, narrowedSpecFiles({
+    descriptors,
+    changedSpecs: ['tests/e2e/community-journal.spec.ts'],
+    ownerIds: ['community-journal'],
+    catalog: [...new Set([...MODULE_LANE_SMOKE_FILES, ...fixtureFiles, 'tests/e2e/community-journal.spec.ts', 'tests/e2e/other-feature.spec.ts'])].sort(),
+  }));
+  assert.equal(modE2e.files.includes('tests/e2e/other-feature.spec.ts'), false);
+  assert.match(githubOutput(modSelection, modE2e.profile), /^ui_default_shards=true$/m);
+
+  // Positive 1b: non-PR events and bad candidate topology decline to full
+  assert.equal(collectRepositoryDecision({ ...modInput, event: 'push', ref: 'refs/heads/main', head: modInput.candidate }).mode, 'full');
+  assert.equal(collectRepositoryDecision({ ...modInput, event: 'merge_group' }).mode, 'full');
+  assert.equal(collectRepositoryDecision({ ...modInput, candidate: modInput.head }).mode, 'full');
+
+  // Positive 2: runtime-test-only PR -> smoke + fixtures only
+  const rtInput = await propose(async () => {
+    await put('tests/runtime/community-journal.test.ts', '// runtime test only\n');
+  }, 'runtime-only');
+  assert.equal(collectRepositoryDecision(rtInput).reason, 'module_affected');
+  const rtE2e = collectRepositoryE2eDecision(rtInput);
+  assert.equal(rtE2e.profile, 'module-affected');
+  assert.deepEqual(rtE2e.files, narrowedSpecFiles({}));
+  assert.equal(rtE2e.files.includes('tests/e2e/community-journal.spec.ts'), false);
+
+  // Positive 2b: leaf module + runtime test admitted even when unrelated e2e imports ../runtime/*-fixture.js and another uses non-literal import(x)
+  const mixedGraphInput = await propose(async () => {
+    await put('modules/community-journal/service.ts', 'export const v = 22;\n');
+    await put('tests/runtime/community-journal.test.ts', '// updated runtime test\n');
+  }, 'leaf+runtime-with-unrelated-fixture-and-dynamic-import');
+  assert.equal(collectRepositoryDecision(mixedGraphInput).reason, 'module_affected');
+  const mixedGraphE2e = collectRepositoryE2eDecision(mixedGraphInput);
+  assert.equal(mixedGraphE2e.profile, 'module-affected');
+  assert.equal(mixedGraphE2e.reason, 'module_affected');
+
+  // Positive 2c: module with a dependent includes dependent's catalog spec
+  const depInput = await propose(async () => {
+    await put('modules/journal-base/service.ts', 'export const jb = 2;\n');
+  }, 'module-with-dependent');
+  assert.equal(collectRepositoryDecision(depInput).reason, 'module_affected');
+  const depE2e = collectRepositoryE2eDecision(depInput);
+  assert.equal(depE2e.profile, 'module-affected');
+  assert.equal(depE2e.files.includes('tests/e2e/journal-base.spec.ts'), true);
+  assert.equal(depE2e.files.includes('tests/e2e/journal-consumer.spec.ts'), true);
+
+  // Positive 3: spec-only PR narrowed on pull_request, whole catalog on push
+  const specInput = await propose(async () => {
+    await put('tests/e2e/community-journal.spec.ts', '// spec only\n');
+  }, 'spec-only');
+  assert.equal(collectRepositoryDecision(specInput).reason, 'browser_specs_only');
+  const specE2e = collectRepositoryE2eDecision(specInput);
+  assert.equal(specE2e.profile, 'specs-affected');
+  assert.equal(specE2e.reason, 'browser_specs_only');
+  assert.deepEqual(specE2e.files, narrowedSpecFiles({ changedSpecs: ['tests/e2e/community-journal.spec.ts'] }));
+  const specPush = { ...specInput, event: 'push', ref: 'refs/heads/main', head: specInput.candidate };
+  assert.equal(collectRepositoryDecision(specPush).reason, 'browser_specs_only');
+  assert.equal(collectRepositoryE2eDecision(specPush).profile, 'full');
+
+  // Negative cases: each declines to full
+  const negatives = [
+    ['core module', async () => put('modules/portal-shell/shell.ts', 'export const s = 2;\n')],
+    ['10+ dependents', async () => put('modules/popular-leaf/service.ts', 'export const p = 2;\n')],
+    ['packages path', async () => put('packages/other/helper.ts', 'export const h = 2;\n')],
+    ['descriptor change', async () => put('modules/community-journal/freedom.module.json', JSON.stringify({ ...descriptors[0], invariants: ['updated'] }))],
+    ['deleted path', async () => rm(join(directory, 'modules/community-journal/service.ts'))],
+    ['renamed path', async () => git(['mv', 'modules/community-journal/service.ts', 'modules/community-journal/service-v2.ts'])],
+    ['mode change', async () => { await chmod(join(directory, 'modules/community-journal/service.ts'), 0o755); git(['update-index', '--chmod=+x', 'modules/community-journal/service.ts']); }],
+    ['spec helper', async () => put('tests/e2e/fixtures.ts', '// helper edited\n')],
+    ['module config file', async () => put('modules/community-journal/package.json', '{"name":"cj"}\n')],
+    ['unknown extension', async () => put('modules/community-journal/data.json', '{"a":1}\n')],
+    ['over 80 e2e files', async () => {
+      await put('modules/community-journal/service.ts', 'export const v = 3;\n');
+      for (let i = 0; i < 72; i++) await put(`tests/e2e/extra-spec-${i}.spec.ts`, '// extra\n');
+    }],
+    ['e2e static import from tests/runtime/', async () => {
+      await put('tests/runtime/community-journal.test.ts', '// runtime\n');
+      await put('tests/e2e/community-journal.spec.ts', "import '../runtime/community-journal.test.ts';\n");
+    }],
+  ];
+  for (const [label, mutate] of negatives) {
+    const negInput = await propose(mutate, label);
+    assert.equal(collectRepositoryDecision(negInput).mode, 'full', `${label} must decline to full`);
+    assert.equal(collectRepositoryE2eDecision(negInput).profile, 'full', `${label} e2e must decline to full`);
+  }
+  assert.equal(decideE2eProfile({
+    event: 'pull_request', diffComplete: true, nonExecutableBlobsProven: true, descriptorsProven: true,
+    baseline: descriptors, candidate: descriptors,
+    changes: [{ path: 'modules/community-journal/service.ts', status: 'C100' }],
+    catalog: [...new Set([...MODULE_LANE_SMOKE_FILES, ...fixtureFiles])].sort(),
+  }).profile, 'full');
+});
+
+test('module_affected aggregate admits exact four-job shape and rejects extra, missing or failed jobs', () => {
+  const selection = {
+    mode: 'affected',
+    reason: 'module_affected',
+    jobs: {
+      'runtime-full': true,
+      'runtime-aggregate': true,
+      'ui-e2e': true,
+      'static-worker': true,
+      'governance-consumers': false,
+      'deploy-preflight': false,
+      'guild-presentation': false,
+    },
+  };
+  const passingResults = {
+    'runtime-full': 'success',
+    'runtime-aggregate': 'success',
+    'ui-e2e': 'success',
+    'static-worker': 'success',
+    'governance-consumers': 'skipped',
+    'deploy-preflight': 'skipped',
+    'guild-presentation': 'skipped',
+  };
+  assert.deepEqual(evaluateVerifyAggregate(needsFor(selection, passingResults)), { ok: true, reason: 'affected_selected_subset' });
+
+  const extraSelected = needsFor(selection, passingResults);
+  extraSelected.select.outputs.guild_presentation = 'true';
+  assert.deepEqual(evaluateVerifyAggregate(extraSelected), { ok: false, reason: 'decision_inconsistent' });
+
+  const missingSelected = needsFor(selection, passingResults);
+  missingSelected.select.outputs.ui_e2e = 'false';
+  assert.deepEqual(evaluateVerifyAggregate(missingSelected), { ok: false, reason: 'decision_inconsistent' });
+
+  const failedSelected = needsFor(selection, { ...passingResults, 'ui-e2e': 'failure' });
+  assert.equal(evaluateVerifyAggregate(failedSelected).ok, false);
+
+  const failedSkipped = needsFor(selection, { ...passingResults, 'deploy-preflight': 'failure' });
+  assert.equal(evaluateVerifyAggregate(failedSkipped).ok, false);
 });

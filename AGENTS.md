@@ -1,5 +1,15 @@
 # Agent 工作說明
 
+## 五步開始
+
+1. Fork 後 clone（或確認已在工作分支）。
+2. `git switch -c <分支>`。
+3. 只改單一功能模組，並將測試放在旁邊（`tests/runtime/`、`tests/e2e/`，皆列在該模組 `freedom.module.json` 的 `owned_paths`）。
+4. 回報完成前先跑 `npm run check:pr`。
+5. 開 PR 並貼上 `check:pr` 最後五行摘要。
+
+維持單一模組與其測試變更會走 PR 模組快速通道（CI 約快一倍）；合併到 `main` 後仍跑完整檢查。
+
 ## 開工與現況入口
 
 先讀 [Foundation 收尾入口](docs/platform-plan/execution/unified-foundation/closeout.md)，

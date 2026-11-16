@@ -337,6 +337,20 @@ export const agentOperations = [
     "if_match": true
   },
   {
+    "id": "skills.upload",
+    "method": "POST",
+    "path": "/me/skill-submissions/upload",
+    "scope": "share",
+    "if_match": false
+  },
+  {
+    "id": "skills.fill",
+    "method": "POST",
+    "path": "/me/skill-submissions/{id}/upload",
+    "scope": "share",
+    "if_match": false
+  },
+  {
     "id": "development.status",
     "method": "GET",
     "path": "/me/development/{kind}/{target}",
@@ -348,6 +362,62 @@ export const agentOperations = [
     "method": "POST",
     "path": "/me/development/{kind}/{target}/proposals",
     "scope": "share",
+    "if_match": false
+  },
+  {
+    "id": "journal.status",
+    "method": "GET",
+    "path": "/me/community-journal",
+    "scope": "read",
+    "if_match": false
+  },
+  {
+    "id": "journal.read",
+    "method": "GET",
+    "path": "/me/community-journal/submissions/{id}",
+    "scope": "read",
+    "if_match": false
+  },
+  {
+    "id": "journal.submit",
+    "method": "POST",
+    "path": "/me/community-journal/submissions",
+    "scope": "share",
+    "if_match": false
+  },
+  {
+    "id": "retail.catalog",
+    "method": "GET",
+    "path": "/retail/catalog",
+    "scope": "read",
+    "if_match": false
+  },
+  {
+    "id": "retail.stores",
+    "method": "GET",
+    "path": "/retail/stores",
+    "scope": "read",
+    "if_match": false
+  },
+  {
+    "id": "retail.listings",
+    "method": "GET",
+    "path": "/retail/listings",
+    "scope": "read",
+    "if_match": false
+  },
+  {
+    "id": "supplier.products",
+    "method": "GET",
+    "path": "/supplier/products",
+    "scope": "read",
+    "if_match": false
+  },
+  {
+    "id": "supplier.requests",
+    "method": "GET",
+    "path": "/supplier/requests",
+    "scope": "read",
     "if_match": false
   },
   {
