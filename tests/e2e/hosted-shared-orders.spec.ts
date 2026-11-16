@@ -130,7 +130,7 @@ test('ordinary A/B/C members open stores, agree supply, opt in, race shared stoc
     }
     for(const store of [b,c]) {
       await store.page.getByRole('button',{name:'更新供貨狀態',exact:true}).click();await storeArea(store.page,'店面');await store.page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布',exact:true}).click();
-      await expect(store.page.locator('.hosted-store > [role="status"]')).toContainText('已發布');
+      await expect(store.page.locator('.hosted-store > [role="status"]')).toContainText('公開頁已更新。');
     }
     const buyerB=await contexts[4].newPage(),buyerC=await contexts[5].newPage();
     const emailB=await register(buyerB,'茶杯買家 B'),emailC=await register(buyerC,'茶杯買家 C');
@@ -231,7 +231,7 @@ test('supplier-only A accepts B, explicitly opens reservations, reads only its o
     await b.getByRole('button', {name: '更新供貨狀態', exact: true}).click();
     await storeArea(b,'店面');
     await b.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true}).click();
-    await expect(b.locator('.hosted-store > [role="status"]')).toContainText('已發布');
+    await expect(b.locator('.hosted-store > [role="status"]')).toContainText('公開頁已更新。');
     // Exact-version supply consent alone must not opt A into reservations.
     await customer.goto('/#reservations/' + slug);
     await customer.getByLabel(title + '數量', {exact: true}).fill('3');
