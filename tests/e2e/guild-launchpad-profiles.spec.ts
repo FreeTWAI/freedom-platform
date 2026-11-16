@@ -246,7 +246,8 @@ test('supplier-only member publishes supply without a slug, retail page or comme
     await page.getByRole('navigation', {name: '供貨工作區'}).getByRole('button', {name: '供貨合作', exact: true}).click();
     await expect(page.locator('.hosted-distribution summary').filter({hasText: '我的供貨（1）'})).toBeVisible();
     await expect(page.locator('.hosted-distribution summary').filter({hasText: '我的選品'})).toHaveCount(0);
-    await expect(page.getByRole('heading', {name: '預覽與發布', exact: true})).toHaveCount(0);
+    await expect(page.getByRole('region', {name: '公開狀態', exact: true})).toHaveCount(0);
+    await expect(page.getByRole('heading', {name: '店面', exact: true})).toHaveCount(0);
     expect((await (await page.request.get('/api/v1/me/stores?pagination=cursor')).json()).items).toEqual([]);
     const catalogs = await (await page.request.get('/api/v1/me/supply-catalogs?pagination=cursor')).json();
     expect(catalogs.items).toHaveLength(1);

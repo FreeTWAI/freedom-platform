@@ -57,7 +57,7 @@ test('editing product text blocks photo autosave so refreshing a photo cannot di
   const form=page.getByRole('form',{name:'編輯手作茶杯',exact:true});
   await form.getByLabel('商品名稱',{exact:true}).fill('尚未儲存的新商品名稱');
   await expect(photo(page).getByLabel('商品照片',{exact:true})).toBeDisabled();
-  await expect(page.getByRole('button',{name:'一鍵上架商品',exact:true})).toBeDisabled();
+  await expect(page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布',exact:true})).toBeDisabled();
   await expect(form.getByLabel('商品名稱',{exact:true})).toHaveValue('尚未儲存的新商品名稱');
   await form.getByRole('button',{name:'儲存',exact:true}).click();
   await expect(page.getByRole('heading',{name:'尚未儲存的新商品名稱',exact:true})).toBeVisible();
@@ -86,8 +86,8 @@ test('large phone photo is prepared locally and automatically saved once, keepin
 for(const width of [390,1280])test(`member photo draft, preview, immutable publication and removal at ${width}px`,async({page,browser,baseURL,e2eAuthPool},info)=>{
   await page.setViewportSize({width,height:900});const s=await ready(page,e2eAuthPool),a=await source('tea-a.png','#e8a45c'),b=await source('tea-b.png','#387362');
   await save(page,a);const privateA=await photo(page).locator(':scope > img').getAttribute('src');expect(privateA).toContain(s.product.product_id+'/photo/2');
-  await storeArea(page,'店面與發布');
-  const review=page.locator('#store-publish-panel .hosted-store-publication-review');
+  await storeArea(page,'店面');
+  const review=page.getByRole('region',{name:'公開狀態'}).locator('.hosted-store-publication-review');
   await review.getByText('查看本次上架內容',{exact:true}).click();
   await expect(review.getByRole('img',{name:'手作茶杯 本次上架照片',exact:true})).toHaveAttribute('src',privateA!);
   await expect.poll(()=>review.getByRole('img').evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(120);
@@ -97,7 +97,7 @@ for(const width of [390,1280])test(`member photo draft, preview, immutable publi
     await expect(preview.locator('article img')).toHaveAttribute('src',privateA!);
     expect((await anonymous.request.get(privateA!)).status()).toBe(401);
     await storeArea(page,'商品');
-    await page.getByRole('button',{name:'一鍵上架商品',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 1 版');
+    await page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 1 版');
     const pub=await anonymous.newPage();await pub.goto('/shops/'+s.slug);
     const media=async()=>PublicStoreMediaSchema.parse(await(await anonymous.request.get('/api/v1/public/stores/'+s.slug+'/media')).json());
     const first=await media(),publicA=first.photos[0].photo.read_path;await expect(pub.locator('article img')).toHaveAttribute('src',publicA);
@@ -114,8 +114,8 @@ for(const width of [390,1280])test(`member photo draft, preview, immutable publi
     const bytesA=await(await anonymous.request.get(publicA)).body();expect(bytesA.subarray(0,4).toString()).toBe('RIFF');expect(digest(await(await page.request.get(privateA!)).body())).toBe(digest(bytesA));
     await save(page,b);await preview.reload();await expect(preview.locator('article img')).toHaveAttribute('src',new RegExp('/photo/3$'));
     await pub.reload();expect(await media()).toEqual(first);expect(digest(await(await anonymous.request.get(publicA)).body())).toBe(digest(bytesA));
-    await storeArea(page,'店面與發布');
-    await page.getByRole('button',{name:'發布更新',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 2 版');
+    await storeArea(page,'店面');
+    await page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布更新',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 2 版');
     const second=await media(),publicB=second.photos[0].photo.read_path;expect(second.revision).toBe('2');expect(publicB).not.toBe(publicA);
     expect(digest(await(await anonymous.request.get(publicB)).body())).not.toBe(digest(bytesA));expect((await anonymous.request.get(publicA)).status()).toBe(404);
     await pub.reload();await expect(pub.locator('article img')).toHaveAttribute('src',publicB);
@@ -131,8 +131,8 @@ for(const width of [390,1280])test(`member photo draft, preview, immutable publi
     await page.screenshot({path:info.outputPath(`photo-member-${width}.png`),fullPage:true});await pub.screenshot({path:info.outputPath(`photo-public-${width}.png`),fullPage:true});
     page.once('dialog',dialog=>dialog.accept());await photo(page).getByRole('button',{name:'移除照片',exact:true}).click();
     await expect(photo(page).locator(':scope > img')).toHaveCount(0);expect((await media()).photos[0].photo.read_path).toBe(publicB);
-    await storeArea(page,'店面與發布');
-    await page.getByRole('button',{name:'發布更新',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 3 版');expect((await media()).photos).toEqual([]);
+    await storeArea(page,'店面');
+    await page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布更新',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已發布・第 3 版');expect((await media()).photos).toEqual([]);
     await signOut(page);await loginHere(page,s.member.email);await open(page,s.hash);await expect(photo(page)).toContainText('尚未加入商品照片');
     const rows=await e2eAuthPool.query('SELECT product_id,asset_id FROM commerce_product_photo_targets WHERE product_id=$1',[s.product.product_id]);expect(rows.rows).toEqual([{product_id:s.product.product_id,asset_id:null}]);
     expect((await e2eAuthPool.query('SELECT count(*)::int n FROM commerce_publication_photo_refs WHERE instance_id=$1',[s.hash.split('/')[2]])).rows[0].n).toBe(2);
@@ -1071,9 +1071,9 @@ test('SC-E2E-72 a partner image becomes the seller\'s storefront photo only afte
 
     // Seller B publishes the store once before using the image and records the public media JSON
     await open(sellerB.page, sellerB.store.hash);
-    await storeArea(sellerB.page, '店面與發布');
-    await expect(sellerB.page.getByRole('button', {name: '發布展示頁', exact: true})).toBeEnabled();
-    await sellerB.page.getByRole('button', {name: '發布展示頁', exact: true}).click();
+    await storeArea(sellerB.page, '店面');
+    await expect(sellerB.page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true})).toBeEnabled();
+    await sellerB.page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 1 版');
 
     const mediaBeforeResp = await sellerB.page.request.get(`/api/v1/public/stores/${sellerBSlug}/media`);
@@ -1175,8 +1175,8 @@ test('SC-E2E-72 a partner image becomes the seller\'s storefront photo only afte
     expect(mediaStillBefore).toEqual(mediaBefore);
 
     // B 發布更新 → 已發布・第 2 版
-    await storeArea(sellerB.page, '店面與發布');
-    await sellerB.page.getByRole('button', {name: '發布更新', exact: true}).click();
+    await storeArea(sellerB.page, '店面');
+    await sellerB.page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布更新', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 2 版');
 
     const mediaPubV1 = PublicStoreMediaSchema.parse(
@@ -1245,8 +1245,8 @@ test('SC-E2E-72 a partner image becomes the seller\'s storefront photo only afte
     expect(digest(stillV1AfterUse)).toBe(digest(pubBytesV1!));
 
     // After 發布更新 they differ from version 1 and equal B's new private copy; old public path returns 404
-    await storeArea(sellerB.page, '店面與發布');
-    await sellerB.page.getByRole('button', {name: '發布更新', exact: true}).click();
+    await storeArea(sellerB.page, '店面');
+    await sellerB.page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布更新', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 3 版');
 
     const mediaPubV2 = PublicStoreMediaSchema.parse(
@@ -1343,8 +1343,8 @@ test('SC-E2E-73 a withdrawn or closed source keeps the published photo until the
       '已更新店面草稿，發布店面後才會生效。',
     );
 
-    await storeArea(sellerB.page, '店面與發布');
-    await sellerB.page.getByRole('button', {name: '發布展示頁', exact: true}).click();
+    await storeArea(sellerB.page, '店面');
+    await sellerB.page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 1 版');
 
     const mediaPub1 = PublicStoreMediaSchema.parse(
@@ -1382,8 +1382,8 @@ test('SC-E2E-73 a withdrawn or closed source keeps the published photo until the
 
     // Refresh store preview state via 更新供貨狀態 and publish update: public media has no photo for that product
     await sellerB.page.getByRole('button', {name: '更新供貨狀態', exact: true}).click();
-    await storeArea(sellerB.page, '店面與發布');
-    await sellerB.page.getByRole('button', {name: '發布更新', exact: true}).click();
+    await storeArea(sellerB.page, '店面');
+    await sellerB.page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布更新', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 2 版');
 
     const mediaAfterWithdrawPub = PublicStoreMediaSchema.parse(
@@ -1437,8 +1437,8 @@ test('SC-E2E-73 a withdrawn or closed source keeps the published photo until the
       '已更新店面草稿，發布店面後才會生效。',
     );
 
-    await storeArea(sellerB.page, '店面與發布');
-    await sellerB.page.getByRole('button', {name: '發布更新', exact: true}).click();
+    await storeArea(sellerB.page, '店面');
+    await sellerB.page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布更新', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 3 版');
 
     const mediaPub2 = PublicStoreMediaSchema.parse(
@@ -1463,8 +1463,8 @@ test('SC-E2E-73 a withdrawn or closed source keeps the published photo until the
     expect(digest(stillPubBytes2)).toBe(digest(pubBytes2));
 
     await sellerB.page.getByRole('button', {name: '更新供貨狀態', exact: true}).click();
-    await storeArea(sellerB.page, '店面與發布');
-    await sellerB.page.getByRole('button', {name: '發布更新', exact: true}).click();
+    await storeArea(sellerB.page, '店面');
+    await sellerB.page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布更新', exact: true}).click();
     await expect(sellerB.page.locator('.hosted-store > [role="status"]')).toContainText('已發布・第 4 版');
 
     const mediaAfterClosePub = PublicStoreMediaSchema.parse(
@@ -1816,8 +1816,8 @@ async function photoChoose(page:Page,title:string,product:string,update=false){
  await page.getByRole('dialog',{name:'把這張素材用在公開店面？',exact:true}).getByRole('button',{name:'複製並使用',exact:true}).click();
 }
 async function photoPublish(page:Page,revision:number){
- await storeArea(page,'店面與發布');
- await page.getByRole('button',{name:revision===1?'發布展示頁':'發布更新',exact:true}).click();
+ await storeArea(page,'店面');
+ await page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:revision===1?'發布':'發布更新',exact:true}).click();
  await expect(page.locator('.hosted-store > [role="status"]')).toContainText(`已發布・第 ${revision} 版`);
 }
 const photoTenant=(store:{hash:string})=>store.hash.split('/')[1];
@@ -1862,7 +1862,7 @@ test('SC-E2E-76 one partner-photo flow: grant, use, draft preview, publish, new 
   await expect(block).toContainText('店面使用中（第 1 版）');
   const private1=await block.locator('img.distribution-photo-thumb').getAttribute('src');expect(private1).toBeTruthy();
   const copy1=await b.page.request.get(private1!);expect(copy1.status()).toBe(200);const hash1=digest(await copy1.body());
-  await storeArea(b.page,'店面與發布');
+  await storeArea(b.page,'店面');
   const popup=b.page.waitForEvent('popup');await b.page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();
   const preview=await popup;await expect(preview.locator('article img')).toHaveAttribute('src',private1!);
   await expect(preview.locator('article img')).toBeVisible();
@@ -1943,7 +1943,7 @@ test('SC-E2E-77 a use answered after a business-space or account switch changes 
   };
   await photoStoreFromList(b.page,b2,true);await storeArea(b.page,'供貨合作');await none(b.page,b2);
   const b2Before=await photoFacts(e2eAuthPool,b2,productId);expect(b2Before).toEqual({copies:[],pointers:[],assets:[],capacity:'0'});
-  await storeArea(b.page,'店面與發布');const b2Publication=await b.page.locator('#store-publish-panel').innerText();
+  await storeArea(b.page,'店面');const b2Publication=await b.page.locator('#store-publish-panel').innerText();
   await photoStoreFromList(c.page,c.store,true);await storeArea(c.page,'供貨合作');await none(c.page,c.store);
   const cBefore=await photoFacts(e2eAuthPool,c.store,productId);expect(cBefore).toEqual({copies:[],pointers:[],assets:[],capacity:'0'});
   await photoStoreFromList(b.page,b.store);await storeArea(b.page,'供貨合作');await none(b.page,b.store);
@@ -1987,7 +1987,7 @@ test('SC-E2E-77 a use answered after a business-space or account switch changes 
   await expect(b.page.locator('.hosted-store > [role="status"]')).toHaveText('已更新店面草稿，發布店面後才會生效。 尚未發布');
   await photoStoreFromList(b.page,b2);await storeArea(b.page,'供貨合作');await none(b.page,b2);
   expect(await photoFacts(e2eAuthPool,b2,productId)).toEqual(b2Before);
-  await storeArea(b.page,'店面與發布');expect(await b.page.locator('#store-publish-panel').innerText()).toBe(b2Publication);
+  await storeArea(b.page,'店面');expect(await b.page.locator('#store-publish-panel').innerText()).toBe(b2Publication);
   await screenshot('business-space-b2-unaffected.png');
   await photoStoreFromList(b.page,b.store);await storeArea(b.page,'供貨合作');
   await uploadImageVersionInConsole(page,`switch-v2-${suffix}.png`,'#b35e37');
@@ -3277,8 +3277,8 @@ test('SC-E2E-85 a malformed committed photo upload ack retains the original File
   const anonymous = await browser.newContext({baseURL});
   try {
     expect((await anonymous.request.get(privatePath)).status()).toBe(401);
-    await storeArea(page, '店面與發布');
-    await page.getByRole('button', {name:'發布展示頁', exact:true}).click();
+    await storeArea(page, '店面');
+    await page.getByRole('region', {name: '公開狀態'}).getByRole('button', {name: '發布', exact: true}).click();
     await expect(page.locator('.hosted-store')).toContainText('已發布・第 1 版');
     const publicMedia = PublicStoreMediaSchema.parse(await (await anonymous.request.get('/api/v1/public/stores/' + s.slug + '/media')).json());
     expect(publicMedia.photos).toHaveLength(1);
@@ -3532,7 +3532,7 @@ import {AppearanceCommandAckSchema,StorefrontAppearanceDraftSchema} from '../../
 const appearanceEditor=(page:Page)=>page.locator('.hosted-store-appearance');
 const appearanceImage=(page:Page,role:'cover'|'logo')=>appearanceEditor(page).getByRole('region',{name:role==='cover'?'封面圖':'店標',exact:true});
 async function appearanceReady(page:Page,db:Parameters<typeof person>[0]){
-  const s=await ready(page,db);await storeArea(page,'店面與發布');await expect(appearanceEditor(page).getByRole('heading',{name:'店面外觀',exact:true})).toBeVisible();return s;
+  const s=await ready(page,db);await storeArea(page,'店面');await expect(appearanceEditor(page).getByRole('heading',{name:'店面外觀',exact:true})).toBeVisible();return s;
 }
 async function appearanceDraft(page:Page,s:Awaited<ReturnType<typeof ready>>){return StorefrontAppearanceDraftSchema.parse(await(await page.request.get('/api/v1'+s.root+'/appearance-settings')).json());}
 async function patchAppearance(page:Page,s:Awaited<ReturnType<typeof ready>>,patch:Record<string,unknown>){
@@ -3552,7 +3552,7 @@ async function saveAppearanceImage(page:Page,role:'cover'|'logo',replace=false){
   await expect(appearanceEditor(page).getByRole('status')).toContainText('已儲存'+name+'變更');
 }
 async function publishAppearance(page:Page,revision:number){
-  await page.getByRole('button',{name:revision===1?'發布展示頁':'發布更新',exact:true}).click();
+  await page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:revision===1?'發布':'發布更新',exact:true}).click();
   await expect(page.locator('.hosted-store')).toContainText(`已發布・第 ${revision} 版`);
 }
 async function appearanceGeometry(page:Page,target:Locator,info:TestInfo,label:string){
@@ -3598,7 +3598,7 @@ test('APPEARANCE-E2E-01 owner brands a saved draft, previews and publishes a res
   await storeArea(page,'商店資料');const settings=page.getByRole('form',{name:'商店資料',exact:true});
   await settings.getByLabel('商店名稱',{exact:true}).fill('山邊合成茶作');await settings.getByLabel('品牌（選填）',{exact:true}).fill('山邊合成茶作');
   await settings.getByLabel('商店介紹',{exact:true}).fill('把一杯茶的時間，留給喜歡的日常。合成茶具與亞麻織品，陪你慢慢過生活。');
-  await settings.getByRole('button',{name:'儲存商店資料',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已儲存。');await storeArea(page,'店面與發布');
+  await settings.getByRole('button',{name:'儲存商店資料',exact:true}).click();await expect(page.locator('.hosted-store')).toContainText('已儲存。');await storeArea(page,'店面');
   await appearanceEditor(page).getByLabel('公告列',{exact:true}).fill('　 ');
   await appearanceEditor(page).getByRole('button',{name:'儲存店面外觀',exact:true}).click();
   await expect(appearanceEditor(page).getByRole('status')).toContainText('已儲存店面外觀');
@@ -3611,7 +3611,7 @@ test('APPEARANCE-E2E-01 owner brands a saved draft, previews and publishes a res
   await expect(lime.locator('.shop-brand-header .shop-button')).toHaveCSS('border-top-color','rgb(83, 115, 0)');
   await appearanceInputFocus(lime,'rgb(83, 115, 0)');await lime.close();
   const second=ProductViewSchema.parse(await post(page,s.root+'/products',{title:'亞麻茶席巾',description:'合成品牌商品',price_minor:18000,stock:5},201));
-  await page.reload();await storeArea(page,'店面與發布');
+  await page.reload();await storeArea(page,'店面');
   const editor=appearanceEditor(page);await editor.getByRole('radio',{name:'海洋藍',exact:true}).check();
   await editor.getByLabel('公告列',{exact:true}).fill('　 新作已上架，歡迎慢慢挑選。  ');
   await editor.getByRole('combobox',{name:'選擇主打商品',exact:true}).selectOption(s.product.product_id);await editor.getByRole('button',{name:'加入主打商品',exact:true}).click();
@@ -3650,13 +3650,13 @@ test('APPEARANCE-E2E-01 owner brands a saved draft, previews and publishes a res
       return {below:image.y>=text.bottom-1,beside:image.x>=text.right-1};});expect(width===1440?layout.beside:layout.below).toBe(true);}
     await appearanceScreens(pub,info,'appearance-public-cover');
     await editor.getByLabel('公告列',{exact:true}).fill('下一版的草稿公告');await editor.getByRole('button',{name:'儲存店面外觀',exact:true}).click();await expect(editor.getByRole('status')).toContainText('已儲存店面外觀');
-    await expect(page.locator('.hosted-store')).toContainText('有尚未發布的變更');await pub.reload();await expect(pub.locator('.shop-announcement')).toHaveText('新作已上架，歡迎慢慢挑選。');
+    await expect(page.getByRole('region',{name:'公開狀態'})).toContainText('有變更還沒公開。');await pub.reload();await expect(pub.locator('.shop-announcement')).toHaveText('新作已上架，歡迎慢慢挑選。');
     await preview.reload();await expect(preview.locator('.shop-announcement')).toHaveText('下一版的草稿公告');
   }finally{await preview.close();await anonymous.close();}
 });
 
 test('APPEARANCE-E2E-02 cover replacement and removal remain frozen until publication',async({page,browser,baseURL,e2eAuthPool},info)=>{
-  const s=await appearanceReady(page,e2eAuthPool);await save(page,await source('synthetic-catalog-photo.png','#c4a26c'));await storeArea(page,'店面與發布');
+  const s=await appearanceReady(page,e2eAuthPool);await save(page,await source('synthetic-catalog-photo.png','#c4a26c'));await storeArea(page,'店面');
   await chooseAppearanceImage(page,'cover');await saveAppearanceImage(page,'cover');await publishAppearance(page,1);
   const anonymous=await browser.newContext({baseURL});try{
     const pub=await anonymous.newPage();await pub.goto('/shops/'+s.slug);const first=`/shops/${s.slug}/appearance-media/1/cover`,original=digest(await(await anonymous.request.get(first)).body());
@@ -3726,7 +3726,7 @@ test('APPEARANCE-E2E-04 read-only and product writers can read branding without 
       const invitation=await post(page,'/tenants/'+s.hash.split('/')[1]+'/invitations',{invitee_principal_id:candidate.principal_id,role:'operator',
         instance_capabilities:[{instance_id:s.hash.split('/')[2],capabilities}],expires_at:new Date(Date.now()+86400000).toISOString()},201);
       await post(other,'/tenants/'+s.hash.split('/')[1]+'/invitations/'+invitation.invitation_id+'/accept',{},200,invitation.version);
-      await open(other,s.hash);await storeArea(other,'店面與發布');const read=appearanceEditor(other);
+      await open(other,s.hash);await storeArea(other,'店面');const read=appearanceEditor(other);
       await expect(read).toContainText('你目前只有檢視權限，無法修改店面外觀。');await expect(read.locator('input,select,button,textarea')).toHaveCount(0);
       await expect(read.getByRole('img',{name:'已儲存的封面圖',exact:true})).toBeVisible();expect((await context.request.get(saved.cover!.read_path)).status()).toBe(200);
       if(!captured){await appearanceScreens(other,info,'appearance-editor-readonly',true);captured=true;}
@@ -3783,7 +3783,7 @@ test.describe('C1 own product gallery',()=>{
   await block.getByLabel('新增商品照片',{exact:true}).setInputFiles(file);await expect(block.getByRole('img',{name:'待儲存的完整商品照片',exact:true})).toBeVisible();
   await block.getByRole('button',{name:'儲存照片',exact:true}).click();await expect(block.locator('ol > li')).toHaveCount(count+1);await expect(block.getByRole('status')).toContainText('已儲存照片變更');
  }
- async function publish(page:Page){await storeArea(page,'店面與發布');const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/publish-reviewed'));await page.getByRole('button',{name:/^發布(展示頁|更新)$/}).click();expect((await response).status()).toBe(200);await expect(page.locator('.hosted-store')).toContainText(/已發布・第 \d+ 版/);}
+ async function publish(page:Page){await storeArea(page,'店面');const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/publish-reviewed'));await page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:/^發布(更新)?$/}).click();expect((await response).status()).toBe(200);await expect(page.locator('.hosted-store')).toContainText(/已發布・第 \d+ 版/);}
  test('GALLERY-E2E-legacy primary photos decode on B01 and serve B01/B03 Open Graph images',async({browser,e2eAuthPool},info)=>{
   const s=await setup(browser,e2eAuthPool),buyer=await browser.newContext({baseURL:server.origin,viewport:{width:390,height:900}});
   try{
@@ -3809,13 +3809,13 @@ test.describe('C1 own product gallery',()=>{
    await add(page,await source('synthetic-wide.png','#5e8ca0'));await add(page,{name:'synthetic-tall.png',mimeType:'image/png',buffer:await sharp({create:{width:80,height:120,channels:3,background:'#b7a077'}}).png().toBuffer()});
    const second=gallery(page).locator('ol > li').nth(1);await second.getByLabel('照片說明',{exact:true}).fill('合成商品側面');await second.getByRole('button',{name:'儲存說明',exact:true}).click();await expect(second.getByRole('button',{name:'儲存說明',exact:true})).toBeDisabled();
    await expect(gallery(page).getByLabel('新增商品照片',{exact:true})).toBeEnabled();await captureOffer(page,gallery(page),info.outputPath(`gallery-editor-${width}.png`));
-   const review=page.locator('#store-products-panel .hosted-store-publication-review');
+   const review=page.getByRole('region',{name:'公開狀態'}).locator('.hosted-store-publication-review');
    await expect(review).toContainText('本次會公開全部 1 件商品、2 張已儲存照片');
    await review.getByText('查看本次上架內容',{exact:true}).click();
    await expect(review.getByRole('img')).toHaveCount(2);
    for(const image of await review.getByRole('img').all())await expect(image).toHaveAttribute('src',/\/gallery\/photos\//);
    await expect(review.locator('dl div').filter({hasText:'商品圖組'})).toContainText('有尚未發布的變更');
-   await storeArea(page,'店面與發布');const popup=page.waitForEvent('popup');await page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();const preview=await popup;
+   await storeArea(page,'店面');const popup=page.waitForEvent('popup');await page.getByRole('link',{name:'預覽已儲存的展示頁',exact:true}).click();const preview=await popup;
    const link=preview.getByRole('link',{name:'查看商品：合成圖組商品',exact:true});await expect(link).toHaveAttribute('href',new RegExp('/preview-page/products/P0001$'));await link.click();await expect(preview.locator('.shop-gallery-photo')).toHaveCount(2);await expect(preview.locator('meta[property^="og:"]')).toHaveCount(0);await expect(preview.getByRole('link',{name:'商品分享連結',exact:true})).toHaveCount(0);await preview.close();
    await publish(page);const detail=await buyer.newPage();await detail.goto('/shops/'+s.slug+'/products/'+s.product.sku);
    const share=detail.getByRole('link',{name:'商品分享連結',exact:true});await expect(share).toBeVisible();await expect(share).toHaveAttribute('href','/shops/'+s.slug+'/products/'+s.product.sku);

@@ -44,7 +44,7 @@ export function SellerOrdersLink({client, tenantId, instanceId,readinessHref}: S
   };
   // Only a validated owner read enables order links. Readiness was authorized by
   // the parent; retry never repeats a cancellation or any other write.
-  return <div className="actions hosted-seller-order-links">{readinessHref&&<a className="btn btn-ghost" href={readinessHref}>開店準備</a>}{current?.status === 'allowed' && <><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/orders`}>預留訂單</a><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/supply-orders`}>供貨訂單</a></>}{current?.status === 'failed' && <><span role="status">暫時無法讀取訂單入口。</span><button type="button" className="btn btn-ghost btn-small" onClick={retry}>重試讀取訂單入口</button></>}</div>;
+  return <div className="actions hosted-seller-order-links">{readinessHref&&<a className="btn btn-ghost" href={readinessHref}>開店準備</a>}{current?.status === 'allowed' && <><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/orders`}>訂單</a><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/supply-orders`}>供貨訂單</a></>}{current?.status === 'failed' && <><span role="status">暫時無法讀取訂單入口。</span><button type="button" className="btn btn-ghost btn-small" onClick={retry}>重試讀取訂單入口</button></>}</div>;
 }
 
 /** Mounted by exact account/session/store key. No private order data is persisted. */

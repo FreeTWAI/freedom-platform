@@ -9,18 +9,18 @@ test('one-click listing publishes all saved products from the product area and b
   await post(page,store.root+'/products',{title:'陶瓷茶杯',description:'手工製作',price_minor:35000,stock:10},201);
   await post(page,store.root+'/products',{title:'手作購物袋',price_minor:20000,stock:5},201);
   await open(page,store.hash);
-  const listing=page.locator('.hosted-store-publication'),publish=listing.getByRole('button',{name:'一鍵上架商品',exact:true});
+  const bar=page.getByRole('region',{name:'公開狀態'}),publish=bar.getByRole('button',{name:'發布',exact:true});
   await expect(publish).toBeEnabled();
-  await expect(listing).toContainText('本次會公開全部 2 件商品、0 張已儲存照片，以及店面更新。');
+  await expect(bar).toContainText('本次會公開全部 2 件商品、0 張已儲存照片，以及店面更新。');
   const form=page.getByRole('form',{name:'新增商品',exact:true});
   await form.getByLabel('商品名稱',{exact:true}).fill('尚未儲存的商品');await expect(publish).toBeDisabled();
   await form.getByLabel('商品名稱',{exact:true}).fill('');await expect(publish).toBeEnabled();
-  await listing.getByText('查看本次上架內容',{exact:true}).click();
-  await expect(listing).toContainText('陶瓷茶杯');await expect(listing).toContainText('手作購物袋');
+  await bar.getByText('查看本次上架內容',{exact:true}).click();
+  await expect(bar).toContainText('陶瓷茶杯');await expect(bar).toContainText('手作購物袋');
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:info.outputPath('one-click-listing-mobile.png'),fullPage:true});
-  await publish.click();await expect(listing.getByRole('button',{name:'商品已全部上架',exact:true})).toBeDisabled();
+  await publish.click();await expect(bar).toContainText('已公開第 1 版。');await expect(publish).toHaveCount(0);
   const response=await page.request.get('/api/v1/public/stores/'+slug);expect(response.status()).toBe(200);
   const published=await response.json();expect(published.products.map((item:{title:string})=>item.title)).toEqual(['陶瓷茶杯','手作購物袋']);
   await expect(page.getByRole('navigation',{name:'商店工作區'}).getByRole('button',{name:'商品',exact:true})).toHaveAttribute('aria-pressed','true');
@@ -32,16 +32,16 @@ test('a changed product requires a new visible review and another click before p
   await post(page,store.root+'/setup',{name:'確認更新的店',slug,currency:'TWD'},201);
   const product=await post(page,store.root+'/products',{title:'原商品名稱',price_minor:35000,stock:10},201);
   await open(page,store.hash);
-  const listing=page.locator('.hosted-store-publication'),publish=listing.getByRole('button',{name:'一鍵上架商品',exact:true});
+  const bar=page.getByRole('region',{name:'公開狀態'}),publish=bar.getByRole('button',{name:'發布',exact:true});
   await expect(publish).toBeEnabled();
   const session=await (await page.request.get('/api/v1/session')).json();
   const changed=await page.request.patch(`/api/v1${store.root}/products/${product.product_id}`,{data:{title:'另一位管理員更新的名稱',price_minor:38000},headers:{Origin:new URL(page.url()).origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID(),'If-Match':`"${product.version}"`}});
   expect(changed.status()).toBe(200);
   await publish.click();await expect(page.locator('.hosted-store > [role="status"]')).toContainText('請確認後再按一次上架');
   expect((await page.request.get('/api/v1/public/stores/'+slug)).status()).toBe(404);
-  await expect(publish).toBeEnabled();await listing.getByText('查看本次上架內容',{exact:true}).click();
-  await expect(listing).toContainText('另一位管理員更新的名稱');
-  await publish.click();await expect(listing.getByRole('button',{name:'商品已全部上架',exact:true})).toBeVisible();
+  await expect(publish).toBeEnabled();await bar.getByText('查看本次上架內容',{exact:true}).click();
+  await expect(bar).toContainText('另一位管理員更新的名稱');
+  await publish.click();await expect(bar).toContainText('已公開第 1 版。');
   const published=await (await page.request.get('/api/v1/public/stores/'+slug)).json();expect(published.products[0].title).toBe('另一位管理員更新的名稱');
 });
 
@@ -56,10 +56,11 @@ test('an unknown listing response keeps its original request and publishes only 
     const response=await route.fetch();expect(response.status()).toBe(200);
     if(attempts.length===1)await route.abort('failed');else await route.fulfill({response});
   });
-  await open(page,store.hash);await page.getByRole('button',{name:'一鍵上架商品',exact:true}).click();
+  const bar=page.getByRole('region',{name:'公開狀態'});
+  await open(page,store.hash);await bar.getByRole('button',{name:'發布',exact:true}).click();
   const retry=page.locator('.hosted-store > .actions').getByRole('button',{name:'重試',exact:true});
-  await expect(retry).toBeVisible();await expect(page.getByRole('button',{name:'一鍵上架商品',exact:true})).toBeDisabled();
-  await retry.click();await expect(page.getByRole('button',{name:'商品已全部上架',exact:true})).toBeVisible();
+  await expect(retry).toBeVisible();await expect(bar.getByRole('button',{name:'發布',exact:true})).toBeDisabled();
+  await retry.click();await expect(bar).toContainText('已公開第 1 版。');
   expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
   const instance=store.hash.split('/')[2];
   expect((await e2eAuthPool.query('SELECT count(*)::int AS count FROM commerce_storefront_publications WHERE instance_id=$1',[instance])).rows[0].count).toBe(1);
@@ -91,7 +92,7 @@ test('retail work areas preserve a draft, prevent another area overwriting it, a
   const settings=page.getByRole('form',{name:'商店資料',exact:true});await settings.getByLabel('商店名稱',{exact:true}).fill('我的未儲存店名');
   await storeArea(page,'商品');await expect(page.getByRole('form',{name:'新增商品',exact:true}).getByRole('button',{name:'新增商品',exact:true})).toBeDisabled();
   await page.getByRole('button',{name:'回到未儲存的工作區',exact:true}).click();await expect(settings.getByLabel('商店名稱',{exact:true})).toHaveValue('我的未儲存店名');
-  await settings.getByRole('button',{name:'儲存商店資料',exact:true}).click();await storeArea(page,'店面與發布');await expect(page.getByRole('button',{name:'發布展示頁',exact:true})).toBeEnabled();
+  await settings.getByRole('button',{name:'儲存商店資料',exact:true}).click();await storeArea(page,'店面');await expect(page.getByRole('region',{name:'公開狀態'}).getByRole('button',{name:'發布',exact:true})).toBeEnabled();
   for(const theme of ['light','dark','versefolk'])for(const width of [320,390,1280]){
     await page.evaluate(theme=>{localStorage.setItem('freedom-theme',theme);dispatchEvent(new StorageEvent('storage',{key:'freedom-theme',newValue:theme}));},theme);await page.setViewportSize({width,height:900});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -141,7 +142,7 @@ test('read-only cooperation stays explicit after an active writer loses permissi
     }
     await expect(operatorPage.locator('#store-cooperation-panel')).toContainText('你沒有供貨合作的管理權限');
     await expect(operatorPage.locator('#store-cooperation-panel .hosted-distribution')).toHaveCount(0);
-    await expect(operatorPage.getByRole('link',{name:'預留訂單',exact:true})).toHaveCount(0);
+    await expect(operatorPage.getByRole('link',{name:'訂單',exact:true})).toHaveCount(0);
     await expect(operatorPage.getByRole('link',{name:'供貨訂單',exact:true})).toHaveCount(0);
     await storeArea(operatorPage,'商品');await expect(operatorPage.getByRole('heading',{name:'已合法儲存的商品',exact:true})).toBeVisible();
     await operatorPage.reload();await storeArea(operatorPage,'供貨合作');
@@ -169,7 +170,7 @@ test('late owner order-link admission keeps store navigation stable during a poi
       const navigation=page.getByRole('navigation',{name:'商店工作區',exact:true});
       const cooperation=navigation.getByRole('button',{name:'供貨合作',exact:true});
       await cooperation.scrollIntoViewIfNeeded();
-      await expect(page.getByRole('link',{name:'預留訂單',exact:true})).toHaveCount(0);
+      await expect(page.getByRole('link',{name:'訂單',exact:true})).toHaveCount(0);
       await expect(page.getByRole('link',{name:'供貨訂單',exact:true})).toHaveCount(0);
       const before=await navigation.boundingBox(),button=await cooperation.boundingBox();
       expect(before).not.toBeNull();expect(button).not.toBeNull();
@@ -179,7 +180,7 @@ test('late owner order-link admission keeps store navigation stable during a poi
       // Admit the owner-only links between pointer down/up: the navigation must
       // stay under the original pointer instead of silently losing the click.
       release();
-      await expect(page.getByRole('link',{name:'預留訂單',exact:true})).toBeVisible();
+      await expect(page.getByRole('link',{name:'訂單',exact:true})).toBeVisible();
       await expect(page.getByRole('link',{name:'供貨訂單',exact:true})).toBeVisible();
       expect(await navigation.boundingBox()).toEqual(before);
       await page.mouse.up();

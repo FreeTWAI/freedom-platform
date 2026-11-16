@@ -69,11 +69,11 @@ test('registered commerce intern opens a store, publishes a template and returns
       JOIN users u ON u.user_id=m.user_id AND u.community_id=m.community_id
       WHERE u.email=$1 AND m.community_id=$2 AND m.guild_key=$3`, [email, DEMO_COMMUNITY, guild])).rows)
       .toEqual([{state: 'active', member_tier: 'intern'}]);
-    const steps = page.getByRole('region', {name: '開店步驟', exact: true});
-    await expect(steps).toBeVisible();
-    await expect(steps.getByText('已完成：商店資料已建立', {exact: true})).toBeVisible();
-    await expect(steps.getByText('新增第一件商品', {exact: true})).toHaveAttribute('aria-current', 'step');
-    await expect(steps.getByRole('button', {name: '前往下一步', exact: true})).toHaveCount(0);
+    const publishBar = page.getByRole('region', {name: '公開狀態', exact: true});
+    await expect(publishBar).toBeVisible();
+    await expect(publishBar).toContainText('還沒公開。下一步：新增第一件商品。');
+    await expect(publishBar.getByRole('button', {name: '新增商品', exact: true})).toBeVisible();
+    await expect(publishBar.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
     const product = page.getByRole('form', {name: '新增商品', exact: true});
     await product.getByLabel('商品名稱', {exact: true}).fill('手作茶杯');
     await product.getByLabel('商品介紹', {exact: true}).fill('手工製作，適合日常品茶');
@@ -81,32 +81,27 @@ test('registered commerce intern opens a store, publishes a template and returns
     await product.getByLabel('庫存', {exact: true}).fill('10');
     await product.getByRole('button', {name: '新增商品', exact: true}).click();
     await expect(page.locator('.hosted-store-product')).toContainText('手作茶杯');
-    await expect(steps.getByText('已完成：已新增 1 件商品', {exact: true})).toBeVisible();
-    await expect(steps.getByText('在「店面與發布」預覽後發布', {exact: true})).toHaveAttribute('aria-current', 'step');
-    const nextStep = steps.getByRole('button', {name: '前往下一步', exact: true});
-    await expect(nextStep).toBeVisible();
+    await expect(publishBar).toContainText('還沒公開。下一步：發布商店。');
+    await expect(publishBar.getByRole('button', {name: '發布', exact: true})).toBeVisible();
     await page.setViewportSize({width: 320, height: 900});
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.setViewportSize({width: 390, height: 900});
-    await nextStep.click();
+    await storeArea(page, '店面');
     const publishPanel = page.locator('#store-publish-panel');
     await expect(publishPanel).toBeVisible();
-    await expect.poll(() => publishPanel.evaluate(el => el.contains(document.activeElement))).toBe(true);
-    await expect(nextStep).toHaveCount(0);
     await page.getByRole('radio', {name: /^直列目錄/}).check();
-    await storeArea(page,'店面與發布');
     await page.getByRole('button', {name: '儲存版型', exact: true}).click();
     await expect(page.locator('.hosted-store').getByRole('status')).toContainText('已儲存版型');
-    await storeArea(page,'店面與發布');
+    await storeArea(page, '店面');
     const popup = page.waitForEvent('popup'); await page.getByRole('link', {name: '預覽已儲存的展示頁', exact: true}).click();
     const preview = await popup;
     await expect(preview.locator('.shop-products-list article')).toHaveCount(1);
     const publicPage = await publicContext.newPage(); await publicPage.goto('/shops/' + slug);
     await expect(publicPage.getByRole('heading', {name: '新會員選物店', exact: true})).toHaveCount(0);
-    await storeArea(page,'店面與發布');
-    await page.getByRole('button', {name: '發布展示頁', exact: true}).click();
+    await publishBar.getByRole('button', {name: '發布', exact: true}).click();
     await expect(page.locator('.hosted-store').getByRole('status')).toContainText('已發布・第 1 版');
-    await expect(steps).toHaveCount(0);
+    await expect(publishBar).toContainText('已公開第 1 版。');
+    await expect(publishBar.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
     await publicPage.reload(); await expect(publicPage.locator('.shop-products-list article')).toHaveCount(1);
     // Publication preserves the saved catalog content, while preview-only
     // notices/details and public navigation intentionally use different markup.
@@ -145,8 +140,8 @@ test('registered commerce intern opens a store, publishes a template and returns
     await signOut(page); await login(page, email); await guildHome(page);
     await primary.getByRole('button', {name: '進入我的商店', exact: true}).click();
     await expect(page).toHaveURL(new RegExp(storeHash + '$'));
-    await expect(steps).toHaveCount(0);
-    await storeArea(page,'店面與發布');
+    await expect(publishBar).toContainText('已公開第 1 版。');
+    await storeArea(page, '店面');
     await expect(page.getByRole('radio', {name: /^直列目錄/})).toBeChecked();
     await storeArea(page,'商品');
     await expect(page.locator('.hosted-store-product')).toContainText('手作茶杯');
