@@ -216,7 +216,7 @@ This is local candidate UI source, not activation or live acceptance. Runtime/br
 
 ### Owner reservation UI candidate
 
-The existing store manager offers 「預留訂單」 only after a successful owner-only seller list read. `#stores/<tenant>/<instance>/orders` reads the current owner's retained history directly through the HO-4 API; its authority is never inferred from admin/operator templates, grants or guild titles. Pages forward the opaque signed server cursor unchanged. The UI labels reservations as unpaid/unfulfilled and shows their real status, immutable line items and merchandise amount, with no buyer contact, payment or shipping controls.
+The existing store manager offers 「訂單」 only after a successful owner-only seller list read. `#stores/<tenant>/<instance>/orders` reads the current owner's retained history directly through the HO-4 API; its authority is never inferred from admin/operator templates, grants or guild titles. Pages forward the opaque signed server cursor unchanged. The UI labels reservations as unpaid/unfulfilled and shows their real status, immutable line items and merchandise amount, with no buyer contact, payment or shipping controls.
 
 The saved management URL and orders hash remain usable when discovery or admission is OFF; they do not depend on the GLP-gated store/tenant directory. Fresh login reads current authorized state without replaying a cancellation. Cancel holds the original order/version, empty body and key in memory; a matching newer terminal projection confirms it, while unreadable/stale reserved success remains unknown. Unknown retries retain that tuple, including after a later known refusal. A first known 412 requires a fresh read and explicit review before another cancellation. App navigation and full-page close use the existing guards; full-page close is only a warning, not durable recovery of the held command. Source/pure checks and future isolated HTTP/browser acceptance remain distinct; this UI is not activation or live acceptance.
 
@@ -260,11 +260,13 @@ unimplemented. Existing member DTOs and admission settings are unchanged.
 ## Supplier and retailer editing experience candidate (2026-10-14)
 
 The retailer editor has four persistent work areas: 商品, 供貨合作,
-店面與發布 and 商店資料. Switching areas keeps mounted drafts; another area's
-unsaved form disables conflicting writes and offers a return action. Main
-navigation still uses the existing leave/unknown-command guards. On small
-screens the four choices form two rows. The supplier keeps its existing three
-work areas and separate reservation controls.
+店面 and 商店資料. A 公開狀態 bar above them shows whether the store is
+public, the next step and the one publish button. Switching areas keeps
+mounted drafts; another area's unsaved form disables conflicting writes and
+offers a return action. Main navigation still uses the existing
+leave/unknown-command guards. On small screens the four choices form two
+rows. The supplier keeps its existing three work areas and separate
+reservation controls.
 Read-only members see an explicit permission message in the cooperation area,
 including when a refreshed view revokes write access while that area is selected.
 

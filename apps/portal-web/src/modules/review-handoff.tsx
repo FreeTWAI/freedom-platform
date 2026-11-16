@@ -27,7 +27,7 @@ function rememberCli(cli: HandoffCli) {
   try { localStorage.setItem(CLI_KEY, cli); } catch { /* private mode or a blocked storage */ }
 }
 function failure(error: unknown) {
-  return error instanceof Error ? error.message : '無法產生任務。';
+  return error instanceof Error ? error.message : '無法建立任務。';
 }
 
 function HandoffResultView({ result, onAgain }: { result: HandoffResult; onAgain: () => void }) {

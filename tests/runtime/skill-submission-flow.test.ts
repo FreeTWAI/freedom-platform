@@ -336,7 +336,7 @@ const validPage = {
   },
 };
 
-test('I1: step 1 collects repository URL (required, max 300) then step 2 offers 我自己填 or 交給我的 agent', async () => {
+test('I1: step 1 collects repository URL (required, max 300) then step 2 offers 我自己填 or 用我的 Agent 上傳', async () => {
   const host = skillFlowHost();
   try {
     host.render();
@@ -372,9 +372,11 @@ test('I1: step 1 collects repository URL (required, max 300) then step 2 offers 
     host.render();
     host.nodes();
     assert.equal(host.nodes().some(n => n.type === 'dialog'), false, 'does not render SkillUpload dialog');
+    assert.equal(host.nodes().some(n => n.type === 'h2' && textOf(n) === '用我的 Agent 上傳'), true, 'renders 用我的 Agent 上傳 heading');
     assert.equal(host.postCalls.some(c => c.path === '/me/skill-submissions'), true, 'posts /me/skill-submissions');
     assert.equal(host.text().includes('私人草稿'), true, 'states in one line that agent makes a private draft');
     assert.equal(host.text().includes('公開'), true, 'states member publishes here');
+    assert.equal(host.text().includes('只貼給你的 Agent。'), true, 'states 只貼給你的 Agent。');
     const instructionBox = host.nodes().find(n => n.type === 'textarea' && n.props['data-private'] === 'true');
     assert.ok(instructionBox, 'renders private instruction textarea');
     const instr = String(instructionBox.props.value ?? '');

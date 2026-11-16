@@ -25,6 +25,7 @@ test('AI-first shops download complete MD, preview/import files, select catalog 
  await expect(page.getByRole('heading',{name:'有商品，就能開始。',exact:true})).toBeVisible();
  await expect(page.getByLabel('商品名稱',{exact:true})).toHaveCount(0);
  const waiting=page.waitForEvent('download');await page.getByRole('button',{name:'下載開店包',exact:true}).click();const d=await waiting;
+ await expect(page.getByRole('region',{name:'內部商店工作區',exact:true}).getByRole('status')).toHaveText('已下載開店包。交給你使用的 AI，做好後回來上傳成果。');
  const md=await readFile((await d.path())!,'utf8');for(const marker of ['freedom-shop/v1','shop-api/v1','delivery_ref'])expect(md).toContain(marker);
  const internalInstructions=(await readFile(new URL('../../packages/shop-agent/internal.md',import.meta.url),'utf8')).trim();
  expect(internalInstructions).not.toBe('');expect(md).toContain(internalInstructions);
