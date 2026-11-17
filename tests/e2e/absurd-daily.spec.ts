@@ -1518,6 +1518,12 @@ async function marketSceneBounds(page:Page,fullscreen=true){
 }
 async function marketButton(page:Page,name:string){await marketTime(page,400);const button=page.getByRole('button',{name,exact:true});if(!await button.isVisible())await marketPanel(page,/醬/.test(name)?'sauces':'tools');await button.click();}
 async function marketAdd(page:Page,name:string){await marketTime(page,400);await marketPanel(page,'ingredients');await page.locator('.mk-ingredients').getByRole('button',{name:new RegExp(`^${name} `)}).click();await marketPanel(page,'tools');}
+async function marketRiceToss(page:Page){
+ const surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const b=(await surface.boundingBox())!;
+ const x=b.x+b.width*.5,y=b.y+b.height*.7;
+ await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x,y-60,{steps:8});await page.mouse.up();
+}
+async function marketSavedTosses(page:Page){return page.evaluate(k=>(JSON.parse(sessionStorage.getItem(k)!).run as MarketRun).tosses,MARKET_SAVE_KEY);}
 // These gesture-ownership tests sample real RAF callbacks at the hold boundaries;
 // do not spend the whole test rendering every software-WebGL frame in virtual time.
 for(const [first,second] of [['Space','Enter'],['Enter','Space']])test(`UX-9: coating hold keeps ${first} ownership after ${second} releases`,async({page})=>{
@@ -1586,7 +1592,12 @@ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Marke
  if(id==='corn-dog'){await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');await marketTime(page,24000);await marketButton(page,'翻這一面');await marketTime(page,24000);await marketButton(page,'起鍋瀝油');await marketTime(page,4000);}
  if(id==='steak-dinner'){await marketAdd(page,'牛排');await marketAdd(page,'薯條');await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('0');await marketTime(page,23000);await marketButton(page,'翻這一面');await marketTime(page,23000);}
  if(id==='shawarma'){await marketAdd(page,'餅皮');await marketTime(page,6000);for(let i=0;i<4;i++)await marketButton(page,'削一刀');await marketAdd(page,'生菜');await marketAdd(page,'番茄');for(let i=0;i<3;i++)await marketButton(page,`包一折 · ${i}/3`);}
- if(id==='egg-fried-rice'){await marketAdd(page,'白飯');await marketAdd(page,'雞蛋');await marketAdd(page,'蝦仁');for(let i=0;i<10;i++){await marketTime(page,2000);await marketButton(page,'拋鍋！');}}
+ if(id==='egg-fried-rice'){
+  await expect(page.getByRole('button',{name:/拋鍋/,includeHidden:true})).toHaveCount(0);
+  await marketAdd(page,'白飯');await marketAdd(page,'雞蛋');await marketAdd(page,'蝦仁');
+  await marketTime(page,400);await page.locator('.mk-surface').click();expect(await marketSavedTosses(page)).toBe(0);
+  for(let i=0;i<10;i++){await marketTime(page,2400);await marketRiceToss(page);expect(await marketSavedTosses(page)).toBe(i+1);}
+ }
  await marketButton(page,'一撮鹽 · 0');await marketPanel(page,'sauces');await page.getByRole('button',{name:'蒜味醬',exact:true}).click();const surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const b=(await surface.boundingBox())!;await page.mouse.move(b.x+b.width*.35,b.y+b.height*.5);await page.mouse.down();await page.mouse.move(b.x+b.width*.6,b.y+b.height*.6,{steps:10});await page.mouse.up();await marketTime(page,400);const before=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(before.sauces).toHaveLength(1);if(id==='steak-dinner')await page.evaluate(key=>{const original=Storage.prototype.setItem;(window as unknown as {restoreMarketBook:()=>void}).restoreMarketBook=()=>{Storage.prototype.setItem=original;};Storage.prototype.setItem=function(k,v){if(k===key)throw new DOMException('Synthetic cookbook quota','QuotaExceededError');return original.call(this,k,v);};},COOKBOOK_KEY);await markPngTiming(page,'before-serve');await page.getByRole('button',{name:'上桌，看看我的手藝！ ↗',exact:true}).click();await markPngTiming(page,'after-serve');await markPngTiming(page,'before-resume');await page.clock.resume();await expectPngLink(page,testInfo,page.getByRole('link',{name:'下載完整成果 PNG',exact:true}));await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});const completed=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(completed.status).toBe('done');if(id==='steak-dinner'){const warning=page.locator('.fullscreen-game .ck-save-warning');await expect(warning).toBeVisible();expect(await warning.evaluate(el=>!!el.closest('[data-game-stage]'))).toBe(true);await page.evaluate(()=>(window as unknown as {restoreMarketBook:()=>void}).restoreMarketBook());await warning.getByRole('button',{name:'重試保存食譜本',exact:true}).click();await expect(warning).toHaveCount(0);}await expect(page.locator('.mk-score>div>strong')).toHaveText(`${marketGrade(completed).score}分`);await expect(page.getByRole('region',{name:'料理分數',exact:true})).toHaveText(`${marketGrade(completed).score}分`);await expect(page.locator('.fw-arcade-result-heading h1')).toHaveText(recipeOf(id)!.name);await expect(page.locator('.fw-arcade-result')).not.toContainText(marketGrade(completed).title);await expect(page.locator('.mk-score svg,.mk-score dl,.mk-score blockquote')).toHaveCount(0);expect(completed.portions).toHaveLength(before.portions.length);await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();const canvas=page.locator('.ck-dish-canvas canvas'),original=await canvas.screenshot();await page.getByRole('button',{name:'放大料理',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(false);await page.getByRole('button',{name:'回正',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(true);await testInfo.attach(`${id}-result.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});await page.getByRole('button',{name:'分享成果',exact:true}).click();await expect(page.locator('[data-game-share]')).toBeFocused();const downloading=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();await (await downloading).saveAs(testInfo.outputPath(`${id}-share.png`));
  if(id==='steak-dinner'){await page.setViewportSize({width:390,height:844});await testInfo.attach('steak-dinner-phone.png',{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});await page.setViewportSize({width:667,height:375});await testInfo.attach('steak-dinner-landscape.png',{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});}
  await page.evaluate(()=>Object.defineProperty(navigator,'share',{configurable:true,value:undefined}));await page.getByRole('button',{name:'系統分享圖片／連結',exact:true}).click();const link=await page.getByRole('textbox',{name:'同題連結',exact:true}).inputValue();expect(new URL(link).searchParams.get('practice')).toBeNull();expect(new URL(link).searchParams.get('recipe')).toBe(id);expect(posts).toBe(0);expect(errors).toEqual([]);
@@ -2274,9 +2285,17 @@ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Marke
  await expect(game).toHaveAttribute('data-market-status','playing');await expect(surface).toBeFocused();
  await marketAdd(page,({'egg-fried-rice':'白飯','steak-dinner':'牛排',shawarma:'餅皮','corn-dog':'熱狗'} as const)[id]);
  await marketTime(page,6000);
- const primary=({'egg-fried-rice':'拋鍋！','steak-dinner':'翻這一面',shawarma:'削一刀','corn-dog':'翻這一面'} as const)[id];
- await marketButton(page,primary);const progress=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);
- expect(id==='egg-fried-rice'?progress.tosses:id==='shawarma'?progress.shaves:progress.portions[0].flips).toBe(1);
+ const primary=id==='egg-fried-rice'?null:({'steak-dinner':'翻這一面',shawarma:'削一刀','corn-dog':'翻這一面'} as const)[id];
+ if(primary===null){
+  await expect(game.getByRole('button',{name:/拋鍋/,includeHidden:true})).toHaveCount(0);
+  await expect(game.getByRole('button',{name:'上桌，看看我的手藝！ ↗',exact:true})).toBeVisible();
+  await expect(surface).toHaveAccessibleDescription(/空白鍵或 Enter/);
+  await surface.press('ArrowUp');expect(await marketSavedTosses(page)).toBe(0);
+  await surface.press('Enter');expect(await marketSavedTosses(page)).toBe(1);
+  await marketTime(page,400);await surface.press('Space');expect(await marketSavedTosses(page)).toBe(2);
+ }else await marketButton(page,primary);
+ const progress=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);
+ expect(id==='egg-fried-rice'?progress.tosses:id==='shawarma'?progress.shaves:progress.portions[0].flips).toBe(id==='egg-fried-rice'?2:1);
  await marketTime(page,400);await page.locator('.mk-illustration [data-market-portion="0"]').click();
  const touched=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(id==='egg-fried-rice'?touched.stirs-progress.stirs:id==='shawarma'?touched.shaves-progress.shaves:touched.portions[0].flips-progress.portions[0].flips).toBe(1);
  for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1280,height:800}]){
@@ -2306,7 +2325,12 @@ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Marke
  await root.evaluate(el=>{const styles=[el,...el.querySelectorAll('*')].filter(n=>n instanceof HTMLElement).map(n=>({n:n as HTMLElement,font:parseFloat(getComputedStyle(n).fontSize),line:parseFloat(getComputedStyle(n).lineHeight)}));for(const {n,font,line} of styles){n.style.fontSize=`${font*2}px`;if(Number.isFinite(line))n.style.lineHeight=`${line*2}px`;}});
  await expect(root.getByRole('button',{name:'退出全螢幕',exact:true})).toHaveCSS('font-size','28px');
  await expect.poll(()=>surface.evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(44);
- await marketPanel(page,'tools');await marketButton(page,primary);await marketSceneBounds(page);
+ await marketPanel(page,'tools');
+ if(primary===null){
+  await expect(game.getByRole('button',{name:/拋鍋/,includeHidden:true})).toHaveCount(0);
+  await marketTime(page,400);await surface.press('Enter');expect(await marketSavedTosses(page)).toBe(touched.tosses+1);
+ }else await marketButton(page,primary);
+ await marketSceneBounds(page);
  await testInfo.attach(`market-${id}-200-percent-tools.png`,{body:await root.screenshot(),contentType:'image/png'});
  await page.getByRole('button',{name:'暫停',exact:true}).click();
  const paused=await page.evaluate(k=>sessionStorage.getItem(k),MARKET_SAVE_KEY);await marketTime(page,5000);expect(await page.evaluate(k=>sessionStorage.getItem(k),MARKET_SAVE_KEY)).toBe(paused);
