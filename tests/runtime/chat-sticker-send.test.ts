@@ -9,6 +9,7 @@ import {chatPollDue,idleChatPoll,resetChatPoll} from '../../apps/portal-web/src/
 import {directMessageReceiptRefreshDue,hasDirectMessageChanges} from '../../apps/portal-web/src/modules/direct-message-receipts.js';
 import {reconcileMessageAck,refreshLoadedMessages} from '../../apps/portal-web/src/modules/message-refresh.js';
 import {ApiError} from '../../apps/portal-web/src/api.js';
+import {COMMUNICATION_PAGE_MAX_LIMIT} from '../../modules/member-communications/types.js';
 import {findChatSticker} from '../../modules/member-communications/stickers.js';
 import {isFirstImageDecoderRejection,matchesChannelMessageAck,matchesDirectMessageAck} from '../../apps/portal-web/src/modules/message-image-client.js';
 
@@ -21,6 +22,9 @@ function sourceFunction(file:string,name:string){
   return tail.slice(0,end.index+end[0].length);
 
 }
+const directListPollConstants=readFileSync(new URL('../../apps/portal-web/src/modules/MemberMessages.tsx',import.meta.url),'utf8')
+  .match(/^const CONVERSATION_OFFSET_MAX=.*;$/m)?.[0];
+assert.ok(directListPollConstants);
 const clone=<T,>(value:T):T=>JSON.parse(JSON.stringify(value));
 const sender='10000000-0000-4000-8000-000000000001',peer='10000000-0000-4000-8000-000000000002';
 const first='workshop-v1-hello',second='workshop-v1-thanks';
@@ -34,7 +38,7 @@ function harness(mode:'direct'|'channel'){
     idlePoll:{current:resetChatPoll()},resetChatPoll,
     drafts,richDrafts:{get:()=>extras,clear:()=>{state.cleared++;}},cleared:0,
     selections:{current:new Map([[target,image]])},selectionRef:{current:image},messageImagesEnabled:true,
-    historyRevision:{current:0},threadGeneration:{current:0},convGeneration:{current:0},convInFlight:{current:null},loadConversations:()=>{},receiptRefresh:{current:new Map()},conversations:[],thread:null,stick:{current:false},logs:[],uploads:0,
+    historyRevision:{current:0},threadGeneration:{current:0},convGeneration:{current:0},convInFlight:{current:null},convMoreInFlight:{current:null},loadConversations:()=>{},receiptRefresh:{current:new Map()},conversations:[],thread:null,stick:{current:false},logs:[],uploads:0,
     setPendingState:()=>{},setDrafts:(update:any)=>{state.drafts=update(state.drafts);},setSendErrors:(update:any)=>{state.sendErrors=update(state.sendErrors??{});},setSelection:()=>{},setThread:()=>{},setHistory:()=>{},setConversations:()=>{},setChannels:()=>{},rereadAfterWrite:()=>{},
     path:(key:string,rest:string)=>`/me/channels/guild/${key}/${rest}`,crypto:{randomUUID},ApiError,reconcileMessageAck,findChatSticker,isFirstImageDecoderRejection,matchesDirectMessageAck,matchesChannelMessageAck,
     chatPayload:runInNewContext(`${sourceFunction('ChatContent.tsx','chatPayload')};chatPayload`),
@@ -226,12 +230,15 @@ for(const scenario of [
   const state:any={chatPollDue,idleChatPoll,resetChatPoll,directMessageReceiptRefreshDue,hasDirectMessageChanges,
     snapshot:{current:{active:!scenario.inactive,readingThread:true,threadStatus:'ready',thread:{items:[{message_id:'latest',sender_ref:sender,read_at:scenario.read}],unread_count:0,can_send:true},reading:false,sending:false}},
     currentPeer:{current:peer},document:{visibilityState:scenario.hidden?'hidden':'visible'},navigator:{onLine:true},polling:{current:false},retryAt:{current:scenario.retry??0},Date:{now:()=>scenario.now},
-    convInFlight:{current:true},listCheckedAt:{current:0},threadInFlight:{current:scenario.inFlight?{}:null},moreState:{current:{loading:false}},idlePoll:{current:{idle:5,nextAt:12000}},
+    convInFlight:{current:true},convWindow:{current:{span:20,next:null}},COMMUNICATION_PAGE_MAX_LIMIT,listCheckedAt:{current:0},threadInFlight:{current:scenario.inFlight?{}:null},moreState:{current:{loading:false}},idlePoll:{current:{idle:5,nextAt:12000}},
     receiptRefresh:{current:new Map(scenario.dirty?[[peer,Symbol()]]:[])},receiptCheckedAt:{current:new Map([[peer,0]])},me:sender,threadGeneration:{current:0},alive:{current:true},failures:{current:0},
     client:{get:async()=>{calls++;return {last_message_id:'latest',last_outgoing:{message_id:'latest',read_at:scenario.read},unread_count:0,can_send:true};}},
-    loadThread:async()=>{refreshes++;state.threadGeneration.current++;return true;},setLiveError:()=>{},announceInboxChange:()=>{},ApiError,
+    loadThread:async()=>{refreshes++;state.threadGeneration.current++;return true;},
+    loadConversations:(quiet:boolean,background:boolean)=>{assert.equal(quiet,true);assert.equal(background,true);assert.ok(state.convInFlight.current,'background loader coalesces with the pending list');},
+    setLiveError:()=>{},announceInboxChange:()=>{},ApiError,
   };
-  await runInNewContext(`${sourceFunction('MemberMessages.tsx','pullLatest')};pullLatest`,state)();
+  await runInNewContext(`${directListPollConstants}
+${sourceFunction('MemberMessages.tsx','pullLatest')};pullLatest`,state)();
   assert.equal(calls,scenario.expected);assert.equal(refreshes,scenario.expected);
 });
 

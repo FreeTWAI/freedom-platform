@@ -40,7 +40,15 @@ for(const mode of ['desktop','phone','compact'])test(`${mode}: typing skips cach
   await page.evaluate(()=>{(window as any).__listRender.formats=0;});
   for(let i=0;i<12;i++)await input.fill(`保留草稿${i}`);
   await expect(input).toHaveValue('保留草稿11');expect(await page.evaluate(()=>(window as any).__listRender.formats)).toBe(0);
-  if(mode!=='desktop'){await expect(list).toBeHidden();await page.getByRole('button',{name:mode==='compact'?'切換對象':'← 返回對話列表',exact:true}).click();}
+  if(mode!=='desktop'){
+    await expect(list).toBeHidden();
+    await page.getByRole('button',{name:mode==='compact'?'切換對象':'← 返回對話列表',exact:true}).click();
+    await expect(list).toBeVisible();
+    // Settle switchPane's queued animation-frame focus before moving focus to a loaded row.
+    // Otherwise the paused clock runs the old navigation callback during the measured refresh.
+    await page.clock.runFor(32);
+    await expect(page.getByRole('heading',{name:'對話',exact:true})).toBeFocused();
+  }
   // Use a deterministic overflow container without depending on the enclosing portal layout.
   await page.addStyleTag({content:'.messages-side{max-height:280px;overflow-y:auto}.messages-peer{block-size:72px}'});
   const loadedPeer=peer('p32');

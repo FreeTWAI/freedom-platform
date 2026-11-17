@@ -7,7 +7,7 @@ import {chatPollDue,idleChatPoll,resetChatPoll} from '../../apps/portal-web/src/
 import {ApiError} from '../../apps/portal-web/src/api.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Message, MessagePage } from '../../modules/member-communications/types.js';
+import { COMMUNICATION_PAGE_MAX_LIMIT, type Message, type MessagePage } from '../../modules/member-communications/types.js';
 import { compareDirectMessages, directMessageReceiptRefreshDue, hasDirectMessageChanges, mergeDirectMessagePage, readLoadedDirectMessageReceipts } from '../../apps/portal-web/src/modules/direct-message-receipts.js';
 
 const readAt = '2026-10-04T06:00:00.000Z';
@@ -238,12 +238,15 @@ test('bounded receipts do not apply a partial batch or fall back after a lookup 
 });
 
 const source=readFileSync(new URL('../../apps/portal-web/src/modules/MemberMessages.tsx',import.meta.url),'utf8');
+const conversationListConstants=source.match(/^const CONVERSATION_OFFSET_MAX=.*;$/m)?.[0];
+const conversationNextSource=source.match(/^const conversationNext=.*;$/m)?.[0];
+assert.ok(conversationListConstants&&conversationNextSource);
 const stamp='2026-11-10T10:00:00.000Z',self='synthetic-self',peer='synthetic-peer',target='original',replyId='reply';
 // Production closures and helpers, controlled transport and state. These are not
 // React scheduling, browser, API authorization or database acceptance tests.
 function directClosure(start:string,end:string,name:string,host:any){
   const from=source.indexOf(start),to=source.indexOf(end,from+start.length);assert.ok(from>=0&&to>from,name);
-  return runInNewContext(transformSync(source.slice(from,to).replace(`const ${name}=`,`globalThis.${name}=`)+`;globalThis.result=${name};`,{loader:'tsx',target:'es2023',format:'esm'}).code,host);
+  return runInNewContext(transformSync('{\n'+conversationListConstants+'\n'+conversationNextSource+'\n'+source.slice(from,to).replace(`const ${name}=`,`globalThis.${name}=`)+`;globalThis.result=${name};\n}`,{loader:'tsx',target:'es2023',format:'esm'}).code,host);
 }
 function privateRetractionHost(){
  const original={message_id:target,sender_ref:self,recipient_ref:peer,created_at:stamp,read_at:stamp,retracted_at:null,body:'withdrawn private text',image:{content_type:'image/webp',byte_size:80}};
@@ -252,16 +255,18 @@ function privateRetractionHost(){
  type Call={method:string;path:string;resolve:(value:any)=>void;reject:(error:Error)=>void};
  const calls:Call[]=[],reloads:Promise<unknown>[]=[],pages:Promise<unknown>[]=[],lists:Promise<unknown>[]=[],noop=()=>{};
  const state:any={peer,me:self,thread:structuredClone(initial),conversations:[{participant:initial.participant,last_message:original,can_send:true,unread_count:0}],threadMore:{loading:false,error:''},snapshot:{current:{}},alive:{current:true},currentPeer:{current:peer},
-  convGeneration:{current:0},convInFlight:{current:null},listCheckedAt:{current:Date.now()},threadGeneration:{current:0},threadInFlight:{current:null},olderInFlight:{current:null},olderQueued:{current:null},quietInFlight:{current:new Map()},historyRevision:{current:0},
+  convGeneration:{current:0},convInFlight:{current:null},convMoreInFlight:{current:null},convMoreQueued:{current:false},convWindow:{current:{span:20,next:null}},convList:{current:null},convAnchor:{current:null},convFocus:{current:null},listCheckedAt:{current:Date.now()},threadGeneration:{current:0},threadInFlight:{current:null},olderInFlight:{current:null},olderQueued:{current:null},quietInFlight:{current:new Map()},historyRevision:{current:0},
   receiptRefresh:{current:new Map()},receiptCheckedAt:{current:new Map([[peer,Date.now()]])},readIssues:{current:new Map()},idlePoll:{current:resetChatPoll()},polling:{current:false},retryAt:{current:0},failures:{current:0},moreState:{current:{loading:false,error:''}},
   retractTarget:{message_id:target},retractTrigger:{current:null},retracting:false,retractError:'',threadRefresh:{loading:false,error:''},convRefresh:{loading:false,error:''},threadStatus:'ready',threadError:'',liveError:'',
-  scroll:{current:null},anchor:{current:null},stick:{current:true},document:{visibilityState:'visible'},navigator:{onLine:true},PAGE:20,Error,Date,URLSearchParams,ApiError,crypto:{randomUUID},useCallback:(fn:any)=>fn,
+  scroll:{current:null},anchor:{current:null},stick:{current:true},document:{visibilityState:'visible'},navigator:{onLine:true},PAGE:20,COMMUNICATION_PAGE_MAX_LIMIT,Error,Date,URLSearchParams,ApiError,crypto:{randomUUID},useCallback:(fn:any)=>fn,
   refreshLoadedMessages,compareDirectMessages,directMessageReceiptRefreshDue,hasDirectMessageChanges,mergeDirectMessagePage,readLoadedDirectMessageReceipts,chatPollDue,idleChatPoll,resetChatPoll,
   newestMessages:(items:any[])=>[...items].sort((a,b)=>compareDirectMessages(b,a)),merge:(a:any[],b:any[],id:(v:any)=>string)=>[...a,...b.filter(v=>!a.some(x=>id(x)===id(v)))],fail:(e:Error)=>e.message,
   setReadError:noop,setHasNew:noop,onUnread:noop,announceInboxChange:noop,setConvNext:noop,setConvStatus:noop,setConvError:noop,setConvMore:noop,
   client:{sessionGeneration:1,get:(path:string)=>new Promise((resolve,reject)=>calls.push({method:'GET',path,resolve,reject})),post:(path:string)=>new Promise((resolve,reject)=>calls.push({method:'POST',path,resolve,reject}))},
  };
  for(const key of ['retractTarget','retracting','retractError','threadRefresh','convRefresh','threadStatus','threadError','liveError'])state['set'+key[0].toUpperCase()+key.slice(1)]=(value:any)=>state[key]=value;
+ state.convSession=state.client.sessionGeneration;
+ state.convOwner={current:{member:self,client:state.client,session:state.convSession}};
  state.setThread=(update:any)=>{state.thread=typeof update==='function'?update(state.thread):update;state.snapshot.current.thread=state.thread;};
  state.setThreadMore=(update:any)=>{state.threadMore=typeof update==='function'?update(state.threadMore):update;state.moreState.current=state.threadMore;};
  state.setConversations=(update:any)=>state.conversations=typeof update==='function'?update(state.conversations):update;
@@ -269,7 +274,9 @@ function privateRetractionHost(){
  const get=(a:string,b:string,n:string)=>{directClosure(a,b,n,state);return state.result;};
  const load=get('  const loadThread=useCallback(', '  useEffect(()=>{\n    const update=()=>{if(currentPeer.current)', 'loadThread');
  state.loadThread=(...args:any[])=>{const p=load(...args);reloads.push(p);return p;};
- const list=get('  const loadConversations=useCallback(', '  useEffect(()=>{void loadConversations();}', 'loadConversations');
+ state.anchorConversations=get('  function anchorConversations(items:Conversation[]){','  useLayoutEffect(', 'anchorConversations');
+ state.moreConversations=get('  const moreConversations=useCallback(', '  const loadConversations=useCallback(', 'moreConversations');
+ const list=get('  const loadConversations=useCallback(', '  useLayoutEffect(()=>{\n    const owner=convOwner.current;', 'loadConversations');
  state.loadConversations=(...args:any[])=>{const p=list(...args);lists.push(p);return p;};
  const retract=get('  async function retract(){','  useLayoutEffect(()=>{const node=scroll.current','retract');
  const earlier=get('  async function earlier(queued=false){','  useEffect(()=>{\n    const queued=olderQueued.current','earlier');
