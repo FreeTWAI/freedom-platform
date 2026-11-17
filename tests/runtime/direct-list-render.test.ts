@@ -95,8 +95,10 @@ test('cached row callbacks still select the correct peer and preserve each draft
 test('image feature changes invalidate only the presentation, without a new read or write',async()=>{
  const h=await ready(),page=h.page(['p0']);Object.assign(page.items[0].last_message,{body:'[圖片]',image:{image_id:'synthetic'}});await refresh(h,page);const before=list(h),requests=h.count();assert.equal(h.state().preview[0],'[圖片]');h.props.messageImagesEnabled=true;h.render();assert.notEqual(list(h),before);assert.equal(h.state().preview[0],'圖片');assert.deepEqual(h.count(),requests);h.unmount();
 });
-test('the self-message prefix follows current session props rather than a cached actor',async()=>{
- const h=await ready(),before=list(h);h.props.session={user:{user_id:'p0'}};h.render();assert.notEqual(list(h),before);assert.equal(h.state().preview[0],'你：preview-p0');h.unmount();
+test('a changed member hides the previous list and applies the self prefix only to newly authorized rows',async()=>{
+ const h=await ready(),before=list(h);h.props.session={user:{user_id:'p0'}};h.render();assert.notEqual(list(h),before);assert.deepEqual(h.state().peers,[]);
+ const page=h.page(['p1']);page.items[0].last_message.sender_ref='p0';await h.resolve(h.listCalls().at(-1)!,page);
+ assert.deepEqual(h.state().peers,['p1']);assert.equal(h.state().preview[0],'你：preview-p1');h.unmount();
 });
 test('calendar day rollover invalidates timestamps on the next render',async()=>{
  const h=await ready(),before=list(h);h.setWallNow(Date.parse('2026-11-05T12:00:00.000Z'));h.render();assert.notEqual(list(h),before);h.unmount();
