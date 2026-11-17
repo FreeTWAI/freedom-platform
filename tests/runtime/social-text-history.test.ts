@@ -79,7 +79,7 @@ async function gameTextHarness(){
 
  const {readFileSync}=await import('node:fs'),{runInNewContext}=await import('node:vm'),{transformSync}=await import('esbuild');
  let origin:string|undefined,injected=false;
- const module={exports:{} as {gameChallengeLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};externalShareLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};SocialRichText:React.ComponentType<any>}};
+ const module={exports:{} as {gameChallengeLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};externalShareLink:(token:string,origin:string)=>null|{prefix:string;label:string;suffix:string;href:string};SocialRichText:React.ComponentType<any>;pendingMentionQuery:(text:string,mentions:readonly {user_id:string;display_name:string}[])=>string|undefined}};
  const hooks={...React,useState:(initial:unknown)=>{if(origin!==undefined&&!injected){injected=true;return [origin,()=>{}];}return React.useState(initial);}};
  const source=readFileSync(new URL('../../apps/portal-web/src/modules/SocialTools.tsx',import.meta.url),'utf8');
  runInNewContext(transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,URL,require:(name:string)=>{
@@ -370,6 +370,13 @@ test('mounted SocialTextTools mention disclosure',async t=>{
   h.click(choice);assert.equal(h.text(),'Hello @Alice Smith ');assert.deepEqual(JSON.parse(JSON.stringify(h.mentions())),[{user_id:'member-a',display_name:'Alice Smith'}]);
   assert.equal(Boolean(h.picker()),false);assert.equal(document.activeElement,h.area());
  });
+ await t.test('writing after a chosen mention keeps the search closed until a new @query starts',async context=>{
+  const h=fixture(context);h.type('@Al');advance(200);
+  await h.settle(0,{items:[{user_id:'member-a',nickname:'Alice Smith'}]});
+  h.click(h.nodes().find(node=>node.nodeName==='BUTTON'&&node.getAttribute('class')==='social-mention-choice')!);
+  h.type('@Alice Smith thanks');assert.equal(Boolean(h.picker()),false);advance(200);assert.equal(h.requests.length,1);
+  h.type('@Alice Smith thanks @Bo');assert(h.picker());advance(200);assert.equal(h.requests[1].path,'/members?limit=6&search=Bo');
+ });
  await t.test('manual search input remains editable after reopening',async context=>{
   const h=fixture(context);h.type('@Alice');h.click(h.button('標註會員'));h.click(h.button('標註會員'));
   const search=h.nodes().find(node=>node.nodeName==='INPUT')!;h.input(search,'Bob & Co');advance(200);
@@ -414,4 +421,13 @@ test('registered arcade canonical links and guided legacy links retain bounded c
  for(const path of [base+'?game=cash&seed=42',base+'?game=kitchen&recipe=egg-fried-rice&practice=1&seed=42','/play?game=kitchen&recipe=egg-fried-rice&practice=1&seed=42'])assert.equal(parse(origin+path,origin)?.href,path);
  for(const tail of ['?game=cash&seed=0','?game=cash&seed=42&url=https://evil.test','?game=kitchen&recipe=egg-fried-rice&practice=2&seed=42','?game=kitchen&recipe=egg-fried-rice&seed=42&practice=1'])assert.equal(parse(origin+base+tail,origin),null);
  assert.equal(parse(origin+'/#guilds/guild_ar/tools/arcade?game=cash&seed=42',origin),null);
+});
+test('a chosen mention followed by whitespace no longer reopens the member search',async()=>{
+ const {pendingMentionQuery:query}=await gameTextHarness(),amanda={user_id:'30000000-0000-4000-8000-000000000001',display_name:'Amanda'},ann={user_id:'30000000-0000-4000-8000-000000000002',display_name:'Ann'};
+ assert.equal(query('@Amanda ',[amanda]),undefined);assert.equal(query('thanks @Amanda ',[amanda]),undefined);
+ // A draft kept behind a reply tag is writing, not a search.
+ assert.equal(query('@Amanda thanks',[amanda]),undefined);
+ assert.equal(query('@Amanda ',[]),'Amanda ');assert.equal(query('@Amanda',[amanda]),'Amanda');assert.equal(query('@Aman',[amanda]),'Aman');assert.equal(query('@',[amanda]),'');
+ // A chosen name that is only a prefix of the typed word does not complete it.
+ assert.equal(query('@Anna thanks',[ann]),'Anna thanks');assert.equal(query('no mention',[amanda]),undefined);
 });

@@ -73,7 +73,19 @@ const source=readFileSync(new URL('../../apps/portal-web/src/modules/SocialInter
 const compiled=transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code;
 const descendants=(node:HostNode):HostNode[]=>[node,...node.childNodes.flatMap(descendants)];
 const props=(node:HostNode)=>node[Object.keys(node).find(k=>k.startsWith('__reactProps$'))!];
-function fixture(t:TestContext,initialLiked=false){
+// The real composer tools, for checks that the reply draft and the member search agree.
+function realSocialTools(){
+ const tools={exports:{} as any};
+ runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/modules/SocialTools.tsx',import.meta.url),'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module:tools,exports:tools.exports,URL,Error,window,document,setTimeout,clearTimeout,require(name:string){
+  if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');
+  if(name==='../../../../packages/shared/share-url')return {normalizeShareUrl:(s:string)=>s};
+  if(name==='../language')return {useLanguage:()=>({language:'zh-Hant'})};
+  if(name==='./MemberAvatar')return {MemberAvatar:()=>null};
+  throw Error('Unexpected import '+name);
+ }});
+ return tools.exports;
+}
+function fixture(t:TestContext,initialLiked=false,tools?:any){
  const requests:any[]=[]; const updates:any[]=[];
  const transport=(method:string)=>(path:string,body?:any,options?:any)=>new Promise((resolve,reject)=>requests.push({method,path,body,options,resolve,reject}));
  const client={sessionGeneration:1,csrfToken:'synthetic',get:transport('GET'),post:transport('POST'),delete:transport('DELETE')};
@@ -85,6 +97,7 @@ function fixture(t:TestContext,initialLiked=false){
   if(name==='react/jsx-runtime')return require('react/jsx-runtime');
   if(name==='../api')return {ApiError};
   if(name==='../format')return {formatIsoLocal:(s:string)=>s};
+  if(name==='./SocialTools'&&tools)return {...tools,SocialRichText:({text}:any)=>React.createElement('span',null,text)};
   return new Proxy({},{get(_target,key){if(key==='SocialRichText')return ({text}:any)=>React.createElement('span',null,text);if(key==='MemberAvatar')return ({avatarUrl}:any)=>React.createElement('span',{'data-avatar':avatarUrl??''});return ()=>null;}});
  }});
  const container=document.createElement('div');document.body.appendChild(container); const root=createRoot(container as unknown as HTMLElement);
@@ -237,4 +250,38 @@ test('an old-session like ACK cannot invalidate a read started under the new ses
  h.client.sessionGeneration++;h.click(h.toggle());h.click(h.toggle());assert.equal(h.requests[2].method,'GET');
  await h.answer(1,{liked:true,like_count:1});await h.answer(2,page(h.comment));
  assert.equal(h.like().getAttribute('aria-pressed'),'false');assert.equal(h.requests.length,3,'obsolete ACK must not trigger an extra read in the newer session');
+});
+test('reply on another member comment tags that member once, focuses the composer and sends the mention',async t=>{
+ const h=fixture(t);await h.answer(0,page({...h.comment,mine:false}));
+ const reply=()=>h.find(n=>n.nodeName==='BUTTON'&&n.getAttribute('aria-label')==='回覆 synthetic author')!;
+ h.change(h.textarea(),'thanks');h.click(reply());
+ assert.equal(props(h.textarea()).value,'@synthetic author thanks');assert.equal(document.activeElement,h.textarea());
+ h.click(reply());assert.equal(props(h.textarea()).value,'@synthetic author thanks');
+ h.submit(h.find(n=>n.nodeName==='FORM'&&n.getAttribute('class')==='social-comment-composer')!);
+ assert.equal(h.requests[1].method,'POST');assert.equal(JSON.stringify(h.requests[1].body),JSON.stringify({text:'@synthetic author thanks',mention_ids:[h.comment.author.user_id]}));
+});
+test('own comments offer no reply button',async t=>{
+ const h=fixture(t);await h.answer(0,page(h.comment));
+ assert.equal(h.find(n=>n.nodeName==='BUTTON'&&n.textContent==='回覆'),undefined);
+});
+test('reply keeps an existing draft without opening the real member search',async t=>{
+ const h=fixture(t,false,realSocialTools());await h.answer(0,page({...h.comment,mine:false}));
+ h.change(h.textarea(),'thanks');h.click(h.find(n=>n.nodeName==='BUTTON'&&n.getAttribute('aria-label')==='回覆 synthetic author')!);
+ assert.equal(props(h.textarea()).value,'@synthetic author thanks');
+ assert.equal(h.find(n=>n.nodeName==='SECTION'&&n.getAttribute('class')==='social-text-picker'),undefined);assert.equal(h.requests.length,1);
+});
+test('reply tags the replied member by whole name, not by a longer name that starts with it',async t=>{
+ const h=fixture(t);await h.answer(0,page({...h.comment,mine:false,author:{...h.comment.author,display_name:'Ann'}}));
+ const reply=()=>h.find(n=>n.nodeName==='BUTTON'&&n.getAttribute('aria-label')==='回覆 Ann')!;
+ h.change(h.textarea(),'@Anna thanks');h.click(reply());assert.equal(props(h.textarea()).value,'@Ann @Anna thanks');
+ h.click(reply());assert.equal(props(h.textarea()).value,'@Ann @Anna thanks');
+ h.submit(h.find(n=>n.nodeName==='FORM'&&n.getAttribute('class')==='social-comment-composer')!);
+ assert.equal(JSON.stringify(h.requests[1].body.mention_ids),JSON.stringify([h.comment.author.user_id]));
+});
+test('reply reuses an @name already written as a whole word and only adds the mention',async t=>{
+ const h=fixture(t);await h.answer(0,page({...h.comment,mine:false,author:{...h.comment.author,display_name:'Ann'}}));
+ h.change(h.textarea(),'hi @Ann');h.click(h.find(n=>n.nodeName==='BUTTON'&&n.getAttribute('aria-label')==='回覆 Ann')!);
+ assert.equal(props(h.textarea()).value,'hi @Ann');
+ h.submit(h.find(n=>n.nodeName==='FORM'&&n.getAttribute('class')==='social-comment-composer')!);
+ assert.equal(JSON.stringify(h.requests[1].body),JSON.stringify({text:'hi @Ann',mention_ids:[h.comment.author.user_id]}));
 });
