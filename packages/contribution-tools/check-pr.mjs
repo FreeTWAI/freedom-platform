@@ -4,6 +4,16 @@ import { E2E_PLAN } from './pinned-e2e.mjs';
 const RUNTIME_TEST_PATH = /^tests\/runtime\/[a-z0-9][a-z0-9_-]*\.test\.ts$/;
 const E2E_SPEC_PATH = /^tests\/e2e\/[a-z0-9]+(?:-[a-z0-9]+)*\.spec\.ts$/;
 
+// Local pilot only: these suites read or execute MemberMessages source at runtime,
+// so ordinary import-graph analysis does not reliably find all of them.
+const DIRECT_MESSAGES_SOURCE = 'apps/portal-web/src/modules/MemberMessages.tsx';
+const DIRECT_MESSAGES_NO_DB_SUITES = Object.freeze([
+  'tests/runtime/chat-sticker-send.test.ts',
+  'tests/runtime/direct-list-poll-isolation.test.ts',
+  'tests/runtime/direct-list-render.test.ts',
+  'tests/runtime/direct-message-receipts.test.ts',
+]);
+
 export const LANE_DECLINE_SENTENCES = Object.freeze({
   non_pull_request: '只有 pull_request 事件可以走模組快速通道。',
   non_overridable_decision: '已變更到不能由模組快速通道覆寫的核心或特殊範圍。',
@@ -187,6 +197,19 @@ export function selectChangedRuntimeTests(changes) {
       .filter(change => change?.status !== 'D' && RUNTIME_TEST_PATH.test(change?.path ?? ''))
       .map(change => change.path),
   )].sort();
+}
+
+export function planCheckPrRuntimeTests(changes) {
+  const selected = new Set(selectChangedRuntimeTests(changes));
+  const affectedPaths = new Set((changes ?? []).flatMap(change => [change?.path, change?.previousPath]));
+  for (const file of DIRECT_MESSAGES_NO_DB_SUITES) {
+    // Keep deleted/renamed pilot suites in the plan so missing evidence cannot become green.
+    if (affectedPaths.has(DIRECT_MESSAGES_SOURCE) || affectedPaths.has(file)) selected.add(file);
+  }
+  return [...selected].sort().map(file => ({
+    file,
+    requiresDatabase: !DIRECT_MESSAGES_NO_DB_SUITES.includes(file),
+  }));
 }
 
 export function selectE2eSpecs({ lane, changes }) {

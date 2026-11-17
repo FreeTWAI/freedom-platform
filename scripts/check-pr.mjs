@@ -13,6 +13,7 @@ import {
   parseCheckPrArgs,
   parseDiffNameStatus,
   parsePorcelainStatus,
+  planCheckPrRuntimeTests,
   partitionSpecsByE2ePass,
   selectChangedRuntimeTests,
   selectE2eSpecs,
@@ -189,8 +190,8 @@ async function main() {
   }
 
   const e2eCatalog = catalogData.files.filter(file => E2E_SPEC_PATH.test(file)).sort();
-  const runtimeTests = selectChangedRuntimeTests(changes);
-  const e2eRuntimeImports = runtimeTests.length > 0 ? collectLocalE2eRuntimeImports(catalogData.files) : new Set();
+  const runtimePlan = planCheckPrRuntimeTests(changes);
+  const e2eRuntimeImports = selectChangedRuntimeTests(changes).length > 0 ? collectLocalE2eRuntimeImports(catalogData.files) : new Set();
   const nonExecutableBlobsProven = changes.every(change => change.status === 'D' || change.mode === '100644');
 
   const lane = decideModuleLane({
@@ -239,22 +240,36 @@ async function main() {
   }
 
   if (failedChecks.length === 0 || args.keepGoing) {
-    if (process.env.TEST_DATABASE_URL) {
-      if (runtimeTests.length === 0) {
-        console.log('✓ runtime tests (0 changed) 0.0s');
-      } else {
-        for (const file of runtimeTests) {
-          const name = `runtime:${basename(file)}`;
-          const ok = runCheck(name, 'npx', ['tsx', '--test', '--test-concurrency=1', file]);
-          if (ok) passedChecks.push(name);
-          else {
-            failedChecks.push(name);
-            if (!args.keepGoing) break;
-          }
-        }
+    const hasDatabase = Boolean(process.env.TEST_DATABASE_URL);
+    if (runtimePlan.length === 0 && hasDatabase) {
+      console.log('✓ runtime tests (0 selected) 0.0s');
+    }
+    for (const { file, requiresDatabase } of runtimePlan) {
+      const name = `runtime:${basename(file)}`;
+      if (requiresDatabase && !hasDatabase) {
+        const reason = `${name}（未設定 TEST_DATABASE_URL）`;
+        console.log(`未執行：${reason}`);
+        skippedChecks.push(reason);
+        continue;
       }
-    } else {
-      console.log('未設定 TEST_DATABASE_URL，略過變更的 runtime 測試；本機資料庫與設定說明見 docs/development/local-runtime.md（設定 export TEST_DATABASE_URL=...）。');
+
+      // The pilot list is fixed; a removed or non-regular file must fail explicitly.
+      let pilotSuitePresent = true;
+      if (!requiresDatabase) {
+        try { pilotSuitePresent = lstatSync(join(ROOT, file)).isFile(); }
+        catch { pilotSuitePresent = false; }
+      }
+      if (!pilotSuitePresent) {
+        console.log(`✗ ${name}（必要測試檔缺失或不是一般檔案：${file}）`);
+      }
+      const ok = pilotSuitePresent && (requiresDatabase
+        ? runCheck(name, 'npx', ['tsx', '--test', '--test-concurrency=1', file])
+        : runCheck(name, process.execPath, ['--import', 'tsx', '--test', '--test-concurrency=1', file]));
+      if (ok) passedChecks.push(name);
+      else {
+        failedChecks.push(name);
+        if (!args.keepGoing) break;
+      }
     }
   }
 
