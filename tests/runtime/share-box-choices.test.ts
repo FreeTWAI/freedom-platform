@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { transformSync } from 'esbuild';
-import { PortalClient } from '../../apps/portal-web/src/api.js';
+import { ApiError, PortalClient } from '../../apps/portal-web/src/api.js';
 
 const shareBoxPath = new URL('../../apps/portal-web/src/share/ShareBox.tsx', import.meta.url);
 const eventComposerPath = new URL('../../apps/portal-web/src/share/EventComposer.tsx', import.meta.url);
@@ -798,4 +798,137 @@ test('UX-F-06: freedom-share-published carries title and kind from publish answe
       kind: 'repository',
     });
   }
+});
+
+test('retrying guild attribution after a confirmed note never creates another note', async () => {
+  const harness = createHookHarness();
+  const { ShareBoxLauncher, openShareComposer } = loadShareModules(harness);
+  const client = new PortalClient();
+  const calls: {path: string; key?: string; body: unknown}[] = [];
+  const postId = '00000000-0000-4000-8000-000000000021';
+  const shareId = '00000000-0000-4000-8000-000000000022';
+  let attribution = 0;
+  client.post = (async (path: string, body: unknown, options?: { idempotencyKey?: string }) => {
+    calls.push({path, body, key: options?.idempotencyKey});
+    if(path === '/social-posts/notes') return {post_id:postId, share_id:shareId};
+    assert.equal(path, '/shares');
+    if(++attribution === 1) throw new ApiError({status:422,message:'模擬歸功失敗',definitiveResponse:true});
+    return {share_id:shareId,url:`/#shares/${shareId}`};
+  }) as PortalClient['post'];
+  const render = () => harness.render(() =>
+    harness.reactStub.createElement(ShareBoxLauncher, {client, userId:'u-guild', onChoose(){}}),
+  );
+  const button = (label: string) => collectNodes(render()).find(n => n.type === 'button' && nodeText(n) === label)!;
+  render();
+  const initial = openShareComposer({text:'已完成的遊戲',source:{guild_key:'guild_games',tool_id:'game-one'}});
+  collectNodes(render()).find(n => n.type === 'textarea')!.props.onChange({target:{value:'已完成的遊戲'}});
+  button('發布').props.onClick();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(calls.map(call=>call.path), ['/social-posts/notes','/shares']);
+  assert.match(nodeText(collectNodes(render()).find(n => n.props.role === 'alert')), /貼文已發布，遊戲來源尚未確認/);
+  button('關閉').props.onClick();
+  assert.equal((await initial).status,'cancelled');
+  const other = await openShareComposer({text:'不同遊戲',source:{guild_key:'guild_games',tool_id:'game-two'}});
+  assert.equal(other.status,'cancelled');
+  assert.match(nodeText(collectNodes(render()).find(n => n.props.role === 'status')), /還有一筆分享待確認/);
+  const recovery = openShareComposer();
+  button('重試補記來源').props.onClick();
+  assert.equal((await recovery).status,'published');
+  assert.deepEqual(calls.map(call=>call.path), ['/social-posts/notes','/shares','/shares']);
+  assert.deepEqual(calls[1],calls[2]);
+});
+
+test('known game note can be kept without another write; old controls and late receipts cannot settle a different game', async () => {
+  const harness = createHookHarness();
+  const { ShareBoxLauncher, openShareComposer } = loadShareModules(harness);
+  const client = new PortalClient();
+  const calls: {path: string; key?: string; body: any}[] = [];
+  const ids = (n: number) => ({post_id:`00000000-0000-4000-8000-00000000003${n}`,share_id:`00000000-0000-4000-8000-00000000004${n}`});
+  function deferred<T>() {
+    let resolve!:(value:T)=>void,reject!:(reason:unknown)=>void;
+    const promise=new Promise<T>((accept,deny)=>{resolve=accept;reject=deny;});
+    return {promise,resolve,reject};
+  }
+  const note=deferred<ReturnType<typeof ids>>(), attribution=deferred<unknown>(), otherAttribution=deferred<unknown>();
+  let noteCount=0, attributionCount=0;
+  client.post = (async (path: string, body: unknown, options?: {idempotencyKey?: string}) => {
+    calls.push({path,body,key:options?.idempotencyKey});
+    if(path==='/social-posts/notes')return ++noteCount===1?note.promise:ids(2);
+    assert.equal(path,'/shares');
+    return ++attributionCount===1?attribution.promise:otherAttribution.promise;
+  }) as PortalClient['post'];
+  const render=()=>harness.render(()=>harness.reactStub.createElement(ShareBoxLauncher,{client,userId:'u-race',onChoose(){}}));
+  const nodes=()=>collectNodes(render());
+  const button=(name:string)=>nodes().find(n=>n.type==='button'&&nodeText(n)===name);
+  const keep='保留貼文，不再補記來源';
+  const open=(tool:string,text:string)=>openShareComposer({text,source:{guild_key:'guild_games',tool_id:tool}});
+  const turn=()=>new Promise<void>(resolve=>setImmediate(resolve));
+
+  render();
+  const first=open('game-one','第一局');
+  nodes().find(n=>n.type==='textarea')!.props.onChange({target:{value:'第一局'}});
+  const publish=button('發布')!;
+  publish.props.onClick();publish.props.onClick();
+  assert.deepEqual(calls.map(c=>c.path),['/social-posts/notes']);
+  assert.equal((await open('game-two','第二局')).status,'cancelled');
+  assert.equal(button(keep),undefined,'no confirmed post yet');
+  note.resolve(ids(1));
+  await turn();
+  let release=button(keep)!;
+  assert.equal(release.props.disabled,true);
+  release.props.onClick();
+  assert.equal((await open('game-two','第二局')).status,'cancelled');
+  assert.deepEqual(calls.map(c=>c.path),['/social-posts/notes','/shares']);
+  attribution.reject(new ApiError({status:403,message:'工具已停用',code:'tool_unavailable',definitiveResponse:true}));
+  await turn();
+  assert.equal((await open('game-two','第二局')).status,'cancelled');
+  assert.equal((await open('game-one','同一工具，另一局')).status,'cancelled');
+  assert.match(nodeText(nodes().find(n=>n.props.role==='status')), /還有一筆分享待確認/);
+  release=button(keep)!;
+  release.props.onClick();
+  const kept=await first;
+  assert.equal(kept.status,'published');
+  assert.equal((kept as {share_id?:string}).share_id,ids(1).share_id);
+  assert.equal(calls.length,2,'keeping the original sends neither a new note nor a source write');
+  assert.equal(nodes().some(n=>n.props.role==='status'),false,'interrupted hint clears on settlement');
+
+  const second=open('game-two','第二局');
+  nodes().find(n=>n.type==='textarea')!.props.onChange({target:{value:'第二局'}});
+  button('發布')!.props.onClick();
+  await turn();
+  assert.equal(calls.length,4);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[3].body.source)),{guild_key:'guild_games',tool_id:'game-two'});
+  assert.notEqual(calls[0].key,calls[2].key);
+  release.props.onClick(); // previously rendered control cannot settle the newer operation
+  otherAttribution.resolve({share_id:ids(2).share_id,url:`/#shares/${ids(2).share_id}`});
+  const next=await second;
+  assert.equal((next as {share_id?:string}).share_id,ids(2).share_id);
+  assert.equal(calls.length,4);
+});
+
+test('structured server failure and later refusal keep the immutable game note retry key', async () => {
+  const harness=createHookHarness(),{ShareBoxLauncher,openShareComposer}=loadShareModules(harness);
+  const client=new PortalClient();const calls:{path:string;key?:string;body:unknown}[]=[];
+  const postId='00000000-0000-4000-8000-000000000051',shareId='00000000-0000-4000-8000-000000000052';
+  client.post=(async(path:string,body:unknown,options?:{idempotencyKey?:string})=>{
+    calls.push({path,key:options?.idempotencyKey,body});
+    if(calls.length===1)throw new ApiError({status:503,message:'after an unknown outcome',definitiveResponse:true});
+    if(calls.length===2)throw new ApiError({status:422,message:'later refusal',definitiveResponse:true});
+    return path==='/social-posts/notes'?{post_id:postId,share_id:shareId}:{share_id:shareId,url:`/#shares/${shareId}`};
+  }) as PortalClient['post'];
+  const render=()=>harness.render(()=>harness.reactStub.createElement(ShareBoxLauncher,{client,userId:'u-uncertain',onChoose(){}}));
+  const nodes=()=>collectNodes(render());
+  const button=(name:string)=>nodes().find(n=>n.type==='button'&&nodeText(n)===name);
+  render();
+  const result=openShareComposer({text:'合成結果',source:{guild_key:'guild_games',tool_id:'game-one'}});
+  nodes().find(n=>n.type==='textarea')!.props.onChange({target:{value:'合成結果'}});
+  for(let i=0;i<2;i++){
+    button('發布')!.props.onClick();await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(button('保留貼文，不再補記來源'),undefined,'unknown result cannot be discarded as confirmed');
+    assert.equal(nodes().find(n=>n.type==='textarea')!.props.disabled,true);
+  }
+  button('發布')!.props.onClick();
+  assert.equal((await result).status,'published');
+  assert.deepEqual(calls.map(c=>c.path),['/social-posts/notes','/social-posts/notes','/social-posts/notes','/shares']);
+  assert.ok(calls[0].key);assert.deepEqual(calls[0],calls[1]);assert.deepEqual(calls[1],calls[2]);
 });
