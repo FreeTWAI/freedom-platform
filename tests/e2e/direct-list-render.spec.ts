@@ -16,7 +16,14 @@ for(const mode of ['desktop','phone','compact'])test(`${mode}: typing skips cach
     const participant=id=>({user_id:id,display_name:id,avatar_url:null,last_seen_at:null,is_online:false});
     const row=id=>({participant:participant(id),can_send:true,last_message:{message_id:'message-'+id,sender_ref:id,recipient_ref:'synthetic-me',created_at:'2026-11-04T00:00:00.000Z',read_at:'2026-11-04T00:00:00.000Z',retracted_at:fixture.fresh&&id==='p1'?'2026-11-04T12:00:00.000Z':null,body:fixture.fresh&&id==='p0'?'新預覽':'preview-'+id},unread_count:fixture.fresh&&id==='p0'?7:0});
     const client={sessionGeneration:1,get(url){fixture.reads.push(url);
-      if(url.startsWith('/me/conversations?')){const offset=Number(new URL(url,'http://fixture').searchParams.get('offset'));return Promise.resolve({items:Array.from({length:20},(_,i)=>row('p'+(offset+i))),unread_count:fixture.fresh?7:0,next_offset:offset===0?20:null});}
+      if(url.startsWith('/me/conversations?')){
+        const query=new URL(url,'http://fixture').searchParams,offset=Number(query.get('offset')),limit=Number(query.get('limit'));
+        const ordered=Array.from({length:40},(_,i)=>'p'+i);
+        if(fixture.fresh)ordered.unshift(ordered.splice(33,1)[0]);
+        const end=Math.min(ordered.length,offset+limit);
+        return Promise.resolve({items:ordered.slice(offset,end).map(row),unread_count:fixture.fresh?7:0,next_offset:end<ordered.length?end:null});
+      }
+      if(url.endsWith('/activity'))return Promise.resolve({last_message_id:null,unread_count:0,can_send:true,last_outgoing:null,retraction_count:'0'});
       const match=url.match(/^\\/me\\/conversations\\/(p\\d+)\\/messages\\?/);if(match)return Promise.resolve({participant:participant(match[1]),can_send:true,items:[],unread_count:0,retraction_count:'0',next_offset:null});
       throw new Error('Unexpected fixture read: '+url);
     },post(...args){fixture.writes.push(args);throw new Error('No write is permitted in this fixture');}};
@@ -34,8 +41,27 @@ for(const mode of ['desktop','phone','compact'])test(`${mode}: typing skips cach
   for(let i=0;i<12;i++)await input.fill(`保留草稿${i}`);
   await expect(input).toHaveValue('保留草稿11');expect(await page.evaluate(()=>(window as any).__listRender.formats)).toBe(0);
   if(mode!=='desktop'){await expect(list).toBeHidden();await page.getByRole('button',{name:mode==='compact'?'切換對象':'← 返回對話列表',exact:true}).click();}
-  await page.evaluate(()=>{(window as any).__listRender.fresh=true;});await page.getByRole('button',{name:'重新整理對話',exact:true}).click();
+  // Use a deterministic overflow container without depending on the enclosing portal layout.
+  await page.addStyleTag({content:'.messages-side{max-height:280px;overflow-y:auto}.messages-peer{block-size:72px}'});
+  const loadedPeer=peer('p32');
+  const beforeScroll=await loadedPeer.evaluate(element=>{
+    const panel=element.closest('.messages-side')!;
+    element.focus({preventScroll:true});
+    panel.scrollTop+=element.getBoundingClientRect().top-panel.getBoundingClientRect().top;
+    return {scrollTop:panel.scrollTop,relativeTop:element.getBoundingClientRect().top-panel.getBoundingClientRect().top};
+  });
+  expect(beforeScroll.scrollTop).toBeGreaterThan(0);await expect(loadedPeer).toBeFocused();
+  await page.evaluate(()=>{(window as any).__listRender.fresh=true;});
+  await page.clock.runFor(8100);
   await expect(peer('p0')).toContainText('新預覽');await expect(peer('p0')).toContainText('7 則未讀');await expect(peer('p1')).toContainText('訊息已收回');expect(await page.evaluate(()=>(window as any).__listRender.formats)).toBeGreaterThan(0);
+  await expect(list.locator('li')).toHaveCount(40);await expect(list.locator('li').first()).toHaveAttribute('data-peer-id','p33');
+  await expect(loadedPeer).toBeFocused();
+  expect(await loadedPeer.evaluate(element=>element.getBoundingClientRect().top-element.closest('.messages-side')!.getBoundingClientRect().top)).toBeCloseTo(beforeScroll.relativeTop,0);
+  expect(await page.evaluate(()=>(window as any).__listRender.reads.filter((url:string)=>url.startsWith('/me/conversations?')))).toEqual([
+    '/me/conversations?limit=20&offset=0','/me/conversations?limit=20&offset=20','/me/conversations?limit=40&offset=0',
+  ]);
+  await page.getByRole('button',{name:'重新整理對話',exact:true}).click();
+  await expect(list.locator('li')).toHaveCount(40);
   await peer('p1').click();await expect(input).toHaveValue('');
   if(mode!=='desktop')await page.getByRole('button',{name:mode==='compact'?'切換對象':'← 返回對話列表',exact:true}).click();
   await peer('p0').click();await expect(input).toHaveValue('保留草稿11');

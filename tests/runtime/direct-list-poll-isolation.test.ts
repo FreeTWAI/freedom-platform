@@ -44,7 +44,7 @@ function host({mobile=true,compact=false,active=true}={}){
  function state(){const list=nodes().find(n=>n.type==='ul'&&n.props['aria-label']==='對話列表');return{time:now,peers:walk(list).filter(n=>n.type==='strong').map(text),preview:walk(list).filter(n=>n.props.className==='chat-peer-preview').map(text),unread:unread.at(-1),listVisible:!nodes().find(n=>n.props.className==='messages-side')?.props.hidden,threadVisible:!nodes().find(n=>n.props.className==='messages-thread')?.props.hidden,liveError:nodes().some(n=>n.props.role==='status'&&text(n).includes('新訊息更新暫停')),listeners:{focus:window.listeners.get('focus')?.size??0,online:window.listeners.get('online')?.size??0,visibility:document.listeners.get('visibilitychange')?.size??0},intervals:[...timers.values()].filter(t=>t.interval).length};}
  async function resolve(call:Call,page:any){assert.ok(call&&!call.done);call.done=true;call.resolve(page);await settle();render();}
  async function reject(call:Call,cause=new Error('synthetic temporary network error')){assert.ok(call&&!call.done);call.done=true;call.reject(cause);await settle();render();}
- const conversation=(id='old',count=0)=>({participant:{user_id:id,display_name:id,avatar_url:null,last_seen_at:null,is_online:false},can_send:true,last_message:{message_id:'message-'+id,sender_ref:id,recipient_ref:'synthetic-me',created_at:'2026-11-04T00:00:00.000Z',read_at:'2026-11-04T00:00:00.000Z',retracted_at:null,body:'preview-'+id},unread_count:count});
+ const conversation=(id='old',count=0)=>({participant:{user_id:id,display_name:id,avatar_url:null,last_seen_at:null,is_online:false},can_send:true,last_message:{message_id:'message-'+id,sender_ref:id,recipient_ref:'synthetic-me',created_at:'2026-11-04T00:00:00.000Z',read_at:'2026-11-04T00:00:00.000Z',retracted_at:null as string|null,body:'preview-'+id},unread_count:count});
  const page=(ids=['old'],count=0,next:number|null=null)=>({items:ids.map(id=>conversation(id,count)),unread_count:count,next_offset:next});
  async function ready(p=page()){assert.equal(calls.length,1);await resolve(calls[0],p);}
  function button(label:string){const n=nodes().find(n=>n.type==='button'&&(n.props['aria-label']===label||text(n)===label));assert.ok(n,'button '+label);n.props.onClick();render();return n;}
@@ -118,4 +118,71 @@ test('unmount removes subscriptions and fences a pending list response',async()=
  const h=host();await h.ready();await h.tick(8000);const pending=h.listCalls().at(-1)!;h.unmount();const before=h.count();
  h.event('online');h.event('focus');h.event('visibilitychange','visible');await h.tick(16000);await h.resolve(pending,h.page(['late'],99));
  assert.deepEqual(h.count(),before);assert.deepEqual(h.unread,[0]);assert.equal(h.state().intervals,0);assert.deepEqual(h.state().listeners,{focus:0,online:0,visibility:0});
+});
+
+const peers=(offset:number,count:number)=>Array.from({length:count},(_,i)=>'peer-'+(offset+i));
+const query=(call:Call)=>new URL(call.url,'http://fixture').search;
+async function append(h:ReturnType<typeof host>,offset:number,next:number|null=offset+20){
+ h.button('載入更多對話');
+ const load=h.listCalls().at(-1)!;assert.equal(query(load),`?limit=20&offset=${offset}`);
+ await h.resolve(load,h.page(peers(offset,20),2,next));
+}
+test('a quiet 40-row reread is one request, replaces authoritative previews and keeps the deeper cursor',async()=>{
+ const h=host();await h.ready(h.page(peers(0,20),1,20));await append(h,20);
+ await h.tick(8000);const quiet=h.listCalls().at(-1)!;assert.equal(query(quiet),'?limit=40&offset=0');assert.equal(h.state().peers.length,40);
+ const fresh=h.page(peers(0,40),7,40);fresh.items[32].last_message.retracted_at='2026-11-04T12:00:00.000Z';
+ await h.resolve(quiet,fresh);assert.deepEqual(h.state().peers,peers(0,40));assert.equal(h.state().preview[32],'訊息已收回');assert.equal(h.state().unread,7);
+ await append(h,40);
+});
+test('automatic refresh neither cancels nor starves a slow append; overlapping rows are not repeated',async()=>{
+ const h=host();await h.ready(h.page(peers(0,20),1,20));
+ h.button('載入更多對話');const pending=h.listCalls().at(-1)!;
+ await h.tick(15000);h.event('focus');h.event('visibilitychange','visible');assert.equal(h.listCalls().length,2);
+ const partial=h.page(peers(19,20),2,40);partial.items[0].last_message.body='must not replace existing preview';
+ await h.resolve(pending,partial);assert.deepEqual(h.state().peers,peers(0,39));assert.equal(h.state().preview[19],'preview-peer-19');
+ await h.tick();const due=h.listCalls().at(-1)!;assert.equal(query(due),'?limit=40&offset=0');
+ await h.resolve(due,h.page(peers(0,40),3,40));assert.deepEqual(h.state().peers,peers(0,40));
+});
+test('load-more clicked during a quiet read waits for the fresh cursor without issuing competing GETs',async()=>{
+ const h=host();await h.ready(h.page(peers(0,20),1,20));
+ await h.tick(8000);const quiet=h.listCalls().at(-1)!;h.button('載入更多對話');assert.equal(h.listCalls().length,2);
+ const newHead=['new',...peers(0,19)];await h.resolve(quiet,h.page(newHead,2,20));
+ const more=h.listCalls().at(-1)!;assert.notEqual(more,quiet);assert.equal(query(more),'?limit=20&offset=20');
+ await h.resolve(more,h.page(peers(19,20),2,40));assert.deepEqual(h.state().peers,['new',...peers(0,39)]);
+});
+test('an explicit invalidation fences an older append and replays the click against the latest cursor',async()=>{
+ const h=host();await h.ready(h.page(peers(0,20),1,20));h.button('載入更多對話');
+ const stale=h.listCalls().at(-1)!;h.event('all-read');const current=h.listCalls().at(-1)!;
+ assert.equal(query(current),'?limit=20&offset=0');await h.resolve(stale,h.page(['stale'],98,40));assert.ok(!h.state().peers.includes('stale'));
+ await h.resolve(current,h.page(peers(0,20),0,20));const corrected=h.listCalls().at(-1)!;assert.notEqual(corrected,stale);assert.equal(query(corrected),'?limit=20&offset=20');
+ await h.resolve(corrected,h.page(peers(20,20),0,40));assert.deepEqual(h.state().peers,peers(0,40));assert.equal(h.state().unread,0);
+});
+test('deeper refresh caps each read at 50, scales cadence on failure and deduplicates authoritative slices atomically',async()=>{
+ const h=host();await h.ready(h.page(peers(0,20),1,20));await append(h,20);await append(h,40);
+ await h.tick(8000);for(let i=0;i<3;i++)h.event('focus');assert.equal(h.listCalls().length,3);
+ await h.tick(8000);const first=h.listCalls().at(-1)!;assert.equal(query(first),'?limit=50&offset=0');
+ const partial=h.page(['first attempt',...peers(1,49)],7,50);partial.items[32].last_message.retracted_at='2026-11-04T12:00:00.000Z';
+ await h.resolve(first,partial);
+ const last=h.listCalls().at(-1)!;assert.equal(query(last),'?limit=10&offset=50');assert.deepEqual(h.state().peers,peers(0,60));
+ await h.reject(last);assert.deepEqual(h.state().peers,peers(0,60));assert.equal(h.state().preview[32],'訊息已收回');assert.equal(h.state().unread,null);
+ await h.tick(15000);for(let i=0;i<3;i++)h.event('focus');assert.equal(h.listCalls().length,5);
+ await h.tick();assert.equal(query(h.listCalls().at(-1)!),'?limit=50&offset=0');
+ await h.resolve(h.listCalls().at(-1)!,h.page(['new',...peers(0,49)],9,50));
+ await h.resolve(h.listCalls().at(-1)!,h.page(peers(48,10),99,60));
+ assert.deepEqual(h.state().peers,['new',...peers(0,58)]);assert.equal(h.state().unread,9);
+ await append(h,60,80);assert.ok(h.state().peers.includes('peer-60'));
+});
+test('a removal or loss of access never keeps unauthorized tail previews',async()=>{
+ const h=host();await h.ready(h.page(peers(0,20),1,20));await append(h,20);
+ await h.tick(8000);await h.resolve(h.listCalls().at(-1)!,h.page(peers(0,30),2,null));
+ assert.deepEqual(h.state().peers,peers(0,30));
+ await h.tick(8000);await h.reject(h.listCalls().at(-1)!,new h.ApiError('synthetic revoked',403));
+ assert.deepEqual(h.state().peers,[]);assert.equal(h.state().unread,null);
+});
+test('an older pending append cannot land after the principal or session generation changes',async()=>{
+ const h=host();await h.ready(h.page(peers(0,20),1,20));h.button('載入更多對話');const stale=h.listCalls().at(-1)!;
+ h.props.client.sessionGeneration++;h.props.session={user:{user_id:'new-member'}};h.render();
+ const first=h.listCalls().at(-1)!;assert.equal(query(first),'?limit=20&offset=0');assert.deepEqual(h.state().peers,[]);
+ await h.resolve(first,h.page(['current'],0));await h.resolve(stale,h.page(['stale'],97,40));
+ assert.deepEqual(h.state().peers,['current']);assert.equal(h.state().unread,0);
 });
