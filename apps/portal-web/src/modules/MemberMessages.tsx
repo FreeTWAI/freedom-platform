@@ -25,7 +25,7 @@ import {isFirstImageDecoderRejection,matchesDirectMessageAck,messageImageFileErr
 import {MessageImagePreview} from './MessageImagePreview';
 import {chatPollDue,idleChatPoll,resetChatPoll} from './adaptive-chat-poll';
 import {reconcileMessageAck,refreshLoadedMessages} from './message-refresh';
-import {isOrderNotificationAction,type DirectMessageReceiptPage,type OrderNotificationAction} from '../../../../modules/member-communications/types';
+import {COMMUNICATION_PAGE_MAX_LIMIT,isOrderNotificationAction,type DirectMessageReceiptPage,type OrderNotificationAction} from '../../../../modules/member-communications/types';
 
 type ActionTab='members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social'|'stores'|'reservations';
 type NotificationAction={tab:Exclude<ActionTab,'stores'|'reservations'>;resource_id:string|null}|OrderNotificationAction;
@@ -42,6 +42,8 @@ type MemberPage={items:MemberCardData[];total:number;next_offset:number|null};
 type Props={client:PortalClient;session:SessionPayload;messageImagesEnabled?:boolean;memberBlockingEnabled?:boolean;onNavigate:(id:TabId)=>void;onNotificationPeer?:{id:string;sequence:number};registerLeave?:(guard:(()=>boolean)|null)=>void};
 
 const PAGE=20,MAX_BODY=2000,LIVE_POLL_MS=1000;
+const CONVERSATION_OFFSET_MAX=10000,CONVERSATION_POLL_MS=8000;
+const conversationNext=(offset:number|null)=>offset!==null&&offset<=CONVERSATION_OFFSET_MAX?offset:null;
 // Actions map to fixed in-app pages only; a notification can never supply a link.
 const actionLabels:Record<ActionTab,string>={members:'前往工坊夥伴',squads:'前往小隊集合',guilds:'前往職業公會','guild-workspace':'前往公會管理',messages:'開啟私訊',events:'前往活動',social:'查看貼文',stores:'查看店家訂單',reservations:'查看我的訂單'};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -298,7 +300,13 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   // Manual refreshes keep the loaded list/thread (and the focused button) on screen until the new page arrives.
   const [convRefresh,setConvRefresh]=useState({loading:false,error:''}),[threadRefresh,setThreadRefresh]=useState({loading:false,error:''});
   // The in-flight refs record the full read that is still out, so a confirmed write can supersede it.
-  const convInFlight=useRef<boolean|null>(null),threadInFlight=useRef<{id:string;quiet:boolean}|null>(null);
+  const convInFlight=useRef<boolean|null>(null),convMoreInFlight=useRef<object|null>(null),convMoreQueued=useRef(false);
+  const convWindow=useRef<{span:number;next:number|null}>({span:PAGE,next:null});
+  const convSession=client.sessionGeneration,convOwner=useRef({client,member:me,session:convSession});
+  const convList=useRef<HTMLUListElement>(null);
+  const convAnchor=useRef<{list:HTMLUListElement;scroll:Element;id:string;top:number}|null>(null);
+  const convFocus=useRef<HTMLElement|null>(null);
+  const threadInFlight=useRef<{id:string;quiet:boolean}|null>(null);
   const olderInFlight=useRef<{id:string;generation:number;refresh:boolean}|null>(null),olderQueued=useRef<{id:string;generation:number}|null>(null);
   const quietInFlight=useRef(new Map<number,string>());
   const convGeneration=useRef(0),threadGeneration=useRef(0),currentPeer=useRef<string|null>(null),heading=useRef<HTMLHeadingElement>(null),focusThread=useRef(false),alive=useRef(true);
@@ -349,32 +357,135 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   useLayoutEffect(()=>{const node=scroll.current;if(!node)return;if(anchor.current){node.scrollTop=anchor.current.top+node.scrollHeight-anchor.current.height;anchor.current=null;}else if(stick.current){node.scrollTop=node.scrollHeight;setHasNew(false);}},[thread,peer,pending[peer??''],picking,singlePane]);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;olderQueued.current=null;convGeneration.current++;threadGeneration.current++;};},[]);
 
-  const loadConversations=useCallback(async(quiet=false)=>{
-    listCheckedAt.current=Date.now();
-    const current=++convGeneration.current;convInFlight.current=quiet;setConvMore({loading:false,error:''});
-    if(quiet)setConvRefresh({loading:true,error:''});else{setConvStatus('loading');setConvError('');setConvRefresh({loading:false,error:''});}
-    try{
-      const page=await client.get<ConversationPage>(`/me/conversations?limit=${PAGE}&offset=0`);
-      if(current!==convGeneration.current)return;
-      convInFlight.current=null;setConversations(page.items);setConvNext(page.next_offset);onUnread(page.unread_count);setConvStatus('ready');setConvRefresh({loading:false,error:''});
-    }catch(cause){
-      if(current!==convGeneration.current)return;
-      convInFlight.current=null;
-      // The list on screen is kept, but its total is no longer confirmed.
-      if(quiet){setConvRefresh({loading:false,error:fail(cause)});onUnread(null);}else{setConvError(fail(cause));setConvStatus('error');}
+  // Preserve the visible row (rather than a raw scroll offset) when a background read reorders the head.
+  function anchorConversations(items:Conversation[]){
+    convAnchor.current=null;convFocus.current=null;
+    const list=convList.current;if(!list||!list.getClientRects().length)return;
+    const focused=document.activeElement;
+    if(focused instanceof HTMLElement&&list.contains(focused))convFocus.current=focused;
+    let scroll=list.parentElement;
+    while(scroll&&!(scroll.scrollHeight>scroll.clientHeight&&/auto|scroll/.test(getComputedStyle(scroll).overflowY)))scroll=scroll.parentElement;
+    const documentScroll=document.scrollingElement;
+    if(!scroll)scroll=documentScroll as HTMLElement|null;
+    if(!scroll||scroll.scrollTop<=0)return;
+    const top=scroll===documentScroll?0:scroll.getBoundingClientRect().top;
+    const rows=list.children;
+    let low=0,high=rows.length;
+    while(low<high){const middle=(low+high)>>1;if(rows[middle].getBoundingClientRect().bottom<=top)low=middle+1;else high=middle;}
+    const ids=new Set(items.map(item=>item.participant.user_id));
+    for(let i=low;i<rows.length;i++){
+      const row=rows[i] as HTMLLIElement,id=row.dataset.peerId,bounds=row.getBoundingClientRect();
+      if(bounds.top>=top+scroll.clientHeight)break;
+      if(id&&ids.has(id)){convAnchor.current={list,scroll,id,top:bounds.top};break;}
     }
-  },[client,onUnread]);
+  }
+  useLayoutEffect(()=>{
+    const anchor=convAnchor.current,focused=convFocus.current;convAnchor.current=null;convFocus.current=null;
+    if(anchor&&convList.current===anchor.list&&anchor.list.getClientRects().length){
+      const sameRow=Array.from(anchor.list.children).find(row=>(row as HTMLLIElement).dataset.peerId===anchor.id);
+      if(sameRow){
+        const delta=sameRow.getBoundingClientRect().top-anchor.top;
+        if(delta)anchor.scroll.scrollTop+=delta;
+      }
+    }
+    // Moving a keyed node can make a browser drop focus even though it still exists.
+    if(focused?.isConnected&&document.activeElement===document.body)focused.focus({preventScroll:true});
+  },[conversations]);
+
+  const moreConversations=useCallback(async()=>{
+    const offset=convWindow.current.next;
+    if(offset===null||convMoreInFlight.current)return;
+    if(convInFlight.current!==null){convMoreQueued.current=true;setConvMore({loading:true,error:''});return;}
+    const request={},generation=convGeneration.current;convMoreInFlight.current=request;
+    const current=()=>alive.current&&convMoreInFlight.current===request&&convGeneration.current===generation
+      &&client.sessionGeneration===convSession&&convOwner.current.client===client&&convOwner.current.member===me;
+    setConvMore({loading:true,error:''});
+    try{
+      const page=await client.get<ConversationPage>(`/me/conversations?limit=${PAGE}&offset=${offset}`);
+      if(!current())return;
+      const next=conversationNext(page.next_offset);
+      if(next!==null&&(!Number.isSafeInteger(next)||next<=offset))throw new Error('較早對話尚未更新，請重新整理。');
+      convWindow.current={span:Math.max(PAGE,next??offset+page.items.length),next};
+      // Offset pages may overlap when a peer moves to the head between reads. Do not overwrite the newer loaded row.
+      const unique=[...new Map(page.items.map(item=>[item.participant.user_id,item])).values()];
+      setConversations(value=>merge(value,unique,item=>item.participant.user_id));setConvNext(next);onUnread(page.unread_count);setConvMore({loading:false,error:''});
+    }catch(cause){
+      if(!current())return;
+      if(cause instanceof ApiError&&(cause.status===401||cause.status===403)){
+        convWindow.current={span:PAGE,next:null};setConversations([]);setConvNext(null);setConvStatus('error');setConvError(fail(cause));onUnread(null);setConvMore({loading:false,error:''});
+      }else setConvMore({loading:false,error:fail(cause)});
+    }finally{if(convMoreInFlight.current===request)convMoreInFlight.current=null;}
+  },[client,convSession,me,onUnread]);
+
+  const loadConversations=useCallback(async(quiet=false,background=false)=>{
+    // An automatic timer never invalidates a member's pending load-more.
+    if(background&&(convInFlight.current!==null||convMoreInFlight.current))return;
+    if(convMoreInFlight.current){convMoreQueued.current=quiet;convMoreInFlight.current=null;}
+    listCheckedAt.current=Date.now();
+    const generation=++convGeneration.current;convInFlight.current=quiet;
+    const current=()=>alive.current&&convGeneration.current===generation
+      &&client.sessionGeneration===convSession&&convOwner.current.client===client&&convOwner.current.member===me;
+    if(!convMoreQueued.current&&!background)setConvMore({loading:false,error:''});
+    if(quiet){if(!background)setConvRefresh({loading:true,error:''});}
+    else{convWindow.current={span:PAGE,next:null};setConvStatus('loading');setConvError('');setConvRefresh({loading:false,error:''});}
+    // A quiet refresh revalidates the entire loaded range rather than retaining stale private previews.
+    // Typical one/two-page usage takes a single GET; deeper ranges use bounded, sequential API pages.
+    const span=convWindow.current.span,pages=new Map<string,Conversation>();
+    try{
+      let offset=0,unread=0,next:number|null=null;
+      do{
+        const limit=Math.min(COMMUNICATION_PAGE_MAX_LIMIT,span-offset);
+        const page=await client.get<ConversationPage>(`/me/conversations?limit=${limit}&offset=${offset}`);
+        if(!current())return;
+        if(offset===0)unread=page.unread_count;
+        for(const item of page.items)if(!pages.has(item.participant.user_id))pages.set(item.participant.user_id,item);
+        next=conversationNext(page.next_offset);
+        if(next!==null&&(!Number.isSafeInteger(next)||next<=offset))throw new Error('較早對話尚未更新，請重新整理。');
+        if(next===null||next>=span){convWindow.current={span:next??Math.max(PAGE,offset+page.items.length),next};break;}
+        offset=next;
+      }while(offset<span);
+      const items=[...pages.values()];
+      if(quiet)anchorConversations(items);
+      setConversations(items);setConvNext(next);onUnread(unread);setConvStatus('ready');setConvRefresh({loading:false,error:''});
+    }catch(cause){
+      if(!current())return;
+      if(cause instanceof ApiError&&(cause.status===401||cause.status===403)){
+        convWindow.current={span:PAGE,next:null};setConversations([]);setConvNext(null);setConvStatus('error');setConvError(fail(cause));setConvRefresh({loading:false,error:''});onUnread(null);
+      }else if(quiet){
+        // Keep the old window/cursor on partial transport failure, but never hide a confirmed retraction.
+        if(pages.size)setConversations(value=>{
+          let changed=false;
+          const sanitized=value.map(item=>{
+            const fresh=pages.get(item.participant.user_id);
+            if(!item.last_message.retracted_at&&fresh?.last_message.retracted_at&&fresh.last_message.message_id===item.last_message.message_id){
+              changed=true;return {...item,last_message:fresh.last_message};
+            }
+            return item;
+          });
+          return changed?sanitized:value;
+        });
+        setConvRefresh({loading:false,error:fail(cause)});onUnread(null);
+      }else{setConvError(fail(cause));setConvStatus('error');}
+    }finally{
+      if(current()){
+        convInFlight.current=null;
+        if(convMoreQueued.current){
+          convMoreQueued.current=false;
+          if(convWindow.current.next!==null)void moreConversations();
+          else setConvMore({loading:false,error:''});
+        }
+      }
+    }
+  },[client,convSession,me,onUnread,moreConversations]);
+  useLayoutEffect(()=>{
+    const owner=convOwner.current;
+    if(owner.client===client&&owner.member===me&&owner.session===convSession)return;
+    convOwner.current={client,member:me,session:convSession};
+    convGeneration.current++;convInFlight.current=null;convMoreInFlight.current=null;convMoreQueued.current=false;
+    convWindow.current={span:PAGE,next:null};convAnchor.current=null;convFocus.current=null;setConversations([]);setConvNext(null);setConvMore({loading:false,error:''});setConvStatus('loading');
+  },[client,convSession,me]);
   useEffect(()=>{void loadConversations();},[loadConversations]);
   useEffect(()=>{const update=()=>void loadConversations(true);window.addEventListener(INBOX_ALL_READ,update);return()=>window.removeEventListener(INBOX_ALL_READ,update)},[loadConversations]);
-  async function moreConversations(){
-    if(convNext===null||convMore.loading)return;
-    const current=convGeneration.current;setConvMore({loading:true,error:''});
-    try{
-      const page=await client.get<ConversationPage>(`/me/conversations?limit=${PAGE}&offset=${convNext}`);
-      if(current!==convGeneration.current)return;
-      setConversations(value=>merge(value,page.items,item=>item.participant.user_id));setConvNext(page.next_offset);onUnread(page.unread_count);setConvMore({loading:false,error:''});
-    }catch(cause){if(current===convGeneration.current)setConvMore({loading:false,error:fail(cause)});}
-  }
 
   const loadThread=useCallback(async(id:string,quiet=false)=>{
     // A read ACK or background refresh must not cancel a member's older-page request.
@@ -437,7 +548,9 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
     const shown=snapshot.current,id=currentPeer.current;
     if(!shown.active||document.visibilityState!=='visible'||!navigator.onLine)return;
     // Other conversations remain discoverable without reloading their previews every second.
-    if(convInFlight.current===null&&Date.now()-listCheckedAt.current>=8000)void loadConversations(true);
+    // Amortize a multi-page sweep: no extra background requests per eight seconds as history grows.
+    const listPollMs=CONVERSATION_POLL_MS*Math.ceil(convWindow.current.span/COMMUNICATION_PAGE_MAX_LIMIT);
+    if(Date.now()-listCheckedAt.current>=listPollMs)void loadConversations(true,true);
     if(polling.current||Date.now()<retryAt.current)return;
     if(!shown.readingThread||!id||shown.threadStatus!=='ready'||!shown.thread||shown.reading||shown.sending||threadInFlight.current||moreState.current.loading)return;
     const refreshDue=receiptRefresh.current.has(id)||directMessageReceiptRefreshDue(shown.thread.items,me,receiptCheckedAt.current.get(id)??0,Date.now());
@@ -453,7 +566,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
       if(!alive.current||currentPeer.current!==id||threadGeneration.current!==nextGeneration)return;
       if(!refreshed){retryAt.current=Date.now()+Math.min(60000,2000*2**Math.min(++failures.current,5));setLiveError('新訊息更新暫停，會自動重試。草稿仍保留，也可手動重讀。');return;}
       failures.current=0;retryAt.current=0;setLiveError('');
-      if(convInFlight.current===null)void loadConversations(true);
+      if(convWindow.current.span<=COMMUNICATION_PAGE_MAX_LIMIT)void loadConversations(true,true);
       announceInboxChange();
     }catch(cause){
       if(!alive.current||generation!==threadGeneration.current||currentPeer.current!==id)return;
@@ -479,7 +592,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   // A read that was already out when a write was confirmed may answer with the state before it.
   // Starting a new one supersedes it (and its busy flag), so the screen settles on a snapshot taken after the write.
   function rereadAfterWrite(id:string){
-    if(convInFlight.current!==null)void loadConversations(convInFlight.current);
+    if(convInFlight.current!==null||convMoreInFlight.current)void loadConversations(convInFlight.current??true);
     const open=threadInFlight.current;if(open&&open.id===id&&currentPeer.current===id)void loadThread(id,open.quiet);
   }
   useEffect(()=>{if(threadStatus==='ready'&&focusThread.current){focusThread.current=false;heading.current?.focus();}},[threadStatus]);
@@ -638,8 +751,8 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
     [thread,peer,Boolean(attempt),retracting,messageImagesEnabled,changeRichDraft,uid,calendarKey]);
   // Draft keystrokes must not rebuild every peer, avatar and localized timestamp,
   // including the hidden phone picker. Live rows, selection and calendar still invalidate.
-  const conversationList=useMemo(()=>(conversations.length===0?<p className="empty">還沒有私訊。可搜尋會員開始對話。</p>:<ul className="messages-list" aria-label="對話列表">
-          {conversations.map(item=><li key={item.participant.user_id} className={item.unread_count?'is-unread':undefined}>
+  const conversationList=useMemo(()=>(conversations.length===0?<p className="empty">還沒有私訊。可搜尋會員開始對話。</p>:<ul ref={convList} className="messages-list" aria-label="對話列表">
+          {conversations.map(item=><li key={item.participant.user_id} data-peer-id={item.participant.user_id} className={item.unread_count?'is-unread':undefined}>
             <button type="button" className="messages-peer" aria-current={peer===item.participant.user_id?'true':undefined} onClick={()=>select(item.participant.user_id,true)}>
               <MemberAvatar nickname={item.participant.display_name} avatarUrl={item.participant.avatar_url}/>
               <span className="chat-peer-copy"><strong>{item.participant.display_name}</strong><MemberPresence online={item.participant.is_online} lastSeen={item.participant.last_seen_at}/><span className="chat-peer-preview">{item.last_message.sender_ref===me?'你：':''}{item.last_message.retracted_at?'訊息已收回':messageImagesEnabled===true&&item.last_message.image&&item.last_message.body==='[圖片]'?'圖片':item.last_message.body.slice(0,40)}</span></span>
