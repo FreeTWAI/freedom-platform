@@ -1332,7 +1332,14 @@ test.describe('UX-7 real touch cooking',()=>{
 
 test('UX-7: a failed kitchen renderer loads the usable illustration, and a draw fault preserves the same dish',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');await expect(page.locator('.ck-visual-light')).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await page.unroute('**/assets/kitchen-stage-*.js');await page.reload();await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await page.getByRole('button',{name:'繼續料理',exact:true}).click();
-  const clear=await page.evaluateHandle(()=>WebGL2RenderingContext.prototype.clear);await page.evaluate(()=>{WebGL2RenderingContext.prototype.clear=function(){throw Error('Synthetic toy kitchen draw fault');};});await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await page.evaluate(original=>{WebGL2RenderingContext.prototype.clear=original;},clear);await clear.dispose();await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');expect(errors).toEqual([]);
+  // Exercise the idle scene too: the knife pulse ends after 320ms, then unchanged
+  // slice frames need no render. A delayed browser command must still test a fault.
+  await exitStartedFullscreen(page);
+  await page.waitForTimeout(1000);
+  const clear=await page.evaluateHandle(()=>WebGL2RenderingContext.prototype.clear);await page.evaluate(()=>{WebGL2RenderingContext.prototype.clear=function(){throw Error('Synthetic toy kitchen draw fault');};});
+  // A real viewport change requests a draw without advancing the dish.
+  await page.setViewportSize({width:1100,height:700});
+  await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');await page.evaluate(original=>{WebGL2RenderingContext.prototype.clear=original;},clear);await clear.dispose();await page.getByRole('button',{name:'立體料理台',exact:true}).click();await expect(page.locator('.ck-visual-3d')).toBeVisible(sceneReady);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 6');expect(errors).toEqual([]);
 });
 async function scenePoint(page:Page,x:number,y:number){const box=await page.locator('.ck-scene').boundingBox();expect(box).toBeTruthy();return {x:box!.x+x*box!.width,y:box!.y+y*box!.height};}
 async function playRecipe(page:Page,recipe:Recipe){
