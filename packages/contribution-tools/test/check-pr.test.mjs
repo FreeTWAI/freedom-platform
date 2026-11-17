@@ -11,6 +11,7 @@ import {
   parseCheckPrArgs,
   parseDiffNameStatus,
   parsePorcelainStatus,
+  planCheckPrRuntimeTests,
   partitionSpecsByE2ePass,
   selectChangedRuntimeTests,
   selectE2eSpecs,
@@ -177,6 +178,50 @@ test('parseDiffNameStatus, parsePorcelainStatus, and mergeWorkingChanges normali
   function mergeChangesHelper() {
     return mergeWorkingChanges(committed, uncommitted);
   }
+});
+
+const DIRECT_MESSAGES_SOURCE = 'apps/portal-web/src/modules/MemberMessages.tsx';
+const DIRECT_LIST_RENDER_TEST = 'tests/runtime/direct-list-render.test.ts';
+
+test('source-only MemberMessages changes select the four curated no-database checks', () => {
+  assert.deepEqual(planCheckPrRuntimeTests([{ status: 'M', path: DIRECT_MESSAGES_SOURCE }]), [
+    { file: 'tests/runtime/chat-sticker-send.test.ts', requiresDatabase: false },
+    { file: 'tests/runtime/direct-list-poll-isolation.test.ts', requiresDatabase: false },
+    { file: DIRECT_LIST_RENDER_TEST, requiresDatabase: false },
+    { file: 'tests/runtime/direct-message-receipts.test.ts', requiresDatabase: false },
+  ]);
+  assert.deepEqual(planCheckPrRuntimeTests([{ status: 'M', path: 'apps/portal-web/src/modules/Other.tsx' }]), []);
+});
+
+test('runtime pilot deduplicates explicitly changed suites and does not reclassify unrelated tests', () => {
+  const mixed = [
+    { status: 'M', path: DIRECT_MESSAGES_SOURCE },
+    { status: 'M', path: DIRECT_LIST_RENDER_TEST },
+    { status: 'M', path: 'tests/runtime/community.test.ts' },
+    { status: 'D', path: 'tests/runtime/unrelated-removed.test.ts' },
+  ];
+  const planned = planCheckPrRuntimeTests(mixed);
+  assert.equal(planned.length, 5);
+  assert.equal(planned.filter(test => test.file === DIRECT_LIST_RENDER_TEST).length, 1);
+  assert.deepEqual(planned.filter(test => test.requiresDatabase), [
+    { file: 'tests/runtime/community.test.ts', requiresDatabase: true },
+  ]);
+  assert.deepEqual(planCheckPrRuntimeTests(mixed.slice(1)), [
+    { file: 'tests/runtime/community.test.ts', requiresDatabase: true },
+    { file: DIRECT_LIST_RENDER_TEST, requiresDatabase: false },
+  ]);
+});
+
+test('deleted or renamed curated suites remain required by the local runtime gate', () => {
+  assert.deepEqual(planCheckPrRuntimeTests([{ status: 'D', path: DIRECT_LIST_RENDER_TEST }]), [
+    { file: DIRECT_LIST_RENDER_TEST, requiresDatabase: false },
+  ]);
+  assert.deepEqual(planCheckPrRuntimeTests([
+    { status: 'R', previousPath: DIRECT_LIST_RENDER_TEST, path: 'tests/runtime/replacement.test.ts' },
+  ]), [
+    { file: DIRECT_LIST_RENDER_TEST, requiresDatabase: false },
+    { file: 'tests/runtime/replacement.test.ts', requiresDatabase: true },
+  ]);
 });
 
 test('runtime test selection, e2e spec selection, and summary stay bounded and accurate', () => {
