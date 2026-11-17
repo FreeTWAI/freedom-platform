@@ -107,8 +107,9 @@ export function SocialRichText({client,text,mentions=[],onTag}:{client:PortalCli
  parts.push(plain(text.slice(cursor),text.length));
  return <>{parts}</>;
 }
-// The trailing @query still being typed; a chosen member followed by a space is complete, not a query.
-export function pendingMentionQuery(text:string,mentions:readonly Mention[]){const at=/(?:^|\s)@([^@#\n]{0,40})$/.exec(text);if(!at)return undefined;const typed=at[1];return /\s$/.test(typed)&&mentions.some(m=>m.display_name===typed.trimEnd())?undefined:typed;}
+// The trailing @query still being typed. A chosen member followed by whitespace is complete,
+// so words written after it (or a draft kept behind a reply tag) are not a member search.
+export function pendingMentionQuery(text:string,mentions:readonly Mention[]){const at=/(?:^|\s)@([^@#\n]{0,40})$/.exec(text);if(!at)return undefined;const typed=at[1];return mentions.some(m=>typed.startsWith(m.display_name)&&/^\s/.test(typed.slice(m.display_name.length)))?undefined:typed;}
 export function SocialTextTools({client,text,onChange,mentions,onMentions,disabled,maxLength=1000}:{client:PortalClient;text:string;onChange:(s:string)=>void;mentions:Mention[];onMentions:(v:Mention[])=>void;disabled:boolean;maxLength?:number}){
  const {language}=useLanguage();
  const t=(key:keyof typeof textToolMessages)=>textToolMessages[key][textToolLanguageIndex[language]];
