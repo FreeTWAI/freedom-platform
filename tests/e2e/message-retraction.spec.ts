@@ -178,3 +178,101 @@ for(const width of [390,1280])for(const failRefresh of [false,true])test(`a conf
     await expect(panel.locator('.messages-bubbles')).toContainText(next);await expect(tombstone).toHaveText('你已收回這則訊息。');
   }finally{if(old)await old.route.abort().catch(()=>{});if(fresh)await fresh.route.abort().catch(()=>{});}
 });
+
+for(const mode of ['foreground','hidden','offline'] as const){
+  test(`open guild refreshes 102 loaded messages without losing the viewport (${mode})`,async({browser,baseURL})=>{
+    const guild='guild_ai_vibe',original=randomUUID(),reply=randomUUID(),anchor=randomUUID();
+    const marker='合成：已收回內容',body=marker+' '+('tall synthetic content '.repeat(55));
+    await db.query(`INSERT INTO member_chat_channels(community_id,kind,channel_key,last_sequence) VALUES($1,'guild',$2,102)
+      ON CONFLICT(community_id,kind,channel_key) DO UPDATE SET last_sequence=102`,[DEMO_COMMUNITY,guild]);
+    await db.query(`INSERT INTO member_channel_messages(message_id,community_id,kind,channel_key,sequence,sender_ref,body,created_at)
+      VALUES($1,$2,'guild',$3,1,$4,$5,now()-interval '3 min')`,[original,DEMO_COMMUNITY,guild,accounts[0].id,body]);
+    await db.query(`INSERT INTO member_channel_messages(message_id,community_id,kind,channel_key,sequence,sender_ref,body,reply_to_message_id,created_at)
+      VALUES($1,$2,'guild',$3,2,$4,'合成：保留回覆',$5,now()-interval '179 sec')`,[reply,DEMO_COMMUNITY,guild,accounts[0].id,original]);
+    await db.query(`INSERT INTO member_channel_messages(message_id,community_id,kind,channel_key,sequence,sender_ref,body,created_at)
+      SELECT CASE WHEN n=4 THEN $4::uuid ELSE gen_random_uuid() END,$1,'guild',$2,n,$3,'合成：歷史訊息 '||n,now()-(180-n)*interval '1 second'
+      FROM generate_series(3,102) AS n`,[DEMO_COMMUNITY,guild,accounts[0].id,anchor]);
+
+    const sender=await member(browser,baseURL!,0),page=await member(browser,baseURL!,1,390);
+    // Synthetic lifecycle events exercise the real browser app and HTTP responses,
+    // without treating headless browser focus or offline state as phone OS behavior.
+    await page.evaluate(()=>{
+      let hidden=false,online=true;
+      Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>hidden?'hidden':'visible'});
+      Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>online});
+      (window as Window&{setTestAvailability?:(mode:string)=>void}).setTestAvailability=mode=>{
+        const nextHidden=mode==='hidden',nextOnline=mode!=='offline';
+        if(nextHidden!==hidden){hidden=nextHidden;document.dispatchEvent(new Event('visibilitychange'));}
+        if(nextOnline!==online){online=nextOnline;window.dispatchEvent(new Event(online?'online':'offline'));}
+        if(mode==='foreground')window.dispatchEvent(new Event('focus'));
+      };
+    });
+    const transition=(next:string)=>page.evaluate(value=>
+      (window as Window&{setTestAvailability?:(mode:string)=>void}).setTestAvailability!(value),next);
+
+    await page.getByRole('tab',{name:/^公會閒聊/}).click();
+    const panel=page.locator('#messages-panel-guild');
+    await panel.locator(`[data-channel-key="${guild}"]`).click();
+    const rows=panel.locator('.messages-bubbles li'),more=panel.getByRole('button',{name:'載入較早訊息',exact:true});
+    for(const count of [40,60,80,100,102]){await more.click();await expect(rows).toHaveCount(count);}
+    const row=(id:string)=>panel.locator(`[data-message-id="${id}"]`);
+    await expect(row(reply)).toContainText(marker);
+    const draft=panel.locator('.messages-compose').getByRole('textbox');
+    await draft.fill('草稿還沒送出');
+    const stable=row(anchor);
+    const relativeTop=()=>stable.evaluate(node=>node.getBoundingClientRect().top-node.closest('.messages-scroll')!.getBoundingClientRect().top);
+    const oldHeight=await row(original).evaluate(node=>node.getBoundingClientRect().height);
+    await stable.evaluate(node=>{
+      const container=node.closest('.messages-scroll')!;
+      container.scrollTop+=node.getBoundingClientRect().top-container.getBoundingClientRect().top-90;
+    });
+    const before=await relativeTop();
+    expect(before).toBeGreaterThan(30);expect(before).toBeLessThan(140);
+
+    const channel=`/api/v1/me/channels/guild/${guild}`,offsets:string[]=[];
+    let release!:()=>void;
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    let held=false,settled=false;
+    await page.route(url=>url.pathname===channel+'/messages'&&url.searchParams.get('limit')==='50'&&url.searchParams.has('offset'),async route=>{
+      const offset=new URL(route.request().url()).searchParams.get('offset')!;
+      offsets.push(offset);
+      if(offset!=='50'||held){await route.continue();return;}
+      const response=await route.fetch();expect(response.ok()).toBe(true);
+      held=true;
+      await gate;await route.fulfill({response});settled=true;
+    });
+    try{
+      const session=await (await sender.request.get('/api/v1/session')).json();
+      const retract=await sender.request.post(`${channel}/messages/${original}/retract`,{data:{},headers:{
+        Origin:new URL(sender.url()).origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':randomUUID(),
+      }});
+      expect(retract.ok()).toBe(true);
+      await expect.poll(()=>held,{timeout:13000}).toBe(true);
+      if(mode!=='foreground')await transition(mode);
+      release();
+      await expect.poll(()=>settled).toBe(true);
+      const tombstone=row(original).locator('.chat-retracted');
+      if(mode!=='foreground'){
+        // Hold the unavailable state across the next timer tick to catch any follow-on.
+        await page.waitForTimeout(1100);
+        expect.soft(offsets.slice()).toEqual(['0','50']);
+        await expect.soft(tombstone).toHaveCount(0);
+        await transition('foreground');
+      }
+      await expect(tombstone).toHaveText('這則訊息已收回。',{timeout:12000});
+      await expect(row(reply)).toContainText('合成：保留回覆');
+      await expect(row(reply)).not.toContainText(marker);
+      await expect(rows).toHaveCount(102);
+      await expect(draft).toHaveValue('草稿還沒送出');
+      await expect.poll(()=>row(original).evaluate(node=>node.getBoundingClientRect().height)).toBeLessThan(oldHeight-30);
+      expect(Math.abs(await relativeTop()-before)).toBeLessThanOrEqual(4);
+      await page.waitForTimeout(1300);
+      expect(offsets).toEqual(mode==='foreground'?['0','50','100']:['0','50','0','50','100']);
+      const refresh=panel.getByRole('button',{name:'重新讀取訊息'});
+      await refresh.click();
+      await expect(refresh).toHaveAttribute('aria-disabled','false');
+      await expect(tombstone).toHaveCount(1);
+      await expect(draft).toHaveValue('草稿還沒送出');
+    }finally{release();}
+  });
+}
