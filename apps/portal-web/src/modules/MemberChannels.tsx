@@ -111,13 +111,19 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
   const [searchOpen,setSearchOpen]=useState(false);
   const [picking,setPicking]=useState(true);
   const scroll=useRef<HTMLDivElement>(null),stick=useRef(true),anchor=useRef<{top:number;height:number}|null>(null),polling=useRef(false),retryAt=useRef(0),failures=useRef(0);
+  const pollAnchor=useRef<{previous:History;next:History;row:HTMLElement;top:number}|null>(null);
   const idlePoll=useRef(resetChatPoll());
   const snapshot=useRef({history,status,more,reading,active,sending:false});snapshot.current={history,status,more,reading,active:active&&(!singlePane||!picking),sending:pending[selected?.key??'']?.status==='sending'};
   const openedRequest=useRef<number|null>(null);
   const searched=useRef('');
   useLayoutEffect(()=>{
     const node=scroll.current;if(!node)return;
+    const pinned=pollAnchor.current;
+    if(pinned&&pinned.previous!==history)pollAnchor.current=null;
     if(anchor.current){node.scrollTop=anchor.current.top+node.scrollHeight-anchor.current.height;anchor.current=null;}
+    else if(pinned&&pinned.next===history&&!stick.current&&node.contains(pinned.row)){
+      node.scrollTop+=pinned.row.getBoundingClientRect().top-node.getBoundingClientRect().top-pinned.top;
+    }
     else if(stick.current){node.scrollTop=node.scrollHeight;setHasNew(false);}
   },[history,selected?.key,pending[selected?.key??''],picking,singlePane]);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;listGeneration.current++;threadGeneration.current++;};},[]);
@@ -203,6 +209,8 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
     return()=>{window.clearInterval(timer);window.removeEventListener('focus',resume);window.removeEventListener('online',resume);document.removeEventListener('visibilitychange',visible);};
   },[active,client,singlePane,picking,kind]);
   async function pullLatest(){
+    const foreground=()=>document.visibilityState==='visible'&&navigator.onLine;
+    if(!foreground())return;
     const key=current.current,shown=snapshot.current;
     if(!key||!shown.active||shown.status!=='ready'||!shown.history||shown.more.loading||shown.reading||shown.sending||threadInFlight.current||polling.current||Date.now()<retryAt.current)return;
     if(!chatPollDue(idlePoll.current,Date.now(),retryAt.current))return;
@@ -210,14 +218,14 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
     try{
       // Idle checks never download history bodies or refresh every joined room.
       const activity=await client.get<Activity>(path(key,'activity'),{background:true});
-      if(!alive.current||generation!==threadGeneration.current||since!==epoch.current||current.current!==key||!snapshot.current.active||snapshot.current.sending)return;
+      if(!foreground()||!alive.current||generation!==threadGeneration.current||since!==epoch.current||current.current!==key||!snapshot.current.active||snapshot.current.sending)return;
       const retractionsChanged=(activity.retraction_count??'0')!==(shown.history.retraction_count??'0');
       if(!retractionsChanged&&compare(activity.latest_sequence,shown.history.items[0]?.sequence??'0')<=0&&activity.unread_count===shown.history.unread_count){if(idlePoll.current===schedule)idlePoll.current=idleChatPoll(schedule,checkedAt);failures.current=0;retryAt.current=0;setLiveError('');return;}
       idlePoll.current=resetChatPoll();
       if(retractionsChanged){
         // A full replacement may only commit against the history it refreshed, not a later older-page append.
         const previous=shown.history;
-        const isCurrent=()=>alive.current&&generation===threadGeneration.current&&since===epoch.current&&current.current===key&&snapshot.current.active&&!snapshot.current.sending&&snapshot.current.history===previous&&!snapshot.current.more.loading;
+        const isCurrent=()=>foreground()&&alive.current&&generation===threadGeneration.current&&since===epoch.current&&current.current===key&&snapshot.current.active&&!snapshot.current.sending&&snapshot.current.history===previous&&!snapshot.current.more.loading;
         const latest=await client.get<History>(path(key,'messages?limit=50&offset=0'),{background:true});
         if(!isCurrent())return;
         const items=await refreshLoadedMessages(latest,previous.items,
@@ -225,13 +233,28 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
         if(!items||!isCurrent())return;
         const fresh=latest.items.filter(item=>!previous.items.some(known=>known.message_id===item.message_id));
         if(fresh.length&&!stick.current)setHasNew(true);
-        setHistory(existing=>existing===previous?{...latest,items:newestFirst(items),next_offset:fresh.length?latest.next_offset:previous.next_offset}:existing);
+        const next={...latest,items:newestFirst(items),next_offset:fresh.length?latest.next_offset:previous.next_offset};
+        const container=scroll.current;
+        if(container&&!stick.current){
+          const before=new Map(previous.items.map(item=>[item.message_id,item]));
+          const after=new Map(next.items.map(item=>[item.message_id,item]));
+          const viewport=container.getBoundingClientRect();
+          // Keep an unchanged visible row steady if a retraction above it reduces the layout height.
+          for(const row of container.querySelectorAll<HTMLElement>('.messages-bubbles > [data-message-id]')){
+            const id=row.dataset.messageId??'',old=before.get(id),updated=after.get(id);
+            if(!old||!updated||old.retracted_at!==updated.retracted_at||old.body!==updated.body||old.reply_to?.message_id!==updated.reply_to?.message_id)continue;
+            const rect=row.getBoundingClientRect();
+            if(rect.top<viewport.top||rect.bottom>viewport.bottom)continue;
+            pollAnchor.current={previous,next,row,top:rect.top-viewport.top};break;
+          }
+        }
+        setHistory(existing=>existing===previous?next:existing);
         failures.current=0;retryAt.current=0;setLiveError('');setCountUnconfirmed('');
         if(kind==='world')onUnread(latest.unread_count);else void loadList(true);
         announceInboxChange();return;
       }
       const value=await client.get<History>(path(key,`messages?limit=50&after_sequence=${shown.history.items[0]?.sequence??'0'}`),{background:true});
-      if(!alive.current||generation!==threadGeneration.current||since!==epoch.current||current.current!==key||!snapshot.current.active)return;
+      if(!foreground()||!alive.current||generation!==threadGeneration.current||since!==epoch.current||current.current!==key||!snapshot.current.active)return;
       failures.current=0;retryAt.current=0;setLiveError('');
       setCountUnconfirmed('');setNewerUnseen(Boolean(value.next_after_sequence));
       if(kind==='world')onUnread(value.unread_count);
@@ -243,7 +266,7 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
       });
       if(value.items.some(item=>!shown.history!.items.some(known=>known.message_id===item.message_id))){void loadList(true);announceInboxChange();}
     }catch(cause){
-      if(!alive.current||generation!==threadGeneration.current||since!==epoch.current||current.current!==key)return;
+      if(!foreground()||!alive.current||generation!==threadGeneration.current||since!==epoch.current||current.current!==key)return;
       if(revoked(cause)){revoke(key,since);return;}
       retryAt.current=Date.now()+Math.min(60000,2000*2**Math.min(++failures.current,5));setLiveError('新訊息更新暫停，會自動重試。草稿仍保留，也可手動重讀。');
     }finally{polling.current=false;}
@@ -295,7 +318,7 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
   }
   function select(item:ChannelSummary){
     current.current=item.channel_key;epoch.current++;focusThread.current=true;
-    stick.current=true;anchor.current=null;setHasNew(false);setLiveError('');retryAt.current=0;
+    stick.current=true;anchor.current=null;pollAnchor.current=null;setHasNew(false);setLiveError('');retryAt.current=0;
     setSelected({key:item.channel_key,name:item.name});setPicking(false);void loadThread(item.channel_key);
     setReading(readLocks.current.has(item.channel_key));
   }
